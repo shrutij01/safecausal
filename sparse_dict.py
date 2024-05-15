@@ -16,9 +16,9 @@ class TiedWeightAutoencoder(nn.Module):
     c: ensures x is a sparse combination of M's rows
     """
 
-    def __init__(self, hidden_size):
+    def __init__(self, input_size, hidden_size):
         super(TiedWeightAutoencoder, self).__init__()
-        self.encoder = nn.Linear(hidden_size, hidden_size, bias=True)
+        self.encoder = nn.Linear(input_size, hidden_size, bias=True)
 
     def forward(self, x):
         c = torch.relu(self.encoder(x))  # this is ReLU(Mx + b)
@@ -56,6 +56,7 @@ def train(dataloader, model, optimizer, loss_fxn):
 def main(args, device):
     if args.data_type == "toy":
         x = utils.load_toy_dataset(args.task_type)
+        input_dim = 2
         hidden_dim = 64
     else:
         raise NotImplementedError
@@ -67,7 +68,7 @@ def main(args, device):
         num_workers=4,
     )
 
-    model = TiedWeightAutoencoder(hidden_dim)
+    model = TiedWeightAutoencoder(input_dim, hidden_dim)
     model.to(device)
     optimizer = optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-5)
     loss = torch.nn.MSELoss()
