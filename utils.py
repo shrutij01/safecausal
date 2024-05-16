@@ -3,7 +3,6 @@ from datasets import load_dataset
 from data import ana
 
 
-
 def load_dataset(dataset_name, **kwargs):
     if dataset_name == "ana":
         data = ana.generate_data(**kwargs)
@@ -17,6 +16,14 @@ def load_dataset(dataset_name, **kwargs):
             }
         data = load_dataset(dataset_name, **dataset_params)
         instruction = "Label as 0 for False and 1 for True."
+        true_targets = [
+            value for is_true, value in zip(
+                [d == 1 for d in data[0]['mc1_targets']['labels']],
+                data[0]['mc1_targets']['choices']) if is_true]
+        false_targets = [
+            value for is_true, value in zip(
+                [d == 0 for d in data[0]['mc1_targets']['labels']],
+                data[0]['mc1_targets']['choices']) if is_true]
     return cfc1_tuples, cfc2_tuples, instruction    
 
 

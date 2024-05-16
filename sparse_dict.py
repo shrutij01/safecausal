@@ -89,7 +89,7 @@ def main(args, device):
     model = SparseDict(
         embedding_size=embedding_dim, overcomplete_basis_size=int(args.overcomplete_basis_factor)*embedding_dim)
     model.to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-5)
+    optimizer = optim.AdamW(model.parameters(), lr=float(args.lr), weight_decay=1e-5)
     loss_fxn = torch.nn.MSELoss()
     losses = train(
         dataloader=loader,
@@ -98,7 +98,7 @@ def main(args, device):
         loss_fxn=loss_fxn,
         args=args,
     )
-    modeldir = os.path.join(args.embedding_dir, "sparse_dict_model")
+    modeldir = os.path.join(args.embedding_dir, "sparse_dict_model_", args.lr)
     if not os.path.exists(modeldir):
         os.makedirs(modeldir)
     else:
@@ -124,6 +124,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--num-epochs", default=500)
     parser.add_argument("--batch-size", default=32)
+    parser.add_argument("--lr", type=float, default=float(1e-3))
     parser.add_argument("--alpha", type=float, default=float(1e-3))
     parser.add_argument("--overcomplete-basis-factor", type=int, default=2)
 
