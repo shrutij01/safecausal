@@ -28,7 +28,6 @@ class SparseDict(nn.Module):
         self.decoder = nn.Linear(overcomplete_basis_size, embedding_size)
 
     def forward(self, x):
-        import ipdb; ipdb.set_trace()
         c = torch.relu(self.encoder(x))  # this is ReLU(M.Tx + b)
         x_hat = self.decoder(c)  # this is Mc
         return x_hat, c
@@ -42,7 +41,6 @@ def train(dataloader, model, optimizer, loss_fxn, args):
         for x_list in dataloader:
             optimizer.zero_grad()
             with autocast():  # Enables mixed precision
-                import ipdb; ipdb.set_trace()
                 x = x_list[0]
                 #todo: check why this appears as a list
                 x_hat, c = model(x)
@@ -67,20 +65,17 @@ def train(dataloader, model, optimizer, loss_fxn, args):
 def main(args, device):
     embeddings_file = os.path.join(args.embedding_dir, "embeddings.h5")
     with h5py.File(embeddings_file, "r") as f:
-        cfc1_train = np.array(f["cfc1_train"])
-        cfc2_train = np.array(f["cfc2_train"])
+        cfc1_train = np.array(f["cfc1_train"]).squeeze()
+        cfc2_train = np.array(f["cfc2_train"]).squeeze()
     config_file = os.path.join(args.embedding_dir, "config.yaml")
     with open(config_file, "r") as file:
         config = Box(yaml.safe_load(file))
-    
-    if config.dataset == "ana":
-        x = cfc2_train - cfc1_train
-        mean = x.mean(dim=0)
-        std = x.std(dim=0, unbiased=False)
-        x = (x - mean) / (std + 1e-8)
-        embedding_dim = x.shape[1]
-    else:
-        raise NotImplementedError
+    x = cfc2_train - cfc1_train
+    mean = x.mean(axis=0)
+    std = x.std(axis=0, ddof=1)
+    x = (x - mean) / (std + 1e-8)
+    embedding_dim = x.shape[1]
+
     if not isinstance(x, torch.Tensor):
         x = torch.tensor(x, dtype=torch.float32).to(device)
     dataset = TensorDataset(x)
@@ -94,7 +89,7 @@ def main(args, device):
     model = SparseDict(
         embedding_size=embedding_dim, overcomplete_basis_size=int(args.overcomplete_basis_factor)*embedding_dim)
     model.to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=1e-3, weight_decay=1e-5)
+    optimizer = optim.AdamW(model.parameters(), lr=3e-4, weight_decay=1e-5)
     loss_fxn = torch.nn.MSELoss()
     losses = train(
         dataloader=loader,
@@ -103,7 +98,22 @@ def main(args, device):
         loss_fxn=loss_fxn,
         args=args,
     )
-    print(losses)
+    modeldir = os.path.join(args.embedding_dir, "sparse_dict_model")
+    if not os.path.exists(modeldir):
+        os.makedirs(modeldir)
+    else:
+        overwrite = input(
+            "A sparse dict model already exists at {}. Do you want to overwrite it? (yes/no): ".format(
+                modeldir
+            )
+        )
+        if overwrite.lower() != "yes":
+            print(
+                "Skipping tf learner for now! Check trained model first!"
+            )
+            exit()
+    model_dict_path = os.path.join(modeldir, "model_M.pth")
+    torch.save(model.state_dict(), model_dict_path)
 
 
 if __name__ == "__main__":
@@ -112,10 +122,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "embedding_dir"
     )
-    parser.add_argument("--num_epochs", default=500)
-    parser.add_argument("--batch_size", default=32)
+    parser.add_argument("--num-epochs", default=500)
+    parser.add_argument("--batch-size", default=32)
     parser.add_argument("--alpha", type=float, default=float(1e-3))
-    parser.add_argument("--ovecomplete-basis-dim", type=int, default=2)
+    parser.add_argument("--overcomplete-basis-factor", type=int, default=2)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
