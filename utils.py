@@ -6,14 +6,18 @@ from data import ana
 
 def load_dataset(dataset_name, **kwargs):
     if dataset_name == "ana":
-        return ana.generate_data(**kwargs)
+        data = ana.generate_data(**kwargs)
+        instruction = "Swap the letters in this string."
+        cfc1_tuples, cfc2_tuples = data[:, 0], data[:, 1]
     else:
         if dataset_name == "truthful_qa":
             dataset_params = {
                 'split': 'validation',
                 'name': 'multiple_choice',     
             }
-        dataset = load_dataset(dataset_name, **dataset_params)    
+        data = load_dataset(dataset_name, **dataset_params)
+        instruction = "Label as 0 for False and 1 for True."
+    return cfc1_tuples, cfc2_tuples, instruction    
 
 
 def append_instruction(contexts, instruction):

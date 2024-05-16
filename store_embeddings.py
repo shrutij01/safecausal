@@ -60,18 +60,17 @@ def store_embeddings(filename, cfc1_train, cfc2_train, cfc1_test, cfc2_test):
     
 
 def main(args):
-    x_tuples = utils.load_dataset(
+    cfc1_tuples, cfc2_tuples, instruction = utils.load_dataset(
                 dataset_name=args.dataset_name,
                 task_type=args.task_type,
                 d_type="str",
                 n=args.dataset_length,
                 string_length=args.string_length,
                 cycle_distance=args.cycle_distance)
-    split = int(0.9 * len(x_tuples))
-    cfc1_train, cfc1_test = x_tuples[0: split, 0], x_tuples[split: , 0]
-    cfc2_train, cfc2_test = x_tuples[0: split, 1], x_tuples[split: , 1]
-    if args.dataset_name == "ana":
-        instruction = "Swap the letters in this string."
+    split = int(0.9 * len(cfc1_tuples))
+    cfc1_train, cfc1_test = cfc1_tuples[0: split], cfc1_tuples[split: ]
+    cfc2_train, cfc2_test = cfc2_tuples[0: split], cfc2_tuples[split: ]
+        
     cfc1_train = utils.append_instruction(cfc1_train, instruction)
     cfc1_test = utils.append_instruction(cfc1_test, instruction)
     cfc2_train = utils.append_instruction(cfc2_train, instruction)
