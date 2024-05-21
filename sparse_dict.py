@@ -11,6 +11,7 @@ import yaml
 from box import Box
 import numpy as np
 import pandas as pd
+import ast
 
 import utils
 
@@ -75,12 +76,13 @@ def main(args, device):
         df_file = os.path.join(
             args.embedding_dir, "multi_objects_single_coordinate.csv"
         )
-        x_df = pd.read_csv(df_file)
 
         config_file = os.path.join(args.embedding_dir, "config.yaml")
         with open(config_file, "r") as file:
             config = Box(yaml.safe_load(file))
         cfc_columns = config.cfc_column_names
+        converters = {col: ast.literal_eval for col in cfc_columns}
+        x_df = pd.read_csv(df_file)
         x_df_train = x_df.iloc[: int(config.split * config.size)]
         import ipdb
 
