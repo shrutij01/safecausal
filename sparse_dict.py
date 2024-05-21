@@ -4,13 +4,11 @@ import torch.optim as optim
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import TensorDataset, DataLoader
 
-
 import argparse
 import os
 import h5py
-import yaml
-from box import Box
 import numpy as np
+import pandas as pd
 
 import utils
 
@@ -24,7 +22,9 @@ class SparseDict(nn.Module):
 
     def __init__(self, embedding_size, overcomplete_basis_size):
         super(SparseDict, self).__init__()
-        self.encoder = nn.Linear(embedding_size, overcomplete_basis_size, bias=True)
+        self.encoder = nn.Linear(
+            embedding_size, overcomplete_basis_size, bias=True
+        )
         self.decoder = nn.Linear(overcomplete_basis_size, embedding_size)
 
     def forward(self, x):
@@ -42,7 +42,7 @@ def train(dataloader, model, optimizer, loss_fxn, args):
             optimizer.zero_grad()
             with autocast():  # Enables mixed precision
                 x = x_list[0]
-                #todo: check why this appears as a list
+                # todo: check why this appears as a list
                 x_hat, c = model(x)
                 reconstruction_error = loss_fxn(x_hat, x)
                 abs_loss = torch.abs(c).sum(dim=-1)
@@ -63,14 +63,21 @@ def train(dataloader, model, optimizer, loss_fxn, args):
 
 
 def main(args, device):
-    embeddings_file = os.path.join(args.embedding_dir, "embeddings.h5")
-    with h5py.File(embeddings_file, "r") as f:
-        cfc1_train = np.array(f["cfc1_train"]).squeeze()
-        cfc2_train = np.array(f["cfc2_train"]).squeeze()
-    config_file = os.path.join(args.embedding_dir, "config.yaml")
-    with open(config_file, "r") as file:
-        config = Box(yaml.safe_load(file))
-    x = cfc2_train - cfc1_train
+    if args.data_type == "emb":
+        embeddings_file = os.path.join(args.embedding_dir, "embeddings.h5")
+        with h5py.File(embeddings_file, "r") as f:
+            cfc1_train = np.array(f["cfc1_train"]).squeeze()
+            cfc2_train = np.array(f["cfc2_train"]).squeeze()
+        x = cfc2_train - cfc1_train
+    elif args.data_type == "gt":
+        df_file = os.path.join(
+            args.embedding_dir, "multi_objects_single_coordinate.csv"
+        )
+        x_df = pd.read_csv(df_file)
+        import ipdb
+
+        ipdb.set_trace()
+
     mean = x.mean(axis=0)
     std = x.std(axis=0, ddof=1)
     x = (x - mean) / (std + 1e-8)
@@ -87,9 +94,14 @@ def main(args, device):
     )
 
     model = SparseDict(
-        embedding_size=embedding_dim, overcomplete_basis_size=int(args.overcomplete_basis_factor)*embedding_dim)
+        embedding_size=embedding_dim,
+        overcomplete_basis_size=int(args.overcomplete_basis_factor)
+        * embedding_dim,
+    )
     model.to(device)
-    optimizer = optim.AdamW(model.parameters(), lr=float(args.lr), weight_decay=1e-5)
+    optimizer = optim.AdamW(
+        model.parameters(), lr=float(args.lr), weight_decay=1e-5
+    )
     loss_fxn = torch.nn.MSELoss()
     losses = train(
         dataloader=loader,
@@ -108,9 +120,7 @@ def main(args, device):
             )
         )
         if overwrite.lower() != "yes":
-            print(
-                "Skipping tf learner for now! Check trained model first!"
-            )
+            print("Skipping tf learner for now! Check trained model first!")
             exit()
     model_dict_path = os.path.join(modeldir, "model_M.pth")
     torch.save(model.state_dict(), model_dict_path)
@@ -119,9 +129,8 @@ def main(args, device):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument(
-        "embedding_dir"
-    )
+    parser.add_argument("embedding_dir")
+    parser.add_argument("--data-type", default="emb", choices=["emb", "gt"])
     parser.add_argument("--num-epochs", default=500)
     parser.add_argument("--batch-size", default=32)
     parser.add_argument("--lr", type=float, default=float(1e-3))
