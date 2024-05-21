@@ -148,6 +148,7 @@ def main(args):
         "num_objects": args.total_objects,
         "cfc_column_names": object_translation_columns,
         "split": 0.9,
+        "size": args.total_objects,
     }
     config_path = os.path.join(directory_name, "config.yaml")
     with open(config_path, "w") as file:
