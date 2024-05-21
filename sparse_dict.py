@@ -84,7 +84,7 @@ def main(args, device):
         import ipdb
 
         ipdb.set_trace()
-        x_df_train = x_df.iloc[: int(config.split * config.size)]
+        x_df_train = x_df.iloc[1 : int(config.split * config.size)]
         x = (
             x_df_train[cfc_columns]
             .apply(lambda row: sum(row, []), axis=1)
