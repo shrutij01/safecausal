@@ -75,16 +75,16 @@ def main(args, device):
         df_file = os.path.join(
             args.embedding_dir, "multi_objects_single_coordinate.csv"
         )
-        x_df = pd.read_csv(df_file, skiprows=1)
+        x_df = pd.read_csv(df_file)
 
         config_file = os.path.join(args.embedding_dir, "config.yaml")
         with open(config_file, "r") as file:
             config = Box(yaml.safe_load(file))
         cfc_columns = config.cfc_column_names
+        x_df_train = x_df.iloc[: int(config.split * config.size)]
         import ipdb
 
         ipdb.set_trace()
-        x_df_train = x_df.iloc[: int(config.split * config.size)]
         x = (
             x_df_train[cfc_columns]
             .apply(lambda row: sum(row, []), axis=1)
