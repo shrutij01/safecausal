@@ -135,7 +135,7 @@ def main(args):
         if overwrite.lower() != "yes":
             print("Skipping dataset creation and saving.")
             exit()
-    positions_df.to_csv("multi_objects_single_coordinate.csv")
+    positions_df.to_csv(df_location)
 
 
 if __name__ == "__main__":
