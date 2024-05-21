@@ -7,6 +7,8 @@ from torch.utils.data import TensorDataset, DataLoader
 import argparse
 import os
 import h5py
+import yaml
+from box import Box
 import numpy as np
 import pandas as pd
 
@@ -74,9 +76,23 @@ def main(args, device):
             args.embedding_dir, "multi_objects_single_coordinate.csv"
         )
         x_df = pd.read_csv(df_file)
-        import ipdb
 
-        ipdb.set_trace()
+        config_file = os.path.join(args.embedding_dir, "config.yaml")
+        with open(config_file, "r") as file:
+            config = Box(yaml.safe_load(file))
+        cfc_columns = config.cfc_column_names
+        x_df_train = x_df.iloc[: config.split]
+        x = (
+            x_df_train[cfc_columns]
+            .apply(lambda row: sum(row, []), axis=1)
+            .tolist()
+        )
+    else:
+        raise NotImplementedError
+
+    import ipdb
+
+    ipdb.set_trace()
 
     mean = x.mean(axis=0)
     std = x.std(axis=0, ddof=1)

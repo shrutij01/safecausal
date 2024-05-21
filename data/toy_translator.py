@@ -2,6 +2,8 @@ import random
 from typing import Optional, List, Dict
 import pandas as pd
 import argparse
+import datetime
+import yaml
 import os
 
 
@@ -121,11 +123,15 @@ def main(args):
         amount_to_translate=args.amount_to_translate,
         max_amount_to_translate=args.max_amount_to_translate,
     )
-
-    df_dir = "/network/scratch/j/joshi.shruti/psp/toy_translator/"
-    if not os.path.exists(df_dir):
-        os.makedirs(df_dir)
-    df_location = os.path.join(df_dir, "multi_objects_single_coordinate.csv")
+    current_datetime = datetime.datetime.now()
+    timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
+    dir_location = "/network/scratch/j/joshi.shruti/psp/toy_translator/"
+    directory_name = os.path.join(dir_location, timestamp_str)
+    if not os.path.exists(directory_name):
+        os.makedirs(directory_name)
+    df_location = os.path.join(
+        directory_name, "multi_objects_single_coordinate.csv"
+    )
     if os.path.exists(df_location):
         overwrite = input(
             "A dataset already exists at {}. Do you want to overwrite it? (yes/no): ".format(
@@ -135,6 +141,18 @@ def main(args):
         if overwrite.lower() != "yes":
             print("Skipping dataset creation and saving.")
             exit()
+    object_translation_columns = [
+        f"translation_for_object_{i}" for i in range(args.total_objects)
+    ]
+    config = {
+        "num_objects": args.total_objects,
+        "cfc_column_names": object_translation_columns,
+        "split": 0.9,
+    }
+    config_path = os.path.join(directory_name, "config.yaml")
+    with open(config_path, "w") as file:
+        yaml.dump(config, file)
+
     positions_df.to_csv(df_location)
 
 
