@@ -84,6 +84,17 @@ def main(args, device):
         converters = {col: ast.literal_eval for col in cfc_columns}
         x_df = pd.read_csv(df_file, converters=converters)
         x_df_train = x_df.iloc[: int(config.split * config.size)]
+
+        def convert_to_list_of_ints(value):
+            if isinstance(value, str):
+                value = ast.literal_eval(value)
+            return [int(x) for x in value]
+
+        for column in x_df_train[cfc_columns]:
+            x_df_train[column] = x_df_train[column].apply(
+                convert_to_list_of_ints
+            )
+
         import ipdb
 
         ipdb.set_trace()
