@@ -72,6 +72,9 @@ def main(args, device):
             cfc1_train = np.array(f["cfc1_train"]).squeeze()
             cfc2_train = np.array(f["cfc2_train"]).squeeze()
         x = cfc2_train - cfc1_train
+        mean = x.mean(axis=0)
+        std = x.std(axis=0, ddof=1)
+        x = (x - mean) / (std + 1e-8)
     elif args.data_type == "gt":
         df_file = os.path.join(
             args.embedding_dir, "multi_objects_single_coordinate.csv"
@@ -95,13 +98,12 @@ def main(args, device):
                 convert_to_list_of_ints
             )
 
-        import ipdb
-
-        ipdb.set_trace()
-        x = (
-            x_df_train[cfc_columns]
-            .apply(lambda row: sum(row, []), axis=1)
-            .tolist()
+        x = np.asarray(
+            (
+                x_df_train[cfc_columns]
+                .apply(lambda row: sum(row, []), axis=1)
+                .tolist()
+            )
         )
     else:
         raise NotImplementedError
@@ -109,10 +111,6 @@ def main(args, device):
     import ipdb
 
     ipdb.set_trace()
-
-    mean = x.mean(axis=0)
-    std = x.std(axis=0, ddof=1)
-    x = (x - mean) / (std + 1e-8)
     embedding_dim = x.shape[1]
 
     if not isinstance(x, torch.Tensor):
