@@ -1,4 +1,3 @@
-from scipy import sparse
 import torch
 from sparse_dict import SparseDict
 
