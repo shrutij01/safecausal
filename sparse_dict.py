@@ -108,9 +108,6 @@ def main(args, device):
     else:
         raise NotImplementedError
 
-    import ipdb
-
-    ipdb.set_trace()
     embedding_dim = x.shape[1]
 
     if not isinstance(x, torch.Tensor):
@@ -140,7 +137,9 @@ def main(args, device):
         loss_fxn=loss_fxn,
         args=args,
     )
-    modeldir = os.path.join(args.embedding_dir, "sparse_dict_model_", args.lr)
+    modeldir = os.path.join(
+        args.embedding_dir, "sparse_dict_model_", str(args.lr)
+    )
     if not os.path.exists(modeldir):
         os.makedirs(modeldir)
     else:
