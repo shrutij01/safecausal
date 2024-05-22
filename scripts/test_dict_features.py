@@ -1,5 +1,5 @@
 import torch
-from sparse_dict import SparseDict
+from psp.sparse_dict import SparseDict
 
 import argparse
 import os
