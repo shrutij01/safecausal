@@ -12,6 +12,7 @@ from box import Box
 import numpy as np
 import pandas as pd
 import ast
+import datetime
 
 import utils
 
@@ -119,11 +120,12 @@ def main(args, device):
         shuffle=True,
         num_workers=0,
     )
-
+    overcomplete_basis_size = (
+        int(args.overcomplete_basis_factor) * embedding_dim
+    )
     model = SparseDict(
         embedding_size=embedding_dim,
-        overcomplete_basis_size=int(args.overcomplete_basis_factor)
-        * embedding_dim,
+        overcomplete_basis_size=overcomplete_basis_size,
     )
     model.to(device)
     optimizer = optim.AdamW(
@@ -137,20 +139,23 @@ def main(args, device):
         loss_fxn=loss_fxn,
         args=args,
     )
+    current_datetime = datetime.datetime.now()
+    timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
     modeldir = os.path.join(
-        args.embedding_dir, "sparse_dict_model_", str(args.lr)
+        args.embedding_dir, "sparse_dict_model", timestamp_str
     )
     if not os.path.exists(modeldir):
         os.makedirs(modeldir)
-    else:
-        overwrite = input(
-            "A sparse dict model already exists at {}. Do you want to overwrite it? (yes/no): ".format(
-                modeldir
-            )
-        )
-        if overwrite.lower() != "yes":
-            print("Skipping tf learner for now! Check trained model first!")
-            exit()
+    model_config_file = os.path.join(modeldir, "model_config.yaml")
+    model_config = {
+        "embedding_size": embedding_dim,
+        "overcomplete_basis_size": overcomplete_basis_size,
+        "learning_rate": args.lr,
+        "alpha": args.alpha,
+        "data_type": args.data_type,
+    }
+    with open(model_config_file, "w") as file:
+        yaml.dump(model_config, file)
     model_dict_path = os.path.join(modeldir, "model_M.pth")
     torch.save(model.state_dict(), model_dict_path)
 
