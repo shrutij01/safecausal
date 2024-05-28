@@ -27,28 +27,13 @@ class SparseDict(nn.Module):
     def __init__(self, embedding_size, overcomplete_basis_size):
         super(SparseDict, self).__init__()
         self.encoder = nn.Linear(
-            embedding_size, overcomplete_basis_size, bias=False
+            embedding_size, overcomplete_basis_size, bias=True
         )
-        self.decoder = nn.Linear(
-            overcomplete_basis_size, embedding_size, bias=False
-        )
-        self.bias_encoder = nn.Parameter(torch.zeros(overcomplete_basis_size))
-        self.bias_decoder = nn.Parameter(torch.zeros(embedding_size))
-
-        # these implementation tricks below are from anthropic's most recent paper
-        Wd_initial = torch.randn(overcomplete_basis_size, embedding_size)
-        norms = torch.sqrt(torch.sum(Wd_initial**2, dim=0))
-        desired_norms = torch.rand(embedding_size) * 0.95 + 0.05
-        scale_factors = desired_norms / norms
-        self.decoder.weight = nn.Parameter(Wd_initial * scale_factors)
-
-        self.encoder.weight = nn.Parameter(
-            self.decoder.weight.detach().clone().t()
-        )
+        self.decoder = nn.Linear(overcomplete_basis_size, embedding_size)
 
     def forward(self, x):
-        c = torch.relu(self.encoder(x))  # this is ReLU(M1.Tx + b)
-        x_hat = self.decoder(c)  # this is M2c
+        c = torch.relu(self.encoder(x))  # this is ReLU(M.Tx + b)
+        x_hat = self.decoder(c)  # this is Mc
         return x_hat, c
 
 
@@ -64,13 +49,9 @@ def train(dataloader, model, optimizer, loss_fxn, args):
                 # todo: check why this appears as a list
                 x_hat, c = model(x)
                 reconstruction_error = loss_fxn(x_hat, x)
-                sparsity_penalty = torch.sum(
-                    torch.norm(c, dim=1)
-                    * torch.norm(model.decoder.weight, p=2, dim=0),
-                )  # sparisty penalty on the columns
-                total_loss = (
-                    reconstruction_error + float(args.alpha) * sparsity_penalty
-                )
+                abs_loss = torch.abs(c).sum(dim=-1)
+                l1_reg = abs_loss.sum() / x.shape[1]
+                total_loss = reconstruction_error + float(args.alpha) * l1_reg
 
             scaler.scale(total_loss).backward()
             scaler.step(optimizer)
