@@ -53,6 +53,7 @@ def main(args, device):
     model_dict = torch.load(model_file)
     sparse_dict_model.load_state_dict(model_dict)
     x_test = load_test_data(args, data_config)
+    x_test = torch.tensor(x_test)
     x_hat_test, c_test = sparse_dict_model(x_test)
     M = sparse_dict_model.encoder.weight.data
     import ipdb
