@@ -52,9 +52,6 @@ class SparseDict(nn.Module):
         )
 
     def forward(self, x):
-        import ipdb
-
-        ipdb.set_trace()
         c = torch.relu(self.encoder(x))  # this is ReLU(W_e.Tx + b)
         x_hat = self.decoder(c)  # this is W_dc
         return x_hat, c
@@ -76,8 +73,10 @@ def train(dataloader, model, optimizer, loss_fxn, args):
 
                 ipdb.set_trace()
                 sparsity_penalty = torch.sum(
-                    torch.norm(c, dim=1)
-                    * torch.norm(model.decoder.weight, p=2, dim=0),
+                    torch.norm(c, dim=1).unsqueeze(dim=1)
+                    * torch.norm(model.decoder.weight, p=2, dim=1).unsqueeze(
+                        dim=0
+                    ),
                 )  # sparisty penalty on the columns
                 total_loss = (
                     reconstruction_error + float(args.alpha) * sparsity_penalty
