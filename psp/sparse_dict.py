@@ -256,7 +256,7 @@ if __name__ == "__main__":
 
     parser.add_argument("embedding_dir")
     parser.add_argument("--data-type", default="emb", choices=["emb", "gt"])
-    parser.add_argument("--num-epochs", default=500)
+    parser.add_argument("--num-epochs", type=int, default=500)
     parser.add_argument("--batch-size", default=32)
     parser.add_argument("--lr", type=float, default=float(5e-5))
     parser.add_argument("--alpha", type=float, default=float(0.5))
