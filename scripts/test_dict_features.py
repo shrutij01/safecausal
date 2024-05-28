@@ -57,12 +57,12 @@ def main(args, device):
     x_hat_test, c_test = sparse_dict_model(x_test)
 
     # compute feature activations
-    W_d = sparse_dict_model.decoder.weight.data
-    decoder_norms = W_d.norm(p=2, dim=0, keepdim=True).squeeze(0)
-    dict_features = c_test * decoder_norms
     import ipdb
 
     ipdb.set_trace()
+    W_d = sparse_dict_model.decoder.weight.data
+    decoder_norms = W_d.norm(p=2, dim=0, keepdim=True).squeeze(0)
+    dict_features = c_test * decoder_norms
     for row in dict_features:
         formatted_row = " ".join(f"{val:.5f}" for val in row)
         print(formatted_row)
