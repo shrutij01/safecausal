@@ -55,7 +55,12 @@ def main(args, device):
     x_test = load_test_data(args, data_config)
     x_test = torch.from_numpy(x_test).to(device).type(torch.float32)
     x_hat_test, c_test = sparse_dict_model(x_test)
-    M = sparse_dict_model.encoder.weight.data
+    import ipdb
+
+    ipdb.set_trace()
+    dict_features = c_test @ torch.norm(
+        sparse_dict_model.decoder.weight.data, p=2, dim=1
+    )
     for row in M:
         formatted_row = " ".join(f"{val:.5f}" for val in row)
         print(formatted_row)
