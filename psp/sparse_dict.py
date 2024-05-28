@@ -71,7 +71,7 @@ def train(dataloader, model, optimizer, loss_fxn, args):
                 reconstruction_error = loss_fxn(x_hat, x)
 
                 sparsity_penalty = torch.sum(
-                    torch.norm(c, dim=1).unsqueeze(dim=1)
+                    torch.norm(c, p=1, dim=1).unsqueeze(dim=1)
                     * torch.norm(model.decoder.weight, p=2, dim=1).unsqueeze(
                         dim=0
                     ),
