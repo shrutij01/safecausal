@@ -50,6 +50,9 @@ def main(args, device):
         overcomplete_basis_size=model_config.overcomplete_basis_size,
     ).to(device)
     model_file = os.path.join(args.model_dir, "model_M.pth")
+    import ipdb
+
+    ipdb.set_trace()
     model_dict = torch.load(model_file)
     sparse_dict_model.load_state_dict(model_dict)
     x_test = load_test_data(args, data_config)
