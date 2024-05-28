@@ -52,6 +52,9 @@ class SparseDict(nn.Module):
         )
 
     def forward(self, x):
+        import ipdb
+
+        ipdb.set_trace()
         c = torch.relu(self.encoder(x))  # this is ReLU(W_e.Tx + b)
         x_hat = self.decoder(c)  # this is W_dc
         return x_hat, c
