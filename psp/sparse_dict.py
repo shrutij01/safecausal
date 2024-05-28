@@ -243,6 +243,7 @@ def main(args, device):
         "learning_rate": args.lr,
         "alpha": args.alpha,
         "data_type": args.data_type,
+        "num_epochs": args.num_epochs,
     }
     with open(model_config_file, "w") as file:
         yaml.dump(model_config, file)
@@ -258,7 +259,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-epochs", default=500)
     parser.add_argument("--batch-size", default=32)
     parser.add_argument("--lr", type=float, default=float(5e-5))
-    parser.add_argument("--alpha", type=float, default=float(5))
+    parser.add_argument("--alpha", type=float, default=float(0.5))
     parser.add_argument("--overcomplete-basis-factor", type=int, default=2)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
