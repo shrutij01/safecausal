@@ -14,6 +14,13 @@ import pandas as pd
 import ast
 import datetime
 
+import utils
+
+"""Implementation tricks from 1. https://transformer-circuits.pub/2023/monosemantic-features/index.html#appendix-autoencoder
+and 2. https://transformer-circuits.pub/2024/april-update/index.html#training-saes.
+2. over 1. in case of contradictions.
+"""
+
 
 class SparseDict(nn.Module):
     """x: differences between the embeddings of two contexts
@@ -25,16 +32,28 @@ class SparseDict(nn.Module):
     def __init__(self, embedding_size, overcomplete_basis_size):
         super(SparseDict, self).__init__()
         self.encoder = nn.Linear(
-            embedding_size, overcomplete_basis_size, bias=True
+            embedding_size, overcomplete_basis_size, bias=False
         )
-        self.decoder = nn.Linear(overcomplete_basis_size, embedding_size)
+        self.decoder = nn.Linear(
+            overcomplete_basis_size, embedding_size, bias=False
+        )
+
+        self.bias_encoder = nn.Parameter(torch.zeros(overcomplete_basis_size))
+        self.bias_decoder = nn.Parameter(torch.zeros(embedding_size))
+
+        Wd_initial = torch.randn(overcomplete_basis_size, embedding_size)
+        norms = torch.sqrt(torch.sum(Wd_initial**2, dim=0))
+        desired_norms = torch.rand(embedding_size) * 0.95 + 0.05
+        scale_factors = desired_norms / norms
+        self.decoder.weight = nn.Parameter(Wd_initial * scale_factors)
+
+        self.encoder.weight = nn.Parameter(
+            self.decoder.weight.detach().clone().t()
+        )
 
     def forward(self, x):
-        import ipdb
-
-        ipdb.set_trace()
-        c = torch.relu(self.encoder(x))  # this is ReLU(M.Tx + b)
-        x_hat = self.decoder(c)  # this is Mc
+        c = torch.relu(self.encoder(x))  # this is ReLU(W_e.Tx + b)
+        x_hat = self.decoder(c)  # this is W_dc
         return x_hat, c
 
 
@@ -50,9 +69,16 @@ def train(dataloader, model, optimizer, loss_fxn, args):
                 # todo: check why this appears as a list
                 x_hat, c = model(x)
                 reconstruction_error = loss_fxn(x_hat, x)
-                abs_loss = torch.abs(c).sum(dim=-1)
-                l1_reg = abs_loss.sum() / x.shape[1]
-                total_loss = reconstruction_error + float(args.alpha) * l1_reg
+                import ipdb
+
+                ipdb.set_trace()
+                sparsity_penalty = torch.sum(
+                    torch.norm(c, dim=1)
+                    * torch.norm(model.decoder.weight, p=2, dim=0),
+                )  # sparisty penalty on the columns
+                total_loss = (
+                    reconstruction_error + float(args.alpha) * sparsity_penalty
+                )
 
             scaler.scale(total_loss).backward()
             scaler.step(optimizer)
@@ -111,6 +137,7 @@ def main(args, device):
         raise NotImplementedError
 
     embedding_dim = x.shape[1]
+
     if not isinstance(x, torch.Tensor):
         x = torch.tensor(x, dtype=torch.float32).to(device)
     dataset = TensorDataset(x)
