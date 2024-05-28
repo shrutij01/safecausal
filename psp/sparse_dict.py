@@ -57,7 +57,62 @@ class SparseDict(nn.Module):
         return x_hat, c
 
 
-def train(dataloader, model, optimizer, loss_fxn, args):
+class LinearDecayLR:
+    def __init__(self, optimizer, total_steps, last_percentage=0.2):
+        self.optimizer = optimizer
+        self.total_steps = total_steps
+        self.decay_start_step = int(total_steps * (1 - last_percentage))
+        self.decay_steps = total_steps - self.decay_start_step
+        self.initial_lrs = [group["lr"] for group in optimizer.param_groups]
+
+    def step(self, current_step):
+        if current_step < self.decay_start_step:
+            # No decay needed before the last 20% of the steps
+            lr = self.initial_lrs[0]
+        else:
+            # Calculate decayed lr
+            decayed_lr = (
+                (self.total_steps - current_step)
+                / self.decay_steps
+                * self.initial_lrs[0]
+            )
+            lr = max(decayed_lr, 0)  # Ensure lr does not go below 0
+
+        # Apply the decayed learning rate
+        for param_group, initial_lr in zip(
+            self.optimizer.param_groups, self.initial_lrs
+        ):
+            param_group["lr"] = lr
+
+
+class AlphaScheduler:
+    def __init__(self, total_steps, max_value, increase_percentage=0.05):
+        self.total_steps = total_steps
+        self.max_value = max_value
+        self.increase_end_step = int(total_steps * increase_percentage)
+        self.alpha = 0  # Start at zero
+
+    def get_coeff(self, current_step):
+        if current_step <= self.increase_end_step:
+            # Linearly increase
+            self.alpha = (
+                current_step / self.increase_end_step
+            ) * self.max_value
+        else:
+            # Stay at max value
+            self.alpha = self.max_value
+        return self.alpha
+
+
+def train(
+    dataloader,
+    model,
+    optimizer,
+    optim_scheduler,
+    alpha_scheduler,
+    loss_fxn,
+    args,
+):
     scaler = GradScaler()
     losses = []
     for epoch in range(int(args.num_epochs)):
@@ -76,13 +131,16 @@ def train(dataloader, model, optimizer, loss_fxn, args):
                         dim=0
                     ),
                 )  # sparisty penalty on the columns
-                total_loss = (
-                    reconstruction_error + float(args.alpha) * sparsity_penalty
-                )
+                alpha = alpha_scheduler.get_coeff(epoch)
+                total_loss = reconstruction_error + alpha * sparsity_penalty
 
             scaler.scale(total_loss).backward()
             scaler.step(optimizer)
             scaler.update()
+            optim_scheduler.step(epoch)
+            torch.nn.utils.clip_grad_norm_(
+                parameters=model.parameters, max_norm=1
+            )
 
             epoch_loss += total_loss.item()
         average_loss = epoch_loss / len(dataloader)
@@ -158,11 +216,16 @@ def main(args, device):
     optimizer = optim.AdamW(
         model.parameters(), lr=float(args.lr), weight_decay=1e-5
     )
+    optim_scheduler = LinearDecayLR(optimizer, args.num_epochs)
+    alpha_scheduler = AlphaScheduler(args.num_epochs, args.alpha)
+
     loss_fxn = torch.nn.MSELoss()
     losses = train(
         dataloader=loader,
         model=model,
         optimizer=optimizer,
+        optim_scheduler=optim_scheduler,
+        alpha_scheduler=alpha_scheduler,
         loss_fxn=loss_fxn,
         args=args,
     )
@@ -194,8 +257,8 @@ if __name__ == "__main__":
     parser.add_argument("--data-type", default="emb", choices=["emb", "gt"])
     parser.add_argument("--num-epochs", default=500)
     parser.add_argument("--batch-size", default=32)
-    parser.add_argument("--lr", type=float, default=float(1e-3))
-    parser.add_argument("--alpha", type=float, default=float(1e-3))
+    parser.add_argument("--lr", type=float, default=float(5e-5))
+    parser.add_argument("--alpha", type=float, default=float(5))
     parser.add_argument("--overcomplete-basis-factor", type=int, default=2)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
