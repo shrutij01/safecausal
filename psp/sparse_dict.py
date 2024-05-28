@@ -139,7 +139,7 @@ def train(
             scaler.update()
             optim_scheduler.step(epoch)
             torch.nn.utils.clip_grad_norm_(
-                parameters=model.parameters, max_norm=1
+                parameters=model.parameters(), max_norm=1
             )
 
             epoch_loss += total_loss.item()
