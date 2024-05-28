@@ -14,8 +14,6 @@ import pandas as pd
 import ast
 import datetime
 
-import utils
-
 
 class SparseDict(nn.Module):
     """x: differences between the embeddings of two contexts
