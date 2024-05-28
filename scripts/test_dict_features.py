@@ -53,7 +53,7 @@ def main(args, device):
     model_dict = torch.load(model_file)
     sparse_dict_model.load_state_dict(model_dict)
     x_test = load_test_data(args, data_config)
-    x_test = torch.from_numpy(x_test).to(device).type(torch.float64)
+    x_test = torch.from_numpy(x_test).to(device).type(torch.float32)
     import ipdb
 
     ipdb.set_trace()

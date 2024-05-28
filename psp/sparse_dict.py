@@ -112,7 +112,7 @@ def main(args, device):
 
     embedding_dim = x.shape[1]
     if not isinstance(x, torch.Tensor):
-        x = torch.tensor(x, dtype=torch.float64).to(device)
+        x = torch.tensor(x, dtype=torch.float32).to(device)
     dataset = TensorDataset(x)
     loader = DataLoader(
         dataset,
