@@ -41,7 +41,7 @@ class SparseDict(nn.Module):
         self.bias_encoder = nn.Parameter(torch.zeros(overcomplete_basis_size))
         self.bias_decoder = nn.Parameter(torch.zeros(embedding_size))
 
-        Wd_initial = torch.randn(overcomplete_basis_size, embedding_size)
+        Wd_initial = torch.randn(embedding_size, overcomplete_basis_size)
         norms = torch.sqrt(torch.sum(Wd_initial**2, dim=0))
         desired_norms = torch.rand(embedding_size) * 0.95 + 0.05
         scale_factors = desired_norms / norms
