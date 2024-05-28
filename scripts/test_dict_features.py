@@ -55,13 +55,15 @@ def main(args, device):
     x_test = load_test_data(args, data_config)
     x_test = torch.from_numpy(x_test).to(device).type(torch.float32)
     x_hat_test, c_test = sparse_dict_model(x_test)
+
+    # compute feature activations
+    W_d = sparse_dict_model.decoder.weight.data
+    decoder_norms = W_d.norm(p=2, dim=0, keepdim=True).squeeze(0)
+    dict_features = c_test * decoder_norms
     import ipdb
 
     ipdb.set_trace()
-    dict_features = c_test @ torch.norm(
-        sparse_dict_model.decoder.weight.data, p=2, dim=1
-    )
-    for row in M:
+    for row in dict_features:
         formatted_row = " ".join(f"{val:.5f}" for val in row)
         print(formatted_row)
     import ipdb
