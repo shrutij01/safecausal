@@ -110,9 +110,11 @@ def main(args, device):
         raise NotImplementedError
 
     embedding_dim = x.shape[1]
+    import ipdb
 
+    ipdb.set_trace()
     if not isinstance(x, torch.Tensor):
-        x = torch.tensor(x, dtype=torch.float32).to(device)
+        x = torch.tensor(x, dtype=torch.float64).to(device)
     dataset = TensorDataset(x)
     loader = DataLoader(
         dataset,
