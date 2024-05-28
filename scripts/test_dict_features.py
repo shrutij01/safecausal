@@ -54,6 +54,9 @@ def main(args, device):
     sparse_dict_model.load_state_dict(model_dict)
     x_test = load_test_data(args, data_config)
     x_test = torch.from_numpy(x_test).to(device)
+    import ipdb
+
+    ipdb.set_trace()
     x_hat_test, c_test = sparse_dict_model(x_test)
     M = sparse_dict_model.encoder.weight.data
     import ipdb
