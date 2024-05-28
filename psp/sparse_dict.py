@@ -30,6 +30,9 @@ class SparseDict(nn.Module):
         self.decoder = nn.Linear(overcomplete_basis_size, embedding_size)
 
     def forward(self, x):
+        import ipdb
+
+        ipdb.set_trace()
         c = torch.relu(self.encoder(x))  # this is ReLU(M.Tx + b)
         x_hat = self.decoder(c)  # this is Mc
         return x_hat, c
