@@ -14,7 +14,6 @@ import pandas as pd
 import ast
 import datetime
 
-import utils
 
 """Implementation tricks from 1. https://transformer-circuits.pub/2023/monosemantic-features/index.html#appendix-autoencoder
 and 2. https://transformer-circuits.pub/2024/april-update/index.html#training-saes.
