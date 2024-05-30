@@ -66,9 +66,12 @@ def main(args, device):
     W_d = sparse_dict_model.decoder.weight.data
     decoder_norms = W_d.norm(p=2, dim=0, keepdim=True).squeeze(0)
     # dict_features = c_test * decoder_norms
-    for row in W_d:
-        formatted_row = " ".join(f"{val:.5f}" for val in row)
-        print(formatted_row)
+    # for row in W_d:
+    #     formatted_row = " ".join(f"{val:.5f}" for val in row)
+    #     print(formatted_row)
+    threshold = float(1e-5)
+    rounded_W_d = np.where(W_d < threshold, 0, W_d)
+
     import ipdb
 
     ipdb.set_trace()
