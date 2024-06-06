@@ -51,8 +51,8 @@ class SparseDict(nn.Module):
         )
 
     def forward(self, x):
-        c = torch.relu(self.encoder(x))  # this is ReLU(W_e.Tx + b)
-        x_hat = self.decoder(c)  # this is W_dc
+        c = self.encoder(x) + self.bias_encoder  # this is W_e.Tx + b_e
+        x_hat = self.decoder(c) + self.bias_decoder  # this is W_d.c + b_d
         return x_hat, c
 
 
