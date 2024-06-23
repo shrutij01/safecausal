@@ -50,20 +50,15 @@ def main(args, device):
         overcomplete_basis_size=model_config.overcomplete_basis_size,
     ).to(device)
     model_file = os.path.join(args.model_dir, "model_M.pth")
-    import ipdb
 
-    ipdb.set_trace()
     model_dict = torch.load(model_file)
     sparse_dict_model.load_state_dict(model_dict)
     x_test = load_test_data(args, data_config)
     x_test = torch.from_numpy(x_test).to(device).type(torch.float32)
     x_hat_test, c_test = sparse_dict_model(x_test)
 
-    # compute feature activations
-    import ipdb
-
-    ipdb.set_trace()
-    W_d = sparse_dict_model.decoder.weight.data
+    # compute dict features
+    W_d = sparse_dict_model.decoder.weight.data.cpu()
     decoder_norms = W_d.norm(p=2, dim=0, keepdim=True).squeeze(0)
     # dict_features = c_test * decoder_norms
     # for row in W_d:

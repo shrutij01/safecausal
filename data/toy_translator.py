@@ -114,7 +114,6 @@ def translate_objects_single_coordinate(
 
 
 def main(args):
-
     positions_df = translate_objects_single_coordinate(
         num_tuples=args.num_tuples,
         total_objects=args.total_objects,

@@ -1,0 +1,5 @@
+- [burning!]the exact sparse auto encoder (sae) setup, what doesn't track?
+- given 0: (1) if we assume 1, what can we say about 2? (2) If we assume 2, what can we say about 1?
+- exact interpretation of lrh --> (2)
+- next steps with the sae
+
