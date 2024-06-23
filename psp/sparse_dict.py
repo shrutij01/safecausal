@@ -21,11 +21,23 @@ and 2. https://transformer-circuits.pub/2024/april-update/index.html#training-sa
 """
 
 
+class AffineLayer(nn.Module):
+    def __init__(self, embedding_size):
+        super(AffineLayer, self).__init__()
+        self.r = nn.Linear(embedding_size, embedding_size, bias=False)
+        self.bias = nn.Parameter(torch.zeros(embedding_size))
+        # just separating out the two to have control on initialisation
+
+    def forward(self, delta_z):
+        return self.r(delta_z)
+
+
 class SparseDict(nn.Module):
     """x: differences between the embeddings of two contexts
     which differ in k-concepts
     M: rows of this are the sparse codes which express this diff
     c: ensures x is a sparse combination of M's rows
+    this iteration also has updates from anthropic's implementation
     """
 
     def __init__(self, embedding_size, overcomplete_basis_size):
@@ -50,10 +62,14 @@ class SparseDict(nn.Module):
             self.decoder.weight.detach().clone().t()
         )
 
-    def forward(self, x):
-        c = self.encoder(x) + self.bias_encoder  # this is W_e.Tx + b_e
-        x_hat = self.decoder(c) + self.bias_decoder  # this is W_d.c + b_d
-        return x_hat, c
+    def forward(self, r_delta_z):
+        delta_c = (
+            self.encoder(r_delta_z) + self.bias_encoder
+        )  # this is W_e.Tx + b_e
+        r_delta_z_hat = (
+            self.decoder(delta_c) + self.bias_decoder
+        )  # this is W_d.c + b_d
+        return r_delta_z_hat, delta_c
 
 
 class LinearDecayLR:
@@ -105,7 +121,8 @@ class AlphaScheduler:
 
 def train(
     dataloader,
-    model,
+    r_model,
+    sparse_dict_model,
     optimizer,
     optim_scheduler,
     alpha_scheduler,
@@ -116,17 +133,25 @@ def train(
     losses = []
     for epoch in range(int(args.num_epochs)):
         epoch_loss = 0.0
-        for x_list in dataloader:
+        for delta_z_list in dataloader:
             optimizer.zero_grad()
             with autocast():  # Enables mixed precision
-                x = x_list[0]
+                delta_z = delta_z_list[0]
                 # todo: check why this appears as a list
-                x_hat, c = model(x)
-                reconstruction_error = loss_fxn(x_hat, x)
+                r_delta_z = r_model(delta_z)
+                delta_z_hat, delta_c = sparse_dict_model(r_delta_z)
+                reconstruction_error = loss_fxn(delta_z_hat, delta_z)
 
                 sparsity_penalty = torch.sum(
-                    torch.norm(c, p=1, dim=1).unsqueeze(dim=1)
-                )  # sparisty penalty on the columns
+                    torch.norm(delta_c, p=1, dim=1)
+                    * torch.norm(sparse_dict_model.decoder.weight, p=2, dim=0),
+                )
+                # take the l1 norm of each row of delta_c and the l2 norn of each column
+                # of W_d. take their product and sum over all the d products for the sparsity
+                # penalty
+                total_loss = (
+                    reconstruction_error + float(args.alpha) * sparsity_penalty
+                )
                 alpha = alpha_scheduler.get_coeff(epoch)
                 total_loss = reconstruction_error + alpha * sparsity_penalty
 
@@ -135,7 +160,7 @@ def train(
             scaler.update()
             optim_scheduler.step(epoch)
             torch.nn.utils.clip_grad_norm_(
-                parameters=model.parameters(), max_norm=1
+                parameters=sparse_dict_model.parameters(), max_norm=1
             )
 
             epoch_loss += total_loss.item()
@@ -204,13 +229,15 @@ def main(args, device):
     overcomplete_basis_size = (
         int(args.overcomplete_basis_factor) * embedding_dim
     )
-    model = SparseDict(
+    sparse_dict_model = SparseDict(
         embedding_size=embedding_dim,
         overcomplete_basis_size=overcomplete_basis_size,
     )
-    model.to(device)
+    r_model = AffineLayer(embedding_size=embedding_dim)
+    sparse_dict_model.to(device)
+    r_model.to(device)
     optimizer = optim.AdamW(
-        model.parameters(), lr=float(args.lr), weight_decay=1e-5
+        sparse_dict_model.parameters(), lr=float(args.lr), weight_decay=1e-5
     )
     optim_scheduler = LinearDecayLR(optimizer, args.num_epochs)
     alpha_scheduler = AlphaScheduler(args.num_epochs, args.alpha)
@@ -218,7 +245,8 @@ def main(args, device):
     loss_fxn = torch.nn.MSELoss()
     losses = train(
         dataloader=loader,
-        model=model,
+        r_model=r_model,
+        sparse_dict_model=sparse_dict_model,
         optimizer=optimizer,
         optim_scheduler=optim_scheduler,
         alpha_scheduler=alpha_scheduler,
@@ -227,13 +255,18 @@ def main(args, device):
     )
     current_datetime = datetime.datetime.now()
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    modeldir = os.path.join(
+    r_model_dir = os.path.join(args.embedding_dir, "r_model", timestamp_str)
+    sparse_dict_model_dir = os.path.join(
         args.embedding_dir, "sparse_dict_model", timestamp_str
     )
-    if not os.path.exists(modeldir):
-        os.makedirs(modeldir)
-    model_config_file = os.path.join(modeldir, "model_config.yaml")
-    model_config = {
+    if not os.path.exists(r_model_dir):
+        os.makedirs(r_model_dir)
+    if not os.path.exists(sparse_dict_model_dir):
+        os.makedirs(sparse_dict_model_dir)
+    sparse_dict_model_config_file = os.path.join(
+        sparse_dict_model_dir, "sparse_dict_model_config.yaml"
+    )
+    sparse_dict_model_config = {
         "embedding_size": embedding_dim,
         "overcomplete_basis_size": overcomplete_basis_size,
         "learning_rate": args.lr,
@@ -241,10 +274,14 @@ def main(args, device):
         "data_type": args.data_type,
         "num_epochs": args.num_epochs,
     }
-    with open(model_config_file, "w") as file:
-        yaml.dump(model_config, file)
-    model_dict_path = os.path.join(modeldir, "model_M.pth")
-    torch.save(model.state_dict(), model_dict_path)
+    with open(sparse_dict_model_config_file, "w") as file:
+        yaml.dump(sparse_dict_model_config, file)
+    r_model_dict_path = os.path.join(r_model_dir, "r_model.pth")
+    sparse_dict_model_dict_path = os.path.join(
+        sparse_dict_model_dir, "sparse_dict_model.pth"
+    )
+    torch.save(r_model.state_dict(), r_model_dict_path)
+    torch.save(sparse_dict_model.state_dict(), sparse_dict_model_dict_path)
 
 
 if __name__ == "__main__":

@@ -1,5 +1,5 @@
 import torch
-from psp.sparse_dict import SparseDict
+from psp.sparse_dict import SparseDict, AffineLayer
 
 import argparse
 import os
@@ -9,6 +9,7 @@ from box import Box
 import numpy as np
 import pandas as pd
 import ast
+from terminalplot import plot
 
 
 def load_test_data(args, data_config):
@@ -42,30 +43,45 @@ def main(args, device):
     data_config_file = os.path.join(args.embedding_dir, "config.yaml")
     with open(data_config_file, "r") as file:
         data_config = Box(yaml.safe_load(file))
-    model_config_file = os.path.join(args.model_dir, "model_config.yaml")
-    with open(model_config_file, "r") as file:
-        model_config = Box(yaml.safe_load(file))
+    sparse_dict_model_config_file = os.path.join(
+        args.sparse_dict_model_dir, "sparse_dict_model_config.yaml"
+    )
+    with open(sparse_dict_model_config_file, "r") as file:
+        sparse_dict_model_config = Box(yaml.safe_load(file))
     sparse_dict_model = SparseDict(
-        embedding_size=model_config.embedding_size,
-        overcomplete_basis_size=model_config.overcomplete_basis_size,
+        embedding_size=sparse_dict_model_config.embedding_size,
+        overcomplete_basis_size=sparse_dict_model_config.overcomplete_basis_size,
     ).to(device)
-    model_file = os.path.join(args.model_dir, "model_M.pth")
+    sparse_dict_model_file = os.path.join(
+        args.sparse_dict_model_dir, "sparse_dict_model.pth"
+    )
+    sparse_dict_model_dict = torch.load(sparse_dict_model_file)
+    sparse_dict_model.load_state_dict(sparse_dict_model_dict)
+    r_model = AffineLayer(
+        embedding_size=sparse_dict_model_config.embedding_size
+    )
+    r_model_file = os.path.join(args.r_model_dir, "r_model.pth")
+    r_model_dict = torch.load(r_model_file)
+    r_model.load_state_dict(r_model_dict)
+    delta_z_test = load_test_data(args, data_config)
+    delta_z_test = (
+        torch.from_numpy(delta_z_test).to(device).type(torch.float32)
+    )
+    delta_z_hat_test, delta_c_test = sparse_dict_model(delta_z_test)
 
-    model_dict = torch.load(model_file)
-    sparse_dict_model.load_state_dict(model_dict)
-    x_test = load_test_data(args, data_config)
-    x_test = torch.from_numpy(x_test).to(device).type(torch.float32)
-    x_hat_test, c_test = sparse_dict_model(x_test)
+    # get transformations
+    print(delta_c_test)
 
     # compute dict features
     W_d = sparse_dict_model.decoder.weight.data.cpu()
-    decoder_norms = W_d.norm(p=2, dim=0, keepdim=True).squeeze(0)
-    # dict_features = c_test * decoder_norms
-    # for row in W_d:
-    #     formatted_row = " ".join(f"{val:.5f}" for val in row)
-    #     print(formatted_row)
     threshold = float(1e-5)
     rounded_W_d = np.where(W_d < threshold, 0, W_d)
+    print(rounded_W_d)
+
+    # get test error
+    loss_fxn = torch.nn.MSELoss()
+    test_losses = loss_fxn(delta_z_hat_test, delta_z_test)
+    plot(test_losses)
 
     import ipdb
 
@@ -76,7 +92,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("embedding_dir")
-    parser.add_argument("model_dir")
+    parser.add_argument("r_model_dir")
+    parser.add_argument("sparse_dict_model_dir")
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
