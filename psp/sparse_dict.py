@@ -158,8 +158,7 @@ def train(
                 total_loss = reconstruction_error + alpha * sparsity_penalty
 
             scaler.scale(total_loss).backward()
-            for name, param in sparse_dict_model.named_parameters():
-                print(f"Gradient for {name}: {param.grad}")
+
             scaler.step(optimizer)
             scaler.update()
             optim_scheduler.step(epoch)
