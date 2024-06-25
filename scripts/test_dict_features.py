@@ -43,24 +43,20 @@ def main(args, device):
     data_config_file = os.path.join(args.embedding_dir, "config.yaml")
     with open(data_config_file, "r") as file:
         data_config = Box(yaml.safe_load(file))
-    sparse_dict_model_config_file = os.path.join(
-        args.sparse_dict_model_dir, "sparse_dict_model_config.yaml"
-    )
-    with open(sparse_dict_model_config_file, "r") as file:
-        sparse_dict_model_config = Box(yaml.safe_load(file))
+    models_config_file = os.path.join(args.models_dir, "models_config.yaml")
+    with open(models_config_file, "r") as file:
+        models_config = Box(yaml.safe_load(file))
     sparse_dict_model = SparseDict(
-        embedding_size=sparse_dict_model_config.embedding_size,
-        overcomplete_basis_size=sparse_dict_model_config.overcomplete_basis_size,
+        embedding_size=models_config.embedding_size,
+        overcomplete_basis_size=models_config.overcomplete_basis_size,
     ).to(device)
     sparse_dict_model_file = os.path.join(
-        args.sparse_dict_model_dir, "sparse_dict_model.pth"
+        args.models_dir, "sparse_dict_model", "sparse_dict_model.pth"
     )
     sparse_dict_model_dict = torch.load(sparse_dict_model_file)
     sparse_dict_model.load_state_dict(sparse_dict_model_dict)
-    r_model = AffineLayer(
-        embedding_size=sparse_dict_model_config.embedding_size
-    )
-    r_model_file = os.path.join(args.r_model_dir, "r_model.pth")
+    r_model = AffineLayer(embedding_size=models_config.embedding_size)
+    r_model_file = os.path.join(args.models_dir, "r_model", "r_model.pth")
     r_model_dict = torch.load(r_model_file)
     r_model.load_state_dict(r_model_dict)
     delta_z_test = load_test_data(args, data_config)
@@ -92,8 +88,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("embedding_dir")
-    parser.add_argument("r_model_dir")
-    parser.add_argument("sparse_dict_model_dir")
+    parser.add_argument("models_dir")
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
