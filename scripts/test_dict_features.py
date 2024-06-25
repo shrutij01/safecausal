@@ -63,10 +63,19 @@ def main(args, device):
     delta_z_test = (
         torch.from_numpy(delta_z_test).to(device).type(torch.float32)
     )
-    delta_z_hat_test, delta_c_test = sparse_dict_model(delta_z_test)
+    r_delta_z_test = r_model(delta_z_test)
+    delta_z_hat_test, delta_c_test = sparse_dict_model(r_delta_z_test)
+
+    import ipdb
+
+    ipdb.set_trace()
 
     # get transformations
     print(delta_c_test)
+
+    import ipdb
+
+    ipdb.set_trace()
 
     # compute dict features
     W_d = sparse_dict_model.decoder.weight.data.cpu()
@@ -74,16 +83,16 @@ def main(args, device):
     rounded_W_d = np.where(W_d < threshold, 0, W_d)
     print(rounded_W_d)
 
+    import ipdb
+
+    ipdb.set_trace()
+
     # get test error
     loss_fxn = torch.nn.MSELoss()
     test_losses = []
     for _ in range(len(delta_z_test)):
-        test_losses.append(loss_fxn(delta_z_hat_test, delta_z_test))
+        test_losses.append(loss_fxn(delta_z_hat_test, delta_z_test).item())
     plot(range(len(test_losses)), test_losses)
-
-    import ipdb
-
-    ipdb.set_trace()
 
 
 if __name__ == "__main__":

@@ -136,7 +136,9 @@ def train(
         for delta_z_list in dataloader:
             optimizer.zero_grad()
             with autocast():  # Enables mixed precision
+                assert len(delta_z_list) == 1
                 delta_z = delta_z_list[0]
+                assert isinstance(delta_z, torch.Tensor)
                 # todo: check why this appears as a list
                 r_delta_z = r_model(delta_z)
                 delta_z_hat, delta_c = sparse_dict_model(r_delta_z)
