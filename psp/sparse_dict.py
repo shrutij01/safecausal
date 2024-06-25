@@ -255,7 +255,7 @@ def main(args, device):
     )
     current_datetime = datetime.datetime.now()
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    modeldir = os.path.join(args.embedding_dir, timestamp_str)
+    modeldir = os.path.join(args.embedding_dir, timestamp_str + "_models")
     r_model_dir = os.path.join(
         modeldir,
         "r_model",
