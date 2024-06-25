@@ -76,7 +76,9 @@ def main(args, device):
 
     # get test error
     loss_fxn = torch.nn.MSELoss()
-    test_losses = loss_fxn(delta_z_hat_test, delta_z_test)
+    test_losses = []
+    for _ in range(len(delta_z_test)):
+        test_losses.append(loss_fxn(delta_z_hat_test, delta_z_test))
     plot(range(len(test_losses)), test_losses)
 
     import ipdb
