@@ -301,12 +301,14 @@ if __name__ == "__main__":
 
     parser.add_argument("embedding_dir")
     parser.add_argument("--data-type", default="emb", choices=["emb", "gt"])
-    parser.add_argument("--num-epochs", type=int, default=500)
+    parser.add_argument("--num-epochs", type=int, default=2000)
     parser.add_argument("--batch-size", default=32)
     parser.add_argument("--lr", type=float, default=float(5e-5))
-    parser.add_argument("--alpha", type=float, default=float(0.5))
+    parser.add_argument("--alpha", type=float, default=float(0.001))
     parser.add_argument("--overcomplete-basis-factor", type=int, default=1)
-    parser.add_argument("--grad-clip-sae", type=bool, default=False)
+    parser.add_argument(
+        "--grad-clip-sae", action=argparse.BooleanOptionalAction, default=False
+    )
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
