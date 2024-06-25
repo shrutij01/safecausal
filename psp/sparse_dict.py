@@ -165,10 +165,9 @@ def train(
             scaler.step(optimizer)
             scaler.update()
             optim_scheduler.step(epoch)
-            torch.nn.utils.clip_grad_norm_(
-                parameters=sparse_dict_model.parameters(), max_norm=1
-            )
-
+            # torch.nn.utils.clip_grad_norm_(
+            #     parameters=sparse_dict_model.parameters(), max_norm=1
+            # )
             epoch_loss += total_loss.item()
         average_loss = epoch_loss / len(dataloader)
         losses.append(average_loss)
