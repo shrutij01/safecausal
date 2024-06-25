@@ -255,16 +255,18 @@ def main(args, device):
     )
     current_datetime = datetime.datetime.now()
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    r_model_dir = os.path.join(args.embedding_dir, "r_model", timestamp_str)
-    sparse_dict_model_dir = os.path.join(
-        args.embedding_dir, "sparse_dict_model", timestamp_str
+    modeldir = os.path.join(args.embedding_dir, timestamp_str)
+    r_model_dir = os.path.join(
+        modeldir,
+        "r_model",
     )
+    sparse_dict_model_dir = os.path.join(modeldir, "sparse_dict_model")
     if not os.path.exists(r_model_dir):
         os.makedirs(r_model_dir)
     if not os.path.exists(sparse_dict_model_dir):
         os.makedirs(sparse_dict_model_dir)
     sparse_dict_model_config_file = os.path.join(
-        sparse_dict_model_dir, "sparse_dict_model_config.yaml"
+        modeldir, "models_config.yaml"
     )
     sparse_dict_model_config = {
         "embedding_size": embedding_dim,
