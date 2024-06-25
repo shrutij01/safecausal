@@ -55,7 +55,9 @@ def main(args, device):
     )
     sparse_dict_model_dict = torch.load(sparse_dict_model_file)
     sparse_dict_model.load_state_dict(sparse_dict_model_dict)
-    r_model = AffineLayer(embedding_size=models_config.embedding_size)
+    r_model = AffineLayer(embedding_size=models_config.embedding_size).to(
+        device
+    )
     r_model_file = os.path.join(args.models_dir, "r_model", "r_model.pth")
     r_model_dict = torch.load(r_model_file)
     r_model.load_state_dict(r_model_dict)
