@@ -141,7 +141,9 @@ def train(
                 r_delta_z = r_model(delta_z)
                 delta_z_hat, delta_c = sparse_dict_model(r_delta_z)
                 reconstruction_error = loss_fxn(delta_z_hat, delta_z)
+                import ipdb
 
+                ipdb.set_trace()
                 sparsity_penalty = torch.sum(
                     torch.norm(delta_c, p=1, dim=1)
                     * torch.norm(sparse_dict_model.decoder.weight, p=2, dim=0),
@@ -293,7 +295,7 @@ if __name__ == "__main__":
     parser.add_argument("--batch-size", default=32)
     parser.add_argument("--lr", type=float, default=float(5e-5))
     parser.add_argument("--alpha", type=float, default=float(0.5))
-    parser.add_argument("--overcomplete-basis-factor", type=int, default=2)
+    parser.add_argument("--overcomplete-basis-factor", type=int, default=1)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
