@@ -141,11 +141,9 @@ def train(
                 r_delta_z = r_model(delta_z)
                 delta_z_hat, delta_c = sparse_dict_model(r_delta_z)
                 reconstruction_error = loss_fxn(delta_z_hat, delta_z)
-                import ipdb
 
-                ipdb.set_trace()
                 sparsity_penalty = torch.sum(
-                    torch.norm(delta_c, p=1, dim=1)
+                    torch.norm(delta_c.unsqueeze(dim=2), p=1, dim=2)
                     * torch.norm(sparse_dict_model.decoder.weight, p=2, dim=0),
                 )
                 # take the l1 norm of each row of delta_c and the l2 norn of each column
