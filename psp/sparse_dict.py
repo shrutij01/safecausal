@@ -165,9 +165,10 @@ def train(
             scaler.step(optimizer)
             scaler.update()
             optim_scheduler.step(epoch)
-            # torch.nn.utils.clip_grad_norm_(
-            #     parameters=sparse_dict_model.parameters(), max_norm=1
-            # )
+            if args.grad_clip_sae:
+                torch.nn.utils.clip_grad_norm_(
+                    parameters=sparse_dict_model.parameters(), max_norm=1
+                )
             epoch_loss += total_loss.item()
         average_loss = epoch_loss / len(dataloader)
         losses.append(average_loss)
@@ -283,6 +284,7 @@ def main(args, device):
         "alpha": args.alpha,
         "data_type": args.data_type,
         "num_epochs": args.num_epochs,
+        "gradient_clipping_for_dict": args.grad_clip_sae,
     }
     with open(sparse_dict_model_config_file, "w") as file:
         yaml.dump(sparse_dict_model_config, file)
@@ -304,6 +306,7 @@ if __name__ == "__main__":
     parser.add_argument("--lr", type=float, default=float(5e-5))
     parser.add_argument("--alpha", type=float, default=float(0.5))
     parser.add_argument("--overcomplete-basis-factor", type=int, default=1)
+    parser.add_argument("--grad-clip-sae", type=bool, default=False)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
