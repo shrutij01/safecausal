@@ -13,6 +13,7 @@ import numpy as np
 import pandas as pd
 import ast
 import datetime
+from terminalplot import plot
 
 
 """Implementation tricks from 1. https://transformer-circuits.pub/2023/monosemantic-features/index.html#appendix-autoencoder
@@ -133,6 +134,8 @@ def train(
     losses = []
     for epoch in range(int(args.num_epochs)):
         epoch_loss = 0.0
+        reconstruction_error = 0.0
+        sparsity_penalty = 0.0
         for delta_z_list in dataloader:
             optimizer.zero_grad()
             with autocast():  # Enables mixed precision
@@ -170,7 +173,10 @@ def train(
         average_loss = epoch_loss / len(dataloader)
         losses.append(average_loss)
         if epoch % 100 == 0:
-            print(f"Ending epoch {epoch}, Average Loss: {average_loss:.4f}")
+            print(f"Ending epoch {epoch}, Average Loss: {average_loss:.4f}\n")
+            print(
+                f"Loss breakup as {reconstruction_error:.4f} reconstruction, {sparsity_penalty:.4f} sparsity"
+            )
 
     return losses
 
