@@ -59,6 +59,7 @@ def main(args):
         n=args.dataset_length,
         string_length=args.string_length,
         cycle_distance=args.cycle_distance,
+        file_path=args.gradeschooler_file_path,
     )
     split = int(0.9 * len(cfc1_tuples))
     cfc1_train, cfc1_test = cfc1_tuples[0:split], cfc1_tuples[split:]
@@ -139,6 +140,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset-length",
         default=10000,
+    )
+    parser.add_argument(
+        "--gradeschooler-file-path",
+        default="/home/mila/j/joshi.shruti/causalrepl_space/psp/data/gradeschooler.txt",
     )
     parser.add_argument("--string-length", default=3)
     parser.add_argument("--cycle-distance", default=1)
