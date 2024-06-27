@@ -64,11 +64,11 @@ def main(args):
     split = int(0.9 * len(cfc1_tuples))
     cfc1_train, cfc1_test = cfc1_tuples[0:split], cfc1_tuples[split:]
     cfc2_train, cfc2_test = cfc2_tuples[0:split], cfc2_tuples[split:]
-
-    cfc1_train = utils.append_instruction(cfc1_train, instruction)
-    cfc1_test = utils.append_instruction(cfc1_test, instruction)
-    cfc2_train = utils.append_instruction(cfc2_train, instruction)
-    cfc2_test = utils.append_instruction(cfc2_test, instruction)
+    if args.append_instruction:
+        cfc1_train = utils.append_instruction(cfc1_train, instruction)
+        cfc1_test = utils.append_instruction(cfc1_test, instruction)
+        cfc2_train = utils.append_instruction(cfc2_train, instruction)
+        cfc2_test = utils.append_instruction(cfc2_test, instruction)
 
     tokenizer = transformers.LlamaTokenizerFast.from_pretrained(
         args.model_id, token=ACCESS_TOKEN
@@ -147,6 +147,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--string-length", default=3)
     parser.add_argument("--cycle-distance", default=1)
+    parser.add_argument("--append-instruction", default=False)
 
     args = parser.parse_args()
     main(args)

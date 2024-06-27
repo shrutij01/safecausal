@@ -23,9 +23,6 @@ def load_dataset(dataset_name, **kwargs):
         for cp in context_pairs:
             cfc1_tuples.append(cp[0].split(",")[0])
             cfc2_tuples.append(cp[0].split(",")[1].lstrip())
-        import ipdb
-
-        ipdb.set_trace()
         instruction = "Change any one, or two, or all three of the entities in the string, and mention how many and which you changed."
     else:
         if dataset_name == "truthful_qa":
