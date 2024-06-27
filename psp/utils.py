@@ -9,8 +9,28 @@ def load_dataset(dataset_name, **kwargs):
         instruction = "Swap the letters in this string."
         cfc1_tuples, cfc2_tuples = data[:, 0], data[:, 1]
     elif dataset_name == "gradeschooler":
-        data = gradeschooler.generate_data(**kwargs)
-        instruction = "Swap the letters in this string."
+        samples = []
+        file_path = kwargs.get("file_path")
+        if file_path is None:
+            raise ValueError(
+                "file_path must be provided as a keyword argument"
+            )
+        with open(file_path, "r") as f:
+            context_pairs = [
+                line.strip().split("\t") for line in f if line.strip()
+            ]
+        for cp in context_pairs:
+            samples.append(
+                [
+                    cp[0].split(",")[0],
+                    cp[0].split(",")[1].lstrip(),
+                    cp[0].split(",")[2].replace(" ", ""),
+                ]
+            )
+        import ipdb
+
+        ipdb.set_trace()
+        instruction = "Change any one, or two, or all three of the entities in the string, and mention how many and which you changed."
         cfc1_tuples, cfc2_tuples = data[:, 0], data[:, 1]
     else:
         if dataset_name == "truthful_qa":

@@ -114,7 +114,7 @@ def generate_counterfactual_pair():
     return [x, tilde_x, k]
 
 
-def generate_dataset(size):
+def generate_data(size):
     dataset = []
     for _ in range(size):
         cf_pair = generate_counterfactual_pair()
