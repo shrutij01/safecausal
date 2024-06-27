@@ -23,7 +23,7 @@ def get_weighted_mean_embedding(tokens, model):
     weights = torch.linspace(1, sequence_length, steps=sequence_length)
     weights = weights / weights.sum()
     weights = weights.view(1, -1, 1)
-    weighted_mean = (last_hidden_states * weights).sum(dim=1)
+    weighted_mean = (last_hidden_states.cpu() * weights).sum(dim=1)
     return weighted_mean
 
 
