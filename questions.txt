@@ -1,4 +1,9 @@
 Questions/doubts
 
-- non-id if W_e combines both
-which tfs and r
+Apply softmax to Wd  to display dict features properly, no sparsity penalty before that
+
+Evaluation pipeline, MCC score, inspect r and c, hat(c)
+
+Identifiability: Seb's paper, reason it's useful: diff modalities, in each a diff number of concepts is active-- recover this using sparsity-- look at their proof to see how to get statistical identifiability
+
+How can this model disetangle on the basis of sparse perturbs?
