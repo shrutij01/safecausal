@@ -79,7 +79,7 @@ def main(args):
         low_cpu_mem_usage=True,
         device_map="auto",
         # attn_implementation="flash_attention_2",
-        torch_dtype=torch.bfloat16,  # check compatibility
+        # torch_dtype=torch.bfloat16,  # check compatibility
     )
 
     cfc1_train_embeddings = extract_embeddings(
