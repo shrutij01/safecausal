@@ -162,6 +162,9 @@ def main(args, device):
         with h5py.File(embeddings_file, "r") as f:
             cfc1_train = np.array(f["cfc1_train"]).squeeze()
             cfc2_train = np.array(f["cfc2_train"]).squeeze()
+        import ipdb
+
+        ipdb.set_trace()
         x = cfc2_train - cfc1_train
         mean = x.mean(axis=0)
         std = x.std(axis=0, ddof=1)
