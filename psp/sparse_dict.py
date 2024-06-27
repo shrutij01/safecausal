@@ -22,17 +22,6 @@ and 2. https://transformer-circuits.pub/2024/april-update/index.html#training-sa
 """
 
 
-class AffineLayer(nn.Module):
-    def __init__(self, embedding_size):
-        super(AffineLayer, self).__init__()
-        self.r = nn.Linear(embedding_size, embedding_size, bias=False)
-        self.bias = nn.Parameter(torch.zeros(embedding_size))
-        # just separating out the two to have control on initialisation
-
-    def forward(self, delta_z):
-        return self.r(delta_z)
-
-
 class SparseDict(nn.Module):
     """x: differences between the embeddings of two contexts
     which differ in k-concepts
@@ -52,12 +41,6 @@ class SparseDict(nn.Module):
 
         self.bias_encoder = nn.Parameter(torch.zeros(overcomplete_basis_size))
         self.bias_decoder = nn.Parameter(torch.zeros(embedding_size))
-
-        # Wd_initial = torch.randn(embedding_size, overcomplete_basis_size)
-        # norms = torch.sqrt(torch.sum(Wd_initial**2, dim=0))
-        # desired_norms = torch.rand(overcomplete_basis_size) * 0.95 + 0.05
-        # scale_factors = desired_norms / norms
-        # self.decoder.weight = nn.Parameter(Wd_initial * scale_factors)
 
         self.encoder.weight = nn.Parameter(
             self.decoder.weight.detach().clone().t()
@@ -122,7 +105,6 @@ class AlphaScheduler:
 
 def train(
     dataloader,
-    r_model,
     sparse_dict_model,
     optimizer,
     optim_scheduler,
@@ -143,17 +125,10 @@ def train(
                 delta_z = delta_z_list[0]
                 assert isinstance(delta_z, torch.Tensor)
                 # todo: check why this appears as a list
-                r_delta_z = r_model(delta_z)
-                delta_z_hat, delta_c = sparse_dict_model(r_delta_z)
+                delta_z_hat, delta_c = sparse_dict_model(delta_z)
                 reconstruction_error = loss_fxn(delta_z_hat, delta_z)
 
-                sparsity_penalty = torch.sum(
-                    torch.norm(delta_c.unsqueeze(dim=2), p=1, dim=2)
-                    * torch.norm(sparse_dict_model.decoder.weight, p=2, dim=0),
-                )
-                # take the l1 norm of each row of delta_c and the l2 norn of each column
-                # of W_d. take their product and sum over all the d products for the sparsity
-                # penalty
+                sparsity_penalty = torch.sum(torch.norm(delta_c, p=1, dim=1))
                 total_loss = (
                     reconstruction_error + float(args.alpha) * sparsity_penalty
                 )
@@ -242,9 +217,7 @@ def main(args, device):
         embedding_size=embedding_dim,
         overcomplete_basis_size=overcomplete_basis_size,
     )
-    r_model = AffineLayer(embedding_size=embedding_dim)
     sparse_dict_model.to(device)
-    r_model.to(device)
     optimizer = optim.AdamW(
         sparse_dict_model.parameters(), lr=float(args.lr), weight_decay=1e-5
     )
@@ -254,7 +227,6 @@ def main(args, device):
     loss_fxn = torch.nn.MSELoss()
     losses = train(
         dataloader=loader,
-        r_model=r_model,
         sparse_dict_model=sparse_dict_model,
         optimizer=optimizer,
         optim_scheduler=optim_scheduler,
@@ -265,13 +237,7 @@ def main(args, device):
     current_datetime = datetime.datetime.now()
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
     modeldir = os.path.join(args.embedding_dir, timestamp_str + "_models")
-    r_model_dir = os.path.join(
-        modeldir,
-        "r_model",
-    )
     sparse_dict_model_dir = os.path.join(modeldir, "sparse_dict_model")
-    if not os.path.exists(r_model_dir):
-        os.makedirs(r_model_dir)
     if not os.path.exists(sparse_dict_model_dir):
         os.makedirs(sparse_dict_model_dir)
     sparse_dict_model_config_file = os.path.join(
@@ -288,11 +254,9 @@ def main(args, device):
     }
     with open(sparse_dict_model_config_file, "w") as file:
         yaml.dump(sparse_dict_model_config, file)
-    r_model_dict_path = os.path.join(r_model_dir, "r_model.pth")
     sparse_dict_model_dict_path = os.path.join(
         sparse_dict_model_dir, "sparse_dict_model.pth"
     )
-    torch.save(r_model.state_dict(), r_model_dict_path)
     torch.save(sparse_dict_model.state_dict(), sparse_dict_model_dict_path)
 
 
@@ -307,7 +271,10 @@ if __name__ == "__main__":
     parser.add_argument("--alpha", type=float, default=float(0.001))
     parser.add_argument("--overcomplete-basis-factor", type=int, default=1)
     parser.add_argument(
-        "--grad-clip-sae", action=argparse.BooleanOptionalAction, default=False
+        "--grad-clip-sae",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Enable the feature (default: False) by calling --grad-clip-sae and --no-grad-clip-sae for disabling",
     )
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

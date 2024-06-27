@@ -1,5 +1,5 @@
 import torch
-from psp.sparse_dict import SparseDict, AffineLayer
+from psp.sparse_dict import SparseDict
 
 import argparse
 import os
@@ -55,18 +55,11 @@ def main(args, device):
     )
     sparse_dict_model_dict = torch.load(sparse_dict_model_file)
     sparse_dict_model.load_state_dict(sparse_dict_model_dict)
-    r_model = AffineLayer(embedding_size=models_config.embedding_size).to(
-        device
-    )
-    r_model_file = os.path.join(args.models_dir, "r_model", "r_model.pth")
-    r_model_dict = torch.load(r_model_file)
-    r_model.load_state_dict(r_model_dict)
     delta_z_test = load_test_data(args, data_config)
     delta_z_test = (
         torch.from_numpy(delta_z_test).to(device).type(torch.float32)
     )
-    r_delta_z_test = r_model(delta_z_test)
-    delta_z_hat_test, delta_c_test = sparse_dict_model(r_delta_z_test)
+    delta_z_hat_test, delta_c_test = sparse_dict_model(delta_z_test)
 
     import ipdb
 
