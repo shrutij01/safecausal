@@ -103,8 +103,10 @@ def main(args):
     )
     current_datetime = datetime.datetime.now()
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    directory_location = "/network/scratch/j/joshi.shruti/psp/ana/"
-    directory_name = os.path.join(directory_location, timestamp_str)
+    directory_location = "/network/scratch/j/joshi.shruti/psp/"
+    directory_name = os.path.join(
+        directory_location, str(args.dataset_name), timestamp_str
+    )
     if not os.path.exists(directory_name):
         os.makedirs(directory_name)
     embeddings_path = os.path.join(directory_name, "embeddings.h5")
@@ -115,7 +117,6 @@ def main(args):
         cfc1_test_embeddings,
         cfc2_test_embeddings,
     )
-
     config = {
         "dataset": args.dataset_name,
         "dataset_length": args.dataset_length,
@@ -130,7 +131,7 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("dataset_name", choices=["ana"])
+    parser.add_argument("dataset_name", choices=["ana", "gradeschooler"])
     parser.add_argument("model_id", default="meta-llama/Llama-2-7b-hf")
     parser.add_argument(
         "--task-type", default="swap", choices=["swap", "cycle"]
