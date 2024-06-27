@@ -78,7 +78,7 @@ def main(args):
         token=ACCESS_TOKEN,
         low_cpu_mem_usage=True,
         device_map="auto",
-        attn_implementation="flash_attention_2",
+        # attn_implementation="flash_attention_2",
         torch_dtype=torch.bfloat16,  # check compatibility
     )
 
@@ -151,3 +151,5 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     main(args)
+
+# export PYTHONPATH=${PYTHONPATH}:/home/mila/j/joshi.shruti/causalrepl_space/psp
