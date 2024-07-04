@@ -95,15 +95,11 @@ def main(args, device):
     ipdb.set_trace()
 
     # get comparative sparsities of transformations
-    sp = []
+    sparsity_penalties = []
     for delta_c in delta_c_test:
-        sp.append(
+        sparsity_penalties.append(
             torch.sum(torch.norm(delta_c, p=1)).detach().cpu().numpy().item()
         )
-    np_sp = np.array(sp)
-    min_norm = np.min(np_sp)
-    np_sp = np_sp / min_norm
-    sparsity_penalties = list(np_sp)
     labels = list(map(int, labels))
     df = pd.DataFrame(
         {"Sparsity Penalties": sparsity_penalties, "Labels": labels}
