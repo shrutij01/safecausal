@@ -100,17 +100,17 @@ def main(args, device):
         sparsity_penalties.append(
             torch.sum(torch.norm(delta_c, p=1)).detach().cpu().numpy()
         )
-    import ipdb
-
-    ipdb.set_trace()
     data = pd.DataFrame(
         {"Sparsity Penalties": sparsity_penalties, "Labels": labels}
     )
+    import ipdb
+
+    ipdb.set_trace()
     sns.violinplot(x="Labels", y="Sparsity Penalties", data=data)
     plt.title(
         "Variation of the L1 norm of reconstructed transformations with different p-sparse vectors"
     )
-    plt.savefig("sparse_violins.png"))
+    plt.savefig("sparse_violins.png")
 
     # compute dict features
     W_d = sparse_dict_model.decoder.weight.data.cpu()
