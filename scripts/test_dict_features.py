@@ -10,33 +10,61 @@ import numpy as np
 import pandas as pd
 import ast
 from terminalplot import plot
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
 def load_test_data(args, data_config):
-    df_file = os.path.join(
-        args.embedding_dir, "multi_objects_single_coordinate.csv"
-    )
-    cfc_columns = data_config.cfc_column_names
-    converters = {col: ast.literal_eval for col in cfc_columns}
-    x_df = pd.read_csv(df_file, converters=converters)
-    x_df_test = x_df.iloc[int(data_config.split * data_config.size) :]
-
-    def convert_to_list_of_ints(value):
-        if isinstance(value, str):
-            value = ast.literal_eval(value)
-        return [int(x) for x in value]
-
-    for column in x_df_test[cfc_columns]:
-        x_df_test[column] = x_df_test[column].apply(convert_to_list_of_ints)
-
-    x = np.asarray(
-        (
-            x_df_test[cfc_columns]
-            .apply(lambda row: sum(row, []), axis=1)
-            .tolist()
+    delta_z = None
+    labels = []
+    if data_config.dataset == "toy_translator":
+        df_file = os.path.join(
+            args.embedding_dir, "multi_objects_single_coordinate.csv"
         )
-    )
-    return x
+        cfc_columns = data_config.cfc_column_names
+        converters = {col: ast.literal_eval for col in cfc_columns}
+        x_df = pd.read_csv(df_file, converters=converters)
+        x_df_test = x_df.iloc[int(data_config.split * data_config.size) :]
+
+        def convert_to_list_of_ints(value):
+            if isinstance(value, str):
+                value = ast.literal_eval(value)
+            return [int(delta_z) for delta_z in value]
+
+        for column in x_df_test[cfc_columns]:
+            x_df_test[column] = x_df_test[column].apply(
+                convert_to_list_of_ints
+            )
+
+        delta_z = np.asarray(
+            (
+                x_df_test[cfc_columns]
+                .apply(lambda row: sum(row, []), axis=1)
+                .tolist()
+            )
+        )
+    elif data_config.dataset == "gradeschooler":
+        embeddings_file = os.path.join(args.embedding_dir, "embeddings.h5")
+        with h5py.File(embeddings_file, "r") as f:
+            cfc1_embeddings_test = np.array(f["cfc1_test"])
+            cfc2_embeddings_test = np.array(f["cfc2_test"])
+        delta_z = cfc2_embeddings_test - cfc1_embeddings_test
+        mean = delta_z.mean(axis=0)
+        std = delta_z.std(axis=0, ddof=1)
+        delta_z = (delta_z - mean) / (std + 1e-8)
+        labels_file = os.path.join(args.embeddings_dir, "gradeschooler.txt")
+        labels = []
+        with open(labels_file, "r") as f:
+            context_pairs = [
+                line.strip().split("\t") for line in f if line.strip()
+            ]
+        for cp in context_pairs[0.9 * data_config.dataset_length :]:
+            labels.append(cp[0].split(",")[2])
+    else:
+        raise NotImplementedError(
+            "Datasets implemented: toy_translator and gradeschooler"
+        )
+    return delta_z, labels
 
 
 def main(args, device):
@@ -55,7 +83,7 @@ def main(args, device):
     )
     sparse_dict_model_dict = torch.load(sparse_dict_model_file)
     sparse_dict_model.load_state_dict(sparse_dict_model_dict)
-    delta_z_test = load_test_data(args, data_config)
+    delta_z_test, labels = load_test_data(args, data_config)
     delta_z_test = (
         torch.from_numpy(delta_z_test).to(device).type(torch.float32)
     )
@@ -65,8 +93,18 @@ def main(args, device):
 
     ipdb.set_trace()
 
-    # get transformations
-    print(delta_c_test)
+    # get comparative sparsities of transformations
+    sparsity_penalties = []
+    for delta_c in delta_c_test:
+        sparsity_penalties = torch.sum(torch.norm(delta_c, p=1, dim=1))
+    data = pd.DataFrame(
+        {"Sparsity Penalties": sparsity_penalties, "Labels": labels}
+    )
+    sns.violinplot(x="Labels", y="Sparsity Penalties", data=data)
+    plt.title(
+        "Variation of the L1 norm of reconstructed transformations with different p-sparse vectors"
+    )
+    plt.savefig(os.path.join(args.embedding_dir, "sparse_violins.png"))
 
     import ipdb
 

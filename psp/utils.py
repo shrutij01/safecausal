@@ -1,3 +1,5 @@
+import torch
+
 from datasets import load_dataset
 
 from data import ana, gradeschooler
@@ -58,3 +60,37 @@ def append_instruction(contexts, instruction):
             [str(instruction) + " " + str(context)]
         )
     return instruction_plus_contexts
+
+
+def pearson_corr(x, y):
+    mean_x = torch.mean(x, dim=0, keepdim=True)
+    mean_y = torch.mean(y, dim=0, keepdim=True)
+    xm = x - mean_x
+    ym = y - mean_y
+    r_num = torch.mm(xm.t(), ym)
+    r_den = torch.sqrt(
+        torch.sum(xm**2, dim=0).view(-1, 1)
+        * torch.sum(ym**2, dim=0).view(1, -1)
+    )
+    r = r_num / r_den
+    return r
+
+
+def mcc_metric(Z, X):
+    """
+    Calculate Metric for Correlation of Correlations (MCC)
+    Z: Latent variables (N, L) where N is number of samples, L is number of latent dims
+    X: Observed features (N, F) where N is number of samples, F is number of features
+    """
+    corr_matrix = pearson_corr(Z, X)
+
+    # Calculate correlation of the absolute values of correlation coefficients
+    abs_corr_matrix = torch.abs(corr_matrix)
+    upper_triangle_indices = torch.triu_indices(
+        abs_corr_matrix.size(0), abs_corr_matrix.size(1), offset=1
+    )
+    mcc = torch.mean(
+        abs_corr_matrix[upper_triangle_indices[0], upper_triangle_indices[1]]
+    )
+
+    return mcc

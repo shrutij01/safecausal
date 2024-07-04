@@ -6,4 +6,19 @@ Evaluation pipeline, MCC score, inspect r and c, hat(c)
 
 Identifiability: Seb's paper, reason it's useful: diff modalities, in each a diff number of concepts is active-- recover this using sparsity-- look at their proof to see how to get statistical identifiability
 
-How can this model disetangle on the basis of sparse perturbs?
+How can this model disentangle on the basis of sparse perturbs?
+
+All the identifiability we need is to identify delta_c upto permutation and element wise transforms-- what else?
+- assumptions on the data 
+
+Classic sparse coding in ml which we are saying we are realizing with a weak dictionary learning algorithm through sparse auto encoders.
+
+Sparsity penalty only on delta_c.	
+
+Interpretability of delta_c
+
+Apply softmax on delta_c
+
+Recon loss is 0, one matrix that aligns A to have delta_c as 1-sparse. Proof by contradiction. Complication from L0 to L1 later.
+
+Reconstruction loss as 0 and with an L0 norm, try to prove that for 1-sparse changes you get an invertible matrix that gives you 1-sparse changes and anything else will be denser than that.

@@ -123,6 +123,7 @@ def main(args):
         "dataset_length": args.dataset_length,
         "task_type": args.task_type,
         "model": args.model_id,
+        "split": 0.9,
     }
     config_path = os.path.join(directory_name, "config.yaml")
     with open(config_path, "w") as file:
