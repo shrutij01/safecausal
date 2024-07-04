@@ -58,7 +58,8 @@ def load_test_data(args, data_config):
             context_pairs = [
                 line.strip().split("\t") for line in f if line.strip()
             ]
-        for cp in context_pairs[0.9 * data_config.dataset_length :]:
+        split = int(0.9 * data_config.dataset_length)
+        for cp in context_pairs[split:]:
             labels.append(cp[0].split(",")[2])
     else:
         raise NotImplementedError(
