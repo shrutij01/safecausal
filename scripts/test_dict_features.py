@@ -96,12 +96,16 @@ def main(args, device):
 
     # get comparative sparsities of transformations
     sp = []
+    non_zero_sp = []
     for delta_c in delta_c_test:
         sp.append(
             torch.sum(torch.norm(delta_c, p=1)).detach().cpu().numpy().item()
         )
+        non_zero_sp.append(
+            np.count_nonzero(delta_c.detach().cpu().numpy().item())
+        )
+
     np_sp = np.array(sp)
-    non_zero_sp = np.count_nonzero(np_sp)
     min_norm = np.min(np_sp)
     np_sp = np_sp / min_norm
     sparsity_penalties = list(np_sp)
