@@ -100,6 +100,7 @@ def main(args, device):
         sparsity_penalties.append(
             torch.sum(torch.norm(delta_c, p=1)).detach().cpu().numpy()
         )
+    labels = list(map(int, labels))
     df = pd.DataFrame(
         {"Sparsity Penalties": sparsity_penalties, "Labels": labels}
     )
