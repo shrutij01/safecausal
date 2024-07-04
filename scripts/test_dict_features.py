@@ -110,7 +110,7 @@ def main(args, device):
     plt.title(
         "Variation of the L1 norm of reconstructed transformations with different p-sparse vectors"
     )
-    plt.savefig(os.path.join(args.embedding_dir, "sparse_violins.png"))
+    plt.savefig("sparse_violins.png"))
 
     # compute dict features
     W_d = sparse_dict_model.decoder.weight.data.cpu()
