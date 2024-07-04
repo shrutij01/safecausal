@@ -98,7 +98,7 @@ def main(args, device):
     sparsity_penalties = []
     for delta_c in delta_c_test:
         sparsity_penalties.append(
-            torch.sum(torch.norm(delta_c, p=1)).detach().cpu().numpy()
+            torch.sum(torch.norm(delta_c, p=1)).detach().cpu().numpy().item()
         )
     labels = list(map(int, labels))
     df = pd.DataFrame(
