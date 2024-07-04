@@ -102,7 +102,7 @@ def main(args, device):
             torch.sum(torch.norm(delta_c, p=1)).detach().cpu().numpy().item()
         )
         non_zero_sp.append(
-            np.count_nonzero(delta_c.detach().cpu().numpy().item())
+            np.sum(delta_c.detach().cpu().numpy() > args.sparsity_threshold)
         )
 
     np_sp = np.array(sp)
@@ -149,6 +149,7 @@ if __name__ == "__main__":
 
     parser.add_argument("embedding_dir")
     parser.add_argument("models_dir")
+    parser.add_argument("--sparsity-threshold", default=float(1e-1))
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
