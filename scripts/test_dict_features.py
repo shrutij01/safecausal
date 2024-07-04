@@ -113,7 +113,7 @@ def main(args, device):
     df = pd.DataFrame(
         {
             "Sparsity Penalties": sparsity_penalties,
-            "Num-non-zero": non_zero_sp,
+            "Num-non-zeros": non_zero_sp,
             "Labels": labels,
         }
     )
