@@ -101,20 +101,22 @@ def main(args, device):
             torch.sum(torch.norm(delta_c, p=1)).detach().cpu().numpy().item()
         )
     np_sp = np.array(sp)
+    non_zero_sp = np.count_nonzero(np_sp)
     min_norm = np.min(np_sp)
     np_sp = np_sp / min_norm
     sparsity_penalties = list(np_sp)
     labels = list(map(int, labels))
     df = pd.DataFrame(
-        {"Sparsity Penalties": sparsity_penalties, "Labels": labels}
-    )
-    df["Sparsity Penalties"] = pd.to_numeric(
-        df["Sparsity Penalties"], errors="coerce"
+        {
+            "Sparsity Penalties": sparsity_penalties,
+            "Num-non-zero": non_zero_sp,
+            "Labels": labels,
+        }
     )
     import ipdb
 
     ipdb.set_trace()
-    sns.violinplot(x="Labels", y="Sparsity Penalties", data=df, fill=False)
+    sns.violinplot(x="Labels", y="Num-non-zeros", data=df, fill=False)
     plt.title(
         "Variation of the L1 norm of reconstructed transformations with different p-sparse vectors"
     )
