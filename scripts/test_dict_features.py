@@ -97,7 +97,10 @@ def main(args, device):
     # get comparative sparsities of transformations
     sparsity_penalties = []
     for delta_c in delta_c_test:
-        sparsity_penalties = torch.sum(torch.norm(delta_c, p=1)).cpu()
+        sparsity_penalties.append(torch.sum(torch.norm(delta_c, p=1)).cpu())
+    import ipdb
+
+    ipdb.set_trace()
     data = pd.DataFrame(
         {"Sparsity Penalties": sparsity_penalties, "Labels": labels}
     )
@@ -106,10 +109,6 @@ def main(args, device):
         "Variation of the L1 norm of reconstructed transformations with different p-sparse vectors"
     )
     plt.savefig(os.path.join(args.embedding_dir, "sparse_violins.png"))
-
-    import ipdb
-
-    ipdb.set_trace()
 
     # compute dict features
     W_d = sparse_dict_model.decoder.weight.data.cpu()
