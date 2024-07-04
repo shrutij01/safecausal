@@ -52,7 +52,7 @@ def load_test_data(args, data_config):
         mean = delta_z.mean(axis=0)
         std = delta_z.std(axis=0, ddof=1)
         delta_z = (delta_z - mean) / (std + 1e-8)
-        labels_file = os.path.join(args.embeddings_dir, "gradeschooler.txt")
+        labels_file = os.path.join(args.embedding_dir, "gradeschooler.txt")
         labels = []
         with open(labels_file, "r") as f:
             context_pairs = [
