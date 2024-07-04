@@ -97,7 +97,7 @@ def main(args, device):
     # get comparative sparsities of transformations
     sparsity_penalties = []
     for delta_c in delta_c_test:
-        sparsity_penalties = torch.sum(torch.norm(delta_c, p=1))
+        sparsity_penalties = torch.sum(torch.norm(delta_c, p=1)).cpu()
     data = pd.DataFrame(
         {"Sparsity Penalties": sparsity_penalties, "Labels": labels}
     )
