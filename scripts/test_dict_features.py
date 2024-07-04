@@ -102,7 +102,9 @@ def main(args, device):
             torch.sum(torch.norm(delta_c, p=1)).detach().cpu().numpy().item()
         )
         non_zero_sp.append(
-            np.sum(delta_c.detach().cpu().numpy() > args.sparsity_threshold)
+            np.sum(
+                delta_c.detach().cpu().numpy() > float(args.sparsity_threshold)
+            )
         )
 
     np_sp = np.array(sp)
