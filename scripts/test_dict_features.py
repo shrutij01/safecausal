@@ -12,7 +12,7 @@ import ast
 from terminalplot import plot
 import seaborn as sns
 import matplotlib.pyplot as plt
-from utils import DisentanglementScores
+from psp.utils import DisentanglementScores
 
 
 def load_test_data(args, data_config):
