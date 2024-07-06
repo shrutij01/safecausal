@@ -90,18 +90,13 @@ class DisentanglementScores:
             self.get_upper_tri(self.compute_correlation(in_rep)),
         )[0, 1]
 
-    def get_mcc_scores(self, pairs: List[tuple]):
+    def get_mcc_scores(self, out_reps, in_reps):
         mcc_scores = []
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            for pair in pairs:
-                import ipdb
+            import ipdb
 
-                ipdb.set_trace()
-                mcc_scores.append(
-                    executor.map(
-                        self.compute_mcc(
-                            pair[0][:, np.newaxis], pair[1][:, np.newaxis]
-                        )
-                    )
-                )
+            ipdb.set_trace()
+            mcc_scores.append(
+                executor.map(self.compute_mcc(out_reps, in_reps))
+            )
         return mcc_scores

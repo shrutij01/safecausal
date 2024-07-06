@@ -97,13 +97,9 @@ def main(args, device):
 
     # get mcc score
     disentanglement_scores = DisentanglementScores()
-    rep_pairs = list(
-        zip(
-            delta_c_test.detach().cpu().numpy(),
-            delta_z_test.detach().cpu().numpy(),
-        )
+    mcc_scores = disentanglement_scores.get_mcc_scores(
+        delta_c_test, delta_z_test
     )
-    mcc_scores = disentanglement_scores.get_mcc_scores(rep_pairs)
 
     import ipdb
 
