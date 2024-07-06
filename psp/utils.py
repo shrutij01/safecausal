@@ -91,9 +91,5 @@ class DisentanglementScores:
         )[0, 1]
 
     def get_mcc_scores(self, out_reps, in_reps):
-        with concurrent.futures.ProcessPoolExecutor() as executor:
-            import ipdb
-
-            ipdb.set_trace()
-            mcc_scores = executor.map(self.compute_mcc(out_reps, in_reps))
+        mcc_scores = self.compute_mcc(out_reps, in_reps)
         return mcc_scores
