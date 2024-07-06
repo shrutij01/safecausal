@@ -135,38 +135,38 @@ def main(args, device):
             "Labels": labels,
         }
     )
-    import ipdb
+    # import ipdb
 
-    ipdb.set_trace()
+    # ipdb.set_trace()
 
-    clusterer = hdbscan.HDBSCAN(min_cluster_size=100, gen_min_span_tree=True)
-    delta_c_test_normed = StandardScaler().fit_transform(
-        delta_c_test.detach().cpu().numpy()
-    )
-    pca = PCA(n_components=2)
-    delta_c_test_normed_reduced = pca.fit_transform(delta_c_test_normed)
+    # clusterer = hdbscan.HDBSCAN(min_cluster_size=100, gen_min_span_tree=True)
+    # delta_c_test_normed = StandardScaler().fit_transform(
+    #     delta_c_test.detach().cpu().numpy()
+    # )
+    # pca = PCA(n_components=2)
+    # delta_c_test_normed_reduced = pca.fit_transform(delta_c_test_normed)
 
-    cluster_labels = clusterer.fit_predict(delta_c_test_normed_reduced)
-    plt.figure(figsize=(12, 6))
-    plt.subplot(121)
-    plt.scatter(
-        delta_c_test_normed_reduced[:, 0],
-        delta_c_test_normed_reduced[:, 1],
-        c=cluster_labels,
-        cmap="viridis",
-        marker="o",
-        s=50,
-        alpha=0.6,
-    )
-    plt.title("HDBSCAN Clustering")
+    # cluster_labels = clusterer.fit_predict(delta_c_test_normed_reduced)
+    # plt.figure(figsize=(12, 6))
+    # plt.subplot(121)
+    # plt.scatter(
+    #     delta_c_test_normed_reduced[:, 0],
+    #     delta_c_test_normed_reduced[:, 1],
+    #     c=cluster_labels,
+    #     cmap="viridis",
+    #     marker="o",
+    #     s=50,
+    #     alpha=0.6,
+    # )
+    # plt.title("HDBSCAN Clustering")
 
-    plt.subplot(122)
-    clusterer.minimum_spanning_tree_.plot(
-        edge_cmap="viridis", edge_alpha=0.6, node_size=80, edge_linewidth=2
-    )
-    plt.title("HDBSCAN Minimum Spanning Tree")
-    plt.savefig("clusterfck.png")
-    import ipdb
+    # plt.subplot(122)
+    # clusterer.minimum_spanning_tree_.plot(
+    #     edge_cmap="viridis", edge_alpha=0.6, node_size=80, edge_linewidth=2
+    # )
+    # plt.title("HDBSCAN Minimum Spanning Tree")
+    # plt.savefig("clusterfck.png")
+    # import ipdb
 
     ipdb.set_trace()
 
