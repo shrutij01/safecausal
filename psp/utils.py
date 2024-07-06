@@ -93,8 +93,6 @@ class DisentanglementScores:
     def get_mcc_scores(self, pairs: List[tuple]):
         mcc_scores = []
         with concurrent.futures.ProcessPoolExecutor() as executor:
-            results = executor.map(
-                lambda p: self.compute_mcc(p[0], p[1]), pairs
-            )
+            results = executor.map(self.compute_mcc(pairs[0], pairs[1]))
             mcc_scores = list(results)
         return mcc_scores
