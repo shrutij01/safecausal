@@ -133,7 +133,9 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("dataset_name", choices=["ana", "gradeschooler"])
+    parser.add_argument(
+        "dataset_name", choices=["ana", "gradeschooler", "truthful_qa"]
+    )
     parser.add_argument("model_id", default="meta-llama/Llama-2-7b-hf")
     parser.add_argument(
         "--task-type", default="swap", choices=["swap", "cycle"]

@@ -30,15 +30,18 @@ def load_dataset(dataset_name, **kwargs):
             cfc1_tuples.append(cp[0].split(",")[0])
             cfc2_tuples.append(cp[0].split(",")[1].lstrip())
         instruction = "Change any one, or two, or all three of the entities in the string, and mention how many and which you changed."
-    else:
-        if dataset_name == "truthful_qa":
-            dataset_params = {
-                "split": "validation",
-                "name": "multiple_choice",
-            }
-        data = load_dataset(dataset_name, **dataset_params)
+    elif dataset_name == "truthful_qa":
+        import ipdb
+
+        ipdb.set_trace()
+        hf_dataset_name = "allenai/truthful_qa"
+        dataset_params = {
+            "split": "validation",
+            "name": "multiple_choice",
+        }
+        data = load_dataset(hf_dataset_name, **dataset_params)
         instruction = "Label as 0 for False and 1 for True."
-        true_targets = [
+        cfc2_tuples = [
             value
             for is_true, value in zip(
                 [d == 1 for d in data[0]["mc1_targets"]["labels"]],
@@ -46,7 +49,7 @@ def load_dataset(dataset_name, **kwargs):
             )
             if is_true
         ]
-        false_targets = [
+        cfc1_tuples = [
             value
             for is_true, value in zip(
                 [d == 0 for d in data[0]["mc1_targets"]["labels"]],
@@ -54,6 +57,8 @@ def load_dataset(dataset_name, **kwargs):
             )
             if is_true
         ]
+    else:
+        raise NotImplementedError
     return cfc1_tuples, cfc2_tuples, instruction
 
 
