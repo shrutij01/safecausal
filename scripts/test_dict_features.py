@@ -12,6 +12,7 @@ import ast
 from terminalplot import plot
 import seaborn as sns
 import matplotlib.pyplot as plt
+from utils import DisentanglementScores
 
 
 def load_test_data(args, data_config):
@@ -122,17 +123,21 @@ def main(args, device):
     import ipdb
 
     ipdb.set_trace()
+    # compare sparsities
     sns.violinplot(x="Labels", y="Num-non-zeros", data=df, fill=False)
     plt.title(
         "Variation of the L1 norm of reconstructed transformations with different p-sparse vectors"
     )
     plt.savefig("sparse_violins.png")
 
-    # compute dict features
-    W_d = sparse_dict_model.decoder.weight.data.cpu()
-    threshold = float(1e-5)
-    rounded_W_d = np.where(W_d < threshold, 0, W_d)
-    print(rounded_W_d)
+    import ipdb
+
+    ipdb.set_trace()
+
+    # get mcc score
+    disentanglement_scores = DisentanglementScores()
+    rep_pairs = list(zip(delta_c_test, delta_z_test))
+    mcc_scores = disentanglement_scores.get_mcc_scores(rep_pairs)
 
     import ipdb
 
