@@ -40,6 +40,8 @@ def load_dataset(dataset_name, **kwargs):
             "name": "multiple_choice",
         }
         data = hf_load_dataset(hf_dataset_name, **dataset_params)
+        # mc1_targets have a single correct choice and mc2_targets have
+        # multiple choices that can be correct
         instruction = "Label as 0 for False and 1 for True."
         cfc2_tuples = [
             value
