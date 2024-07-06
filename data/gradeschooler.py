@@ -1,0 +1,136 @@
+import random
+import copy
+
+CODEBOOK = {
+    "object": [
+        "Sofa",
+        "Coffee table",
+        "Lamp",
+        "Refrigerator",
+        "Microwave",
+        "Toaster",
+        "Television",
+        "Washing machine",
+        "Dryer",
+        "Vacuum cleaner",
+        "Bed",
+        "Dresser",
+        "Mirror",
+        "Dining table",
+        "Chair",
+        "Bookshelf",
+        "Clock",
+        "Blender",
+        "Cutlery",
+        "Iron",
+        "Toothbrush",
+        "Towel",
+        "Shower curtain",
+        "Trash can",
+        "Kettle",
+    ],
+    "color": [
+        "Red",
+        "Blue",
+        "Green",
+        "Yellow",
+        "Orange",
+        "Purple",
+        "Pink",
+        "Black",
+        "White",
+        "Gray",
+        "Cyan",
+        "Magenta",
+        "Teal",
+        "Maroon",
+        "Olive",
+        "Navy",
+        "Lavender",
+        "Turquoise",
+        "Coral",
+        "Mint",
+    ],
+    "attribute": [
+        "Bright",
+        "Smooth",
+        "Rough",
+        "Soft",
+        "Heavy",
+        "Light",
+        "Warm",
+        "Cold",
+        "Vintage",
+        "Loud",
+        "Bohemian",
+        "Contemporary",
+        "Sharp",
+        "Dull",
+        "Strong",
+        "Weak",
+        "Deep",
+        "Shallow",
+        "Ancient",
+        "Modern",
+    ],
+}
+
+
+def sample_excluding_elements(list, exclude):
+    filtered_list = [item for item in list if item not in exclude]
+
+    if not filtered_list:
+        raise ValueError("No elements left to sample after excluding.")
+
+    return random.choice(filtered_list)
+
+
+def generate_counterfactual_pair():
+    init_attribute = tilde_attribute = random.choice(CODEBOOK["attribute"])
+    init_color = tilde_color = random.choice(CODEBOOK["color"])
+    init_object = tilde_object = random.choice(CODEBOOK["object"])
+    k = random.randint(1, len(CODEBOOK))
+    factors_to_resample = random.sample(list(CODEBOOK.keys()), k)
+    for factor in factors_to_resample:
+        if factor == "attribute":
+            exclude = init_attribute
+            tilde_attribute = sample_excluding_elements(
+                CODEBOOK[factor], exclude=exclude
+            )
+        elif factor == "color":
+            exclude = init_color
+            tilde_color = sample_excluding_elements(
+                CODEBOOK[factor], exclude=exclude
+            )
+        elif factor == "object":
+            exclude = init_object
+            tilde_object = sample_excluding_elements(
+                CODEBOOK[factor], exclude=exclude
+            )
+        else:
+            raise ValueError
+    x = f"{init_attribute} {init_color} {init_object}"
+    tilde_x = f"{tilde_attribute} {tilde_color} {tilde_object}"
+    return [x, tilde_x, k]
+
+
+def generate_data(size):
+    dataset = []
+    for _ in range(size):
+        cf_pair = generate_counterfactual_pair()
+        dataset.append(cf_pair)
+    return dataset
+
+
+def write_to_txt_file(filename, list_of_lists):
+    with open(filename, "w") as file:
+        for single_list in list_of_lists:
+            row = ", ".join(map(str, single_list)) + "\n"
+            file.write(row)
+
+
+if __name__ == "__main__":
+    filename = "compositional_object_contexts.txt"
+    size = 10000
+    dataset = generate_dataset(size)
+    write_to_txt_file(filename, dataset)

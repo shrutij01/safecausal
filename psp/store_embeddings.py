@@ -23,7 +23,7 @@ def get_weighted_mean_embedding(tokens, model):
     weights = torch.linspace(1, sequence_length, steps=sequence_length)
     weights = weights / weights.sum()
     weights = weights.view(1, -1, 1)
-    weighted_mean = (last_hidden_states * weights).sum(dim=1)
+    weighted_mean = (last_hidden_states.cpu() * weights).sum(dim=1)
     return weighted_mean
 
 
@@ -59,15 +59,16 @@ def main(args):
         n=args.dataset_length,
         string_length=args.string_length,
         cycle_distance=args.cycle_distance,
+        file_path=args.gradeschooler_file_path,
     )
     split = int(0.9 * len(cfc1_tuples))
     cfc1_train, cfc1_test = cfc1_tuples[0:split], cfc1_tuples[split:]
     cfc2_train, cfc2_test = cfc2_tuples[0:split], cfc2_tuples[split:]
-
-    cfc1_train = utils.append_instruction(cfc1_train, instruction)
-    cfc1_test = utils.append_instruction(cfc1_test, instruction)
-    cfc2_train = utils.append_instruction(cfc2_train, instruction)
-    cfc2_test = utils.append_instruction(cfc2_test, instruction)
+    if args.append_instruction:
+        cfc1_train = utils.append_instruction(cfc1_train, instruction)
+        cfc1_test = utils.append_instruction(cfc1_test, instruction)
+        cfc2_train = utils.append_instruction(cfc2_train, instruction)
+        cfc2_test = utils.append_instruction(cfc2_test, instruction)
 
     tokenizer = transformers.LlamaTokenizerFast.from_pretrained(
         args.model_id, token=ACCESS_TOKEN
@@ -77,8 +78,8 @@ def main(args):
         token=ACCESS_TOKEN,
         low_cpu_mem_usage=True,
         device_map="auto",
-        attn_implementation="flash_attention_2",
-        torch_dtype=torch.bfloat16,  # check compatibility
+        # attn_implementation="flash_attention_2",
+        # torch_dtype=torch.bfloat16,  # check compatibility
     )
 
     cfc1_train_embeddings = extract_embeddings(
@@ -103,8 +104,10 @@ def main(args):
     )
     current_datetime = datetime.datetime.now()
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    directory_location = "/network/scratch/j/joshi.shruti/psp/ana/"
-    directory_name = os.path.join(directory_location, timestamp_str)
+    directory_location = "/network/scratch/j/joshi.shruti/psp/"
+    directory_name = os.path.join(
+        directory_location, str(args.dataset_name), timestamp_str
+    )
     if not os.path.exists(directory_name):
         os.makedirs(directory_name)
     embeddings_path = os.path.join(directory_name, "embeddings.h5")
@@ -115,12 +118,12 @@ def main(args):
         cfc1_test_embeddings,
         cfc2_test_embeddings,
     )
-
     config = {
         "dataset": args.dataset_name,
         "dataset_length": args.dataset_length,
         "task_type": args.task_type,
         "model": args.model_id,
+        "split": 0.9,
     }
     config_path = os.path.join(directory_name, "config.yaml")
     with open(config_path, "w") as file:
@@ -130,7 +133,9 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("dataset_name", choices=["ana"])
+    parser.add_argument(
+        "dataset_name", choices=["ana", "gradeschooler", "truthful_qa"]
+    )
     parser.add_argument("model_id", default="meta-llama/Llama-2-7b-hf")
     parser.add_argument(
         "--task-type", default="swap", choices=["swap", "cycle"]
@@ -139,8 +144,15 @@ if __name__ == "__main__":
         "--dataset-length",
         default=10000,
     )
+    parser.add_argument(
+        "--gradeschooler-file-path",
+        default="/home/mila/j/joshi.shruti/causalrepl_space/psp/data/gradeschooler.txt",
+    )
     parser.add_argument("--string-length", default=3)
     parser.add_argument("--cycle-distance", default=1)
+    parser.add_argument("--append-instruction", default=False)
 
     args = parser.parse_args()
     main(args)
+
+# export PYTHONPATH=${PYTHONPATH}:/home/mila/j/joshi.shruti/causalrepl_space/psp
