@@ -98,6 +98,10 @@ class DisentanglementScores:
 
                 ipdb.set_trace()
                 mcc_scores.append(
-                    executor.map(self.compute_mcc(pair[0], pair[1]))
+                    executor.map(
+                        self.compute_mcc(
+                            pair[0][:, np.newaxis], pair[1][:, np.newaxis]
+                        )
+                    )
                 )
         return mcc_scores
