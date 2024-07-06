@@ -1,6 +1,6 @@
 import torch
 
-from datasets import load_dataset
+from datasets import load_dataset as hf_load_dataset
 
 from data import ana, gradeschooler
 
@@ -39,7 +39,7 @@ def load_dataset(dataset_name, **kwargs):
             "split": "validation",
             "name": "multiple_choice",
         }
-        data = load_dataset(hf_dataset_name, **dataset_params)
+        data = hf_load_dataset(hf_dataset_name, **dataset_params)
         instruction = "Label as 0 for False and 1 for True."
         cfc2_tuples = [
             value
