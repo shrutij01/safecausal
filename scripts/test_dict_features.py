@@ -13,6 +13,10 @@ from terminalplot import plot
 import seaborn as sns
 import matplotlib.pyplot as plt
 from psp.utils import DisentanglementScores
+import hdbscan
+from sklearn.datasets import make_blobs
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
 
 def load_test_data(args, data_config):
@@ -134,11 +138,59 @@ def main(args, device):
     import ipdb
 
     ipdb.set_trace()
+
+    clusterer = hdbscan.HDBSCAN(min_cluster_size=100, gen_min_span_tree=True)
+    delta_c_test_normed = StandardScaler().fit_transform(
+        delta_c_test.detach().cpu().numpy()
+    )
+    pca = PCA(n_components=2)
+    delta_c_test_normed_reduced = pca.fit_transform(delta_c_test_normed)
+
+    cluster_labels = clusterer.fit_predict(delta_c_test_normed_reduced)
+    plt.figure(figsize=(12, 6))
+    plt.subplot(121)
+    plt.scatter(
+        delta_c_test_normed_reduced[:, 0],
+        delta_c_test_normed_reduced[:, 1],
+        c=cluster_labels,
+        cmap="viridis",
+        marker="o",
+        s=50,
+        alpha=0.6,
+    )
+    plt.title("HDBSCAN Clustering")
+
+    plt.subplot(122)
+    clusterer.minimum_spanning_tree_.plot(
+        edge_cmap="viridis", edge_alpha=0.6, node_size=80, edge_linewidth=2
+    )
+    plt.title("HDBSCAN Minimum Spanning Tree")
+    plt.savefig("clusterfck.png")
+    import ipdb
+
+    ipdb.set_trace()
+
     # compare sparsities
-    sns.violinplot(x="Labels", y="Num-non-zeros", data=df, fill=False)
+    ax = sns.violinplot(
+        x="Labels", y="Sparsity Penalties", data=df, fill=False
+    )
     plt.title(
         "Variation of the L1 norm of reconstructed transformations with different p-sparse vectors"
     )
+    medians = df.groupby(["Labels"])["Sparsity Penalties"].median()
+
+    vertical_offset = df["Sparsity Penalties"].median() * 0.05
+
+    for xtick, median_val in zip(ax.get_xticks(), medians):
+        ax.text(
+            xtick,
+            median_val + vertical_offset,
+            f"Median: {median_val:.2f}",
+            horizontalalignment="center",
+            size="x-small",
+            color="black",
+            weight="semibold",
+        )
     plt.savefig("sparse_violins.png")
 
     import ipdb
