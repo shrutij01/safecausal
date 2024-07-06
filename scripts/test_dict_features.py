@@ -95,6 +95,20 @@ def main(args, device):
 
     ipdb.set_trace()
 
+    # get mcc score
+    disentanglement_scores = DisentanglementScores()
+    rep_pairs = list(
+        zip(
+            delta_c_test.detach().cpu().numpy(),
+            delta_z_test.detach().cpu().numpy(),
+        )
+    )
+    mcc_scores = disentanglement_scores.get_mcc_scores(rep_pairs)
+
+    import ipdb
+
+    ipdb.set_trace()
+
     # get comparative sparsities of transformations
     sp = []
     non_zero_sp = []
@@ -129,20 +143,6 @@ def main(args, device):
         "Variation of the L1 norm of reconstructed transformations with different p-sparse vectors"
     )
     plt.savefig("sparse_violins.png")
-
-    import ipdb
-
-    ipdb.set_trace()
-
-    # get mcc score
-    disentanglement_scores = DisentanglementScores()
-    rep_pairs = list(
-        zip(
-            delta_c_test.detach().cpu().numpy(),
-            delta_z_test.detach().cpu().numpy(),
-        )
-    )
-    mcc_scores = disentanglement_scores.get_mcc_scores(rep_pairs)
 
     import ipdb
 
