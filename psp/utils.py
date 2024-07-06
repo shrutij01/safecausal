@@ -34,7 +34,7 @@ def load_dataset(dataset_name, **kwargs):
         import ipdb
 
         ipdb.set_trace()
-        hf_dataset_name = "allenai/truthful_qa"
+        hf_dataset_name = "truthfulqa/truthful_qa"
         dataset_params = {
             "split": "validation",
             "name": "multiple_choice",
