@@ -89,6 +89,9 @@ def plot_embeddings(label, all_embeddings, all_num_labels, all_labels):
     )
     tsne = TSNE(random_state=1, metric="cosine", perplexity=5.0)
     embs = tsne.fit_transform(embeddings_for_label)
+    import ipdb
+
+    ipdb.set_trace()
     labels = sum(all_labels, [])
     plt.figure(figsize=(10, 8))
     plt.scatter(
