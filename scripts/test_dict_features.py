@@ -115,7 +115,7 @@ def plot_embeddings(label, all_embeddings, all_num_labels, all_labels):
         alpha=0.1,
         c=label_names,
     )
-    ax.legend(legend_names)
+    ax.legend(*legend_names)
     plt.savefig("clusterfck" + str(label) + ".png")
 
 
