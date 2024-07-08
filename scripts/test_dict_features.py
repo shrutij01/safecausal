@@ -88,6 +88,9 @@ def get_embeddings_for_label(
 ):
     labels_array = np.array(all_num_labels)
     mask = labels_array == label
+    import ipdb
+
+    ipdb.set_trace()
     label_names = all_labels[mask]
     return all_embeddings[mask], label_names
 
