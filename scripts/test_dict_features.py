@@ -107,15 +107,15 @@ def plot_embeddings(label, all_embeddings, all_num_labels, all_labels):
 
     ipdb.set_trace()
     label_names = sum(label_names, [])
-    plt.figure(figsize=(10, 8))
-    plt.scatter(
+    legend_names = ["attribute", "color", "object"]
+    fig, ax = plt.subplots()
+    scatter = ax.scatter(
         embs[:, 0],
         embs[:, 1],
         alpha=0.1,
         c=label_names,
-        s=0.1,
-        cmap="Spectral",
     )
+    ax.legend(legend_names)
     plt.savefig("clusterfck" + str(label) + ".png")
 
 
