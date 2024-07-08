@@ -72,6 +72,7 @@ def load_test_data(args, data_config):
 
 
 def get_embeddings_for_label(label, all_embeddings, all_labels):
+    all_labels = list(map(int, all_labels))
     labels_array = np.array(all_labels)
     mask = labels_array == label
     import ipdb
