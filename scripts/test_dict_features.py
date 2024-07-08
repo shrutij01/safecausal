@@ -63,7 +63,7 @@ def load_test_data(args, data_config):
             ]
         split = int(0.9 * data_config.dataset_length)
         for cp in context_pairs[split:]:
-            labels.append(cp[0].split(",")[2])
+            labels.append(cp[0].split(",")[3])
     else:
         raise NotImplementedError(
             "Datasets implemented: toy_translator and gradeschooler"
@@ -72,6 +72,9 @@ def load_test_data(args, data_config):
 
 
 def get_embeddings_for_label(label, all_embeddings, all_labels):
+    import ipdb
+
+    ipdb.set_trace()
     all_labels = list(map(int, all_labels))
     labels_array = np.array(all_labels)
     mask = labels_array == label
@@ -116,12 +119,15 @@ def main(args, device):
         torch.from_numpy(delta_z_test).to(device).type(torch.float32)
     )
     delta_z_hat_test, delta_c_test = sparse_dict_model(delta_z_test)
+    delta_c_test = delta_c_test.detach().cpu().numpy()
+    delta_z_hat_test = delta_z_hat_test.detach().cpu().numpy()
+    delta_z_test = delta_z_test.detach().cpu().numpy()
 
     import ipdb
 
     ipdb.set_trace()
 
-    plot_embeddings(1, delta_c_test.detach().cpu().numpy(), labels)
+    plot_embeddings(1, delta_c_test, labels)
     import ipdb
 
     ipdb.set_trace()
@@ -129,8 +135,8 @@ def main(args, device):
     # get mcc score
     disentanglement_scores = DisentanglementScores()
     mcc_scores = disentanglement_scores.get_mcc_scores(
-        delta_c_test.detach().cpu().numpy(),
-        delta_z_test.detach().cpu().numpy(),
+        delta_c_test,
+        delta_z_test,
     )
 
     import ipdb
