@@ -91,7 +91,8 @@ def get_embeddings_for_label(
     import ipdb
 
     ipdb.set_trace()
-    label_names = all_labels[mask]
+    label_names = [sublist for sublist in all_labels if len(sublist) == label]
+
     return all_embeddings[mask], label_names
 
 
