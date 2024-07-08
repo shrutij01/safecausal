@@ -84,12 +84,12 @@ class DisentanglementScores:
         indices = np.triu_indices_from(rep, k=1)
         return rep[indices]
 
-    def compute_mcc(self, out_rep, in_rep):
+    def compute_mcc(self, rep1, rep2):
         return np.corrcoef(
-            self.get_upper_tri(self.compute_correlation(out_rep)),
-            self.get_upper_tri(self.compute_correlation(in_rep)),
+            self.get_upper_tri(self.compute_correlation(rep1)),
+            self.get_upper_tri(self.compute_correlation(rep2)),
         )[0, 1]
 
-    def get_mcc_scores(self, out_reps, in_reps):
-        mcc_scores = self.compute_mcc(out_reps, in_reps)
-        return mcc_scores
+    def get_mcc_score(self, out_reps, in_reps):
+        mcc_score = self.compute_mcc(out_reps, in_reps)
+        return mcc_score

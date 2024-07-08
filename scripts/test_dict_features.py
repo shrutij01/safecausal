@@ -20,6 +20,7 @@ from sklearn.manifold import TSNE
 def load_test_data(args, data_config):
     delta_z = None
     labels = []
+    num_labels = []
     if data_config.dataset == "toy_translator":
         df_file = os.path.join(
             args.embedding_dir, "multi_objects_single_coordinate.csv"
@@ -57,6 +58,7 @@ def load_test_data(args, data_config):
         delta_z = (delta_z - mean) / (std + 1e-8)
         labels_file = os.path.join(args.embedding_dir, "gradeschooler.txt")
         labels = []
+        num_labels = []
         with open(labels_file, "r") as f:
             context_pairs = [
                 line.strip().split("\t") for line in f if line.strip()
@@ -64,38 +66,53 @@ def load_test_data(args, data_config):
         split = int(0.9 * data_config.dataset_length)
         for cp in context_pairs[split:]:
             labels.append(cp[0].split(",")[3])
+            num_labels.append(cp[0].split(",")[2])
     else:
         raise NotImplementedError(
             "Datasets implemented: toy_translator and gradeschooler"
         )
-    return delta_z, labels
+    return delta_z, labels, num_labels
 
 
-def get_embeddings_for_label(label, all_embeddings, all_labels):
-    import ipdb
-
-    ipdb.set_trace()
-    all_labels = list(map(int, all_labels))
-    labels_array = np.array(all_labels)
+def get_embeddings_for_label(label, all_embeddings, all_num_labels):
+    labels_array = np.array(all_num_labels)
     mask = labels_array == label
     return all_embeddings[mask]
 
 
-def plot_embeddings(label, all_embeddings, all_labels):
+def plot_embeddings(label, all_embeddings, all_num_labels, all_labels):
     embeddings_for_label = get_embeddings_for_label(
-        label, all_embeddings, all_labels
+        label, all_embeddings, all_num_labels
     )
-    import ipdb
-
-    ipdb.set_trace()
     embeddings_for_label = get_embeddings_for_label(
-        label, all_embeddings, all_labels
+        label, all_embeddings, all_num_labels
     )
     tsne = TSNE(random_state=1, metric="cosine", perplexity=5.0)
     embs = tsne.fit_transform(embeddings_for_label)
+    labels = sum(all_labels, [])
     plt.figure(figsize=(10, 8))
-    plt.scatter(embs[:, 0], embs[:, 1], alpha=0.1)
+    plt.scatter(
+        embs[:, 0],
+        embs[:, 1],
+        alpha=0.1,
+        c=labels,
+        s=0.1,
+        cmap="Spectral",
+    )
     plt.savefig("clusterfck" + str(label) + ".png")
+
+
+def get_rep_pairs(num_pairs, delta_c_test):
+    total_samples = delta_c_test.shape[0]
+    m = delta_c_test.shape[1]
+    reps1 = np.zeros((num_pairs, m))
+    reps2 = np.zeros((num_pairs, m))
+    for i in range(num_pairs):
+        id1, id2 = np.random.choice(total_samples, size=2, replace=False)
+
+        reps1[i] = delta_c_test[id1]
+        reps2[i] = delta_c_test[id2]
+    return reps1, reps2
 
 
 def main(args, device):
@@ -114,7 +131,8 @@ def main(args, device):
     )
     sparse_dict_model_dict = torch.load(sparse_dict_model_file)
     sparse_dict_model.load_state_dict(sparse_dict_model_dict)
-    delta_z_test, labels = load_test_data(args, data_config)
+    delta_z_test, labels, num_labels = load_test_data(args, data_config)
+    num_labels = list(map(int, num_labels))
     delta_z_test = (
         torch.from_numpy(delta_z_test).to(device).type(torch.float32)
     )
@@ -127,17 +145,20 @@ def main(args, device):
 
     ipdb.set_trace()
 
-    plot_embeddings(1, delta_c_test, labels)
+    plot_embeddings(1, delta_c_test, num_labels, labels)
     import ipdb
 
     ipdb.set_trace()
 
     # get mcc score
+    reps1, reps2 = get_rep_pairs(1000, delta_c_test)
     disentanglement_scores = DisentanglementScores()
-    mcc_scores = disentanglement_scores.get_mcc_scores(
-        delta_c_test,
-        delta_z_test,
+
+    mcc_score = disentanglement_scores.get_mcc_score(
+        reps1,
+        reps2,
     )
+    print(f"MCC on the test set is: {mcc_score}")
 
     import ipdb
 
@@ -165,7 +186,7 @@ def main(args, device):
         {
             "Sparsity Penalties": sparsity_penalties,
             "Num-non-zeros": non_zero_sp,
-            "Labels": labels,
+            "Labels": num_labels,
         }
     )
 
