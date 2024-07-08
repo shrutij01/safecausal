@@ -85,7 +85,7 @@ def plot_embeddings(label, all_embeddings, all_labels):
     import ipdb
 
     ipdb.set_trace()
-    embs = umap.UMAP(random_state=42).fit(embeddings_for_label)
+    embs = umap.UMAP(random_state=42).fit_transform(embeddings_for_label)
     plt.scatter(
         embs[:, 0],
         embs[:, 1],
