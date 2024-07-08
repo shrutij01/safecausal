@@ -8,6 +8,7 @@ import yaml
 from box import Box
 import numpy as np
 import pandas as pd
+import re
 import ast
 from terminalplot import plot
 import seaborn as sns
@@ -65,12 +66,20 @@ def load_test_data(args, data_config):
             ]
         split = int(0.9 * data_config.dataset_length)
         for cp in context_pairs[split:]:
-            labels.append(cp[0].split(",")[3])
+            match = re.search(r"\[(.*?)\]$", cp[0])
+            if match:
+                list_str = match.group(0)
+                parsed_list = ast.literal_eval(list_str)
+                int_list = [int(str(item).strip()) for item in parsed_list]
+            else:
+                raise ValueError
+            labels.append(int_list)
             num_labels.append(cp[0].split(",")[2])
     else:
         raise NotImplementedError(
             "Datasets implemented: toy_translator and gradeschooler"
         )
+    num_labels = list(map(int, num_labels))
     return delta_z, labels, num_labels
 
 
@@ -135,7 +144,9 @@ def main(args, device):
     sparse_dict_model_dict = torch.load(sparse_dict_model_file)
     sparse_dict_model.load_state_dict(sparse_dict_model_dict)
     delta_z_test, labels, num_labels = load_test_data(args, data_config)
-    num_labels = list(map(int, num_labels))
+    import ipdb
+
+    ipdb.set_trace()
     delta_z_test = (
         torch.from_numpy(delta_z_test).to(device).type(torch.float32)
     )
