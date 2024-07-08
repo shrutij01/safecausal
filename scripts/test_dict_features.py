@@ -13,10 +13,8 @@ from terminalplot import plot
 import seaborn as sns
 import matplotlib.pyplot as plt
 from psp.utils import DisentanglementScores
-import hdbscan
-from sklearn.datasets import make_blobs
 from sklearn.preprocessing import StandardScaler
-from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 
 
 def load_test_data(args, data_config):
@@ -73,6 +71,23 @@ def load_test_data(args, data_config):
     return delta_z, labels
 
 
+def get_embeddings_for_label(label, all_embeddings, all_labels):
+    labels_array = np.array(all_labels)
+    mask = labels_array == label
+    return all_embeddings[mask]
+
+
+def plot_tsne_for_embeddings(label, all_embeddings, all_labels):
+    embeddings_for_lable = get_embeddings_for_label(
+        label, all_embeddings, all_labels
+    )
+    tsne = TSNE(random_state=1, metric="cosine")
+    embs = tsne.fit_transform(embeddings_for_lable)
+    plt.figure(figsize=(10, 8))
+    plt.scatter(embs[:, 0], embs[:, 1], alpha=0.1)
+    plt.savefig("clusterfck" + str(label) + ".png")
+
+
 def main(args, device):
     data_config_file = os.path.join(args.embedding_dir, "config.yaml")
     with open(data_config_file, "r") as file:
@@ -95,6 +110,11 @@ def main(args, device):
     )
     delta_z_hat_test, delta_c_test = sparse_dict_model(delta_z_test)
 
+    import ipdb
+
+    ipdb.set_trace()
+
+    plot_tsne_for_embeddings(1, delta_c_test, labels)
     import ipdb
 
     ipdb.set_trace()
@@ -135,38 +155,8 @@ def main(args, device):
             "Labels": labels,
         }
     )
-    # import ipdb
 
-    # ipdb.set_trace()
-
-    # clusterer = hdbscan.HDBSCAN(min_cluster_size=100, gen_min_span_tree=True)
-    # delta_c_test_normed = StandardScaler().fit_transform(
-    #     delta_c_test.detach().cpu().numpy()
-    # )
-    # pca = PCA(n_components=2)
-    # delta_c_test_normed_reduced = pca.fit_transform(delta_c_test_normed)
-
-    # cluster_labels = clusterer.fit_predict(delta_c_test_normed_reduced)
-    # plt.figure(figsize=(12, 6))
-    # plt.subplot(121)
-    # plt.scatter(
-    #     delta_c_test_normed_reduced[:, 0],
-    #     delta_c_test_normed_reduced[:, 1],
-    #     c=cluster_labels,
-    #     cmap="viridis",
-    #     marker="o",
-    #     s=50,
-    #     alpha=0.6,
-    # )
-    # plt.title("HDBSCAN Clustering")
-
-    # plt.subplot(122)
-    # clusterer.minimum_spanning_tree_.plot(
-    #     edge_cmap="viridis", edge_alpha=0.6, node_size=80, edge_linewidth=2
-    # )
-    # plt.title("HDBSCAN Minimum Spanning Tree")
-    # plt.savefig("clusterfck.png")
-    # import ipdb
+    import ipdb
 
     ipdb.set_trace()
 
@@ -200,8 +190,10 @@ def main(args, device):
     # get test error
     loss_fxn = torch.nn.MSELoss()
     test_losses = []
-    for _ in range(len(delta_z_test)):
-        test_losses.append(loss_fxn(delta_z_hat_test, delta_z_test).item())
+    for i in range(len(delta_z_test)):
+        test_losses.append(
+            loss_fxn(delta_z_hat_test[i], delta_z_test[i]).item()
+        )
     plot(range(len(test_losses)), test_losses)
 
 
