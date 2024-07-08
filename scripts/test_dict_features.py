@@ -118,7 +118,7 @@ def main(args, device):
 
     ipdb.set_trace()
 
-    plot_tsne_for_embeddings(1, delta_c_test, labels)
+    plot_embeddings(1, delta_c_test, labels)
     import ipdb
 
     ipdb.set_trace()
