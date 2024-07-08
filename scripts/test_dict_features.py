@@ -14,7 +14,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from psp.utils import DisentanglementScores
 from sklearn.preprocessing import StandardScaler
-from sklearn.manifold import TSNE
+import umap
 
 
 def load_test_data(args, data_config):
@@ -77,14 +77,18 @@ def get_embeddings_for_label(label, all_embeddings, all_labels):
     return all_embeddings[mask]
 
 
-def plot_tsne_for_embeddings(label, all_embeddings, all_labels):
-    embeddings_for_lable = get_embeddings_for_label(
+def plot_embeddings(label, all_embeddings, all_labels):
+    embeddings_for_label = get_embeddings_for_label(
         label, all_embeddings, all_labels
     )
-    tsne = TSNE(random_state=1, metric="cosine")
-    embs = tsne.fit_transform(embeddings_for_lable)
-    plt.figure(figsize=(10, 8))
-    plt.scatter(embs[:, 0], embs[:, 1], alpha=0.1)
+    embs = umap.UMAP(random_state=42).fit(embeddings_for_label)
+    plt.scatter(
+        embs[:, 0],
+        embs[:, 1],
+        s=0.1,
+        cmap="Spectral",
+    )
+
     plt.savefig("clusterfck" + str(label) + ".png")
 
 
