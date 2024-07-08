@@ -88,10 +88,10 @@ def plot_embeddings(label, all_embeddings, all_labels):
     embeddings_for_label = get_embeddings_for_label(
         label, all_embeddings, all_labels
     )
-    tsne = TSNE(random_state=1, metric="cosine")
+    tsne = TSNE(random_state=1, metric="cosine", perplexity=50.0)
     embs = tsne.fit_transform(embeddings_for_label)
     plt.figure(figsize=(10, 8))
-    plt.scatter(embs[:, 0], embs[:, 1], alpha=0.1, perplexity=50.0)
+    plt.scatter(embs[:, 0], embs[:, 1], alpha=0.1)
     plt.savefig("clusterfck" + str(label) + ".png")
 
 
