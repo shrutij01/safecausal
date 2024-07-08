@@ -83,31 +83,32 @@ def load_test_data(args, data_config):
     return delta_z, labels, num_labels
 
 
-def get_embeddings_for_label(label, all_embeddings, all_num_labels):
+def get_embeddings_for_label(
+    label, all_embeddings, all_num_labels, all_labels
+):
     labels_array = np.array(all_num_labels)
     mask = labels_array == label
-    return all_embeddings[mask]
+    label_names = all_labels[mask]
+    return all_embeddings[mask], label_names
 
 
 def plot_embeddings(label, all_embeddings, all_num_labels, all_labels):
-    embeddings_for_label = get_embeddings_for_label(
-        label, all_embeddings, all_num_labels
+    embeddings_for_label, label_names = get_embeddings_for_label(
+        label, all_embeddings, all_num_labels, all_labels
     )
-    embeddings_for_label = get_embeddings_for_label(
-        label, all_embeddings, all_num_labels
-    )
+
     tsne = TSNE(random_state=1, metric="cosine", perplexity=5.0)
     embs = tsne.fit_transform(embeddings_for_label)
     import ipdb
 
     ipdb.set_trace()
-    labels = sum(all_labels, [])
+    label_names = sum(label_names, [])
     plt.figure(figsize=(10, 8))
     plt.scatter(
         embs[:, 0],
         embs[:, 1],
         alpha=0.1,
-        c=labels,
+        c=label_names,
         s=0.1,
         cmap="Spectral",
     )
