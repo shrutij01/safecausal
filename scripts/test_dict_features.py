@@ -138,7 +138,7 @@ def plot_embeddings(target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids):
         )
         for color in colors
     ]
-    ax.legend(legend_handles, unique_labels, title="Legend")
+    ax.legend(legend_handles, legend_names, title="Legend")
     plt.savefig("clusterfck" + str(label) + ".png")
 
 
