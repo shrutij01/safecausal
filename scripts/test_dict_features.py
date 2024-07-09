@@ -90,10 +90,10 @@ def get_embeddings_for_num_tfs(
 ):
     all_num_tfs_array = np.array(all_num_tfs)
     mask_num_tfs = all_num_tfs_array == target_num_tfs
-    label_names = all_tf_ids[mask_num_tfs]
     import ipdb
 
     ipdb.set_trace()
+    label_names = all_tf_ids[mask_num_tfs]
     return all_embeddings[mask_num_tfs], label_names
 
 
@@ -158,9 +158,6 @@ def main(args, device):
     sparse_dict_model_dict = torch.load(sparse_dict_model_file)
     sparse_dict_model.load_state_dict(sparse_dict_model_dict)
     delta_z_test, tf_ids, num_tfs = load_test_data(args, data_config)
-    import ipdb
-
-    ipdb.set_trace()
     delta_z_test = (
         torch.from_numpy(delta_z_test).to(device).type(torch.float32)
     )
@@ -168,10 +165,6 @@ def main(args, device):
     delta_c_test = delta_c_test.detach().cpu().numpy()
     delta_z_hat_test = delta_z_hat_test.detach().cpu().numpy()
     delta_z_test = delta_z_test.detach().cpu().numpy()
-
-    import ipdb
-
-    ipdb.set_trace()
 
     plot_embeddings(1, delta_c_test, num_tfs, tf_ids)
     import ipdb
