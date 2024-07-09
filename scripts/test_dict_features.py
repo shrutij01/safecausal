@@ -106,9 +106,6 @@ def plot_embeddings(
             target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids
         )
         label = target_num_tfs
-    import ipdb
-
-    ipdb.set_trace()
     if target_num_tfs == 1:
         legend_names = ["attribute", "color", "object"]
         perplexity = 5.0
@@ -123,9 +120,6 @@ def plot_embeddings(
     )
     embs = tsne.fit_transform(embeddings_for_label)
 
-    import ipdb
-
-    ipdb.set_trace()
     unique_labels = sorted(set(label_names))
     cmap = plt.get_cmap("viridis")
     colors = cmap(np.linspace(0, 1, len(unique_labels)))
