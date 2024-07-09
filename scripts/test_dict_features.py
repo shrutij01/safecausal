@@ -86,30 +86,37 @@ def load_test_data(args, data_config):
 
 
 def get_embeddings_for_num_tfs(
-    label, all_embeddings, all_num_labels, all_labels
+    target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids
 ):
-    labels_array = np.array(all_num_labels)
-    mask = labels_array == label
+    all_num_tfs_array = np.array(all_num_tfs)
+    mask_num_tfs = all_num_tfs_array == target_num_tfs
+    label_names = all_tf_ids[mask_num_tfs]
     import ipdb
 
     ipdb.set_trace()
-    label_names = [sublist for sublist in all_labels if len(sublist) == label]
-
-    return all_embeddings[mask], label_names
+    return all_embeddings[mask_num_tfs], label_names
 
 
-def plot_embeddings(label, all_embeddings, all_num_labels, all_labels):
-    embeddings_for_label, label_names = get_embeddings_for_num_tfs(
-        label, all_embeddings, all_num_labels, all_labels
-    )
+def plot_embeddings(target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids):
+    if target_num_tfs is None:
+        embeddings_for_label = all_embeddings
+        label_names = all_num_tfs
+    else:
+        embeddings_for_label, label_names = get_embeddings_for_num_tfs(
+            target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids
+        )
 
     tsne = TSNE(random_state=1, metric="cosine", perplexity=5.0)
     embs = tsne.fit_transform(embeddings_for_label)
     import ipdb
 
     ipdb.set_trace()
-    label_names = sum(label_names, [])
-    legend_names = ["attribute", "color", "object"]
+    if target_num_tfs == 1:
+        legend_names = ["attribute", "color", "object"]
+    elif target_num_tfs == 2:
+        legend_names = ["a+c", "c+o", "o+a"]
+    elif target_num_tfs is None:
+        legend_names = ["one_tf", "two_tfs", "three_tfs"]
     fig, ax = plt.subplots()
     scatter = ax.scatter(
         embs[:, 0],
