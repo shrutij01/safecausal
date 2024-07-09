@@ -107,7 +107,7 @@ def plot_embeddings(target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids):
     import ipdb
 
     ipdb.set_trace()
-    tsne = TSNE(random_state=1, metric="cosine", perplexity=5.0)
+    tsne = TSNE(random_state=1, metric="cosine", perplexity=25.0)
     embs = tsne.fit_transform(embeddings_for_label)
     if target_num_tfs == 1:
         legend_names = ["attribute", "color", "object"]
