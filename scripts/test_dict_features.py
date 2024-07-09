@@ -20,8 +20,8 @@ from sklearn.manifold import TSNE
 
 def load_test_data(args, data_config):
     delta_z = None
-    labels = []
-    num_labels = []
+    tf_ids = []
+    num_tfs = []
     if data_config.dataset == "toy_translator":
         df_file = os.path.join(
             args.embedding_dir, "multi_objects_single_coordinate.csv"
@@ -57,10 +57,10 @@ def load_test_data(args, data_config):
         mean = delta_z.mean(axis=0)
         std = delta_z.std(axis=0, ddof=1)
         delta_z = (delta_z - mean) / (std + 1e-8)
-        labels_file = os.path.join(args.embedding_dir, "gradeschooler.txt")
-        labels = []
-        num_labels = []
-        with open(labels_file, "r") as f:
+        data_file = os.path.join(args.embedding_dir, "gradeschooler.txt")
+        tf_ids = []
+        num_tfs = []
+        with open(data_file, "r") as f:
             context_pairs = [
                 line.strip().split("\t") for line in f if line.strip()
             ]
@@ -71,19 +71,22 @@ def load_test_data(args, data_config):
                 list_str = match.group(0)
                 parsed_list = ast.literal_eval(list_str)
                 int_list = [int(str(item).strip()) for item in parsed_list]
+                import ipdb
+
+                ipdb.set_trace()
             else:
                 raise ValueError
-            labels.append(int_list)
-            num_labels.append(cp[0].split(",")[2])
+            tf_ids.append(int_list)
+            num_tfs.append(cp[0].split(",")[2])
     else:
         raise NotImplementedError(
             "Datasets implemented: toy_translator and gradeschooler"
         )
-    num_labels = list(map(int, num_labels))
-    return delta_z, labels, num_labels
+    num_tfs = list(map(int, num_tfs))
+    return delta_z, tf_ids, num_tfs
 
 
-def get_embeddings_for_label(
+def get_embeddings_for_num_tfs(
     label, all_embeddings, all_num_labels, all_labels
 ):
     labels_array = np.array(all_num_labels)
@@ -97,7 +100,7 @@ def get_embeddings_for_label(
 
 
 def plot_embeddings(label, all_embeddings, all_num_labels, all_labels):
-    embeddings_for_label, label_names = get_embeddings_for_label(
+    embeddings_for_label, label_names = get_embeddings_for_num_tfs(
         label, all_embeddings, all_num_labels, all_labels
     )
 
@@ -255,7 +258,7 @@ if __name__ == "__main__":
 
     parser.add_argument("embedding_dir")
     parser.add_argument("models_dir")
-    parser.add_argument("--sparsity-threshold", default=float(1e-1))
+    parser.add_argument("--sparsity-threshold", default=float(5e-2))
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()

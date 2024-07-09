@@ -89,33 +89,33 @@ def generate_counterfactual_pair():
     init_attribute = tilde_attribute = random.choice(CODEBOOK["attribute"])
     init_color = tilde_color = random.choice(CODEBOOK["color"])
     init_object = tilde_object = random.choice(CODEBOOK["object"])
-    num_labels = random.randint(1, len(CODEBOOK))
-    label_ids = []
-    factors_to_resample = random.sample(list(CODEBOOK.keys()), num_labels)
+    num_tfs = random.randint(1, len(CODEBOOK))
+    tf_ids = []
+    factors_to_resample = random.sample(list(CODEBOOK.keys()), num_tfs)
     for factor in factors_to_resample:
         if factor == "attribute":
             exclude = init_attribute
             tilde_attribute = sample_excluding_elements(
                 CODEBOOK[factor], exclude=exclude
             )
-            label_ids.append(1)
+            tf_ids.append(1)
         elif factor == "color":
             exclude = init_color
             tilde_color = sample_excluding_elements(
                 CODEBOOK[factor], exclude=exclude
             )
-            label_ids.append(2)
+            tf_ids.append(2)
         elif factor == "object":
             exclude = init_object
             tilde_object = sample_excluding_elements(
                 CODEBOOK[factor], exclude=exclude
             )
-            label_ids.append(3)
+            tf_ids.append(3)
         else:
             raise ValueError
     x = f"{init_attribute} {init_color} {init_object}"
     tilde_x = f"{tilde_attribute} {tilde_color} {tilde_object}"
-    return [x, tilde_x, num_labels, label_ids]
+    return [x, tilde_x, num_tfs, tf_ids]
 
 
 def generate_data(size):
