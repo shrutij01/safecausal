@@ -108,13 +108,13 @@ def plot_embeddings(
         label = target_num_tfs
     if target_num_tfs == 1:
         legend_names = ["attribute", "color", "object"]
-        perplexity = 5.0
+        perplexity = 3.0  # 5 is good too
     elif target_num_tfs == 2:
         legend_names = ["a+c", "c+o", "o+a"]
         perplexity = 13.0
     elif target_num_tfs is None:
         legend_names = ["one_tf", "two_tfs", "three_tfs"]
-        perplexity = 25.0
+        perplexity = 25.0  # this is fuck all
     tsne = TSNE(
         random_state=1, metric="cosine", perplexity=float(args.perplexity)
     )
@@ -184,7 +184,7 @@ def main(args, device):
     delta_z_hat_test = delta_z_hat_test.detach().cpu().numpy()
     delta_z_test = delta_z_test.detach().cpu().numpy()
 
-    plot_embeddings(1, delta_c_test, num_tfs, tf_ids, args)
+    plot_embeddings(None, delta_c_test, num_tfs, tf_ids, args)
     import ipdb
 
     ipdb.set_trace()
