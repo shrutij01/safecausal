@@ -98,30 +98,47 @@ def plot_embeddings(target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids):
     if target_num_tfs is None:
         embeddings_for_label = all_embeddings
         label_names = all_num_tfs
+        label = "all"
     else:
         embeddings_for_label, label_names = get_embeddings_for_num_tfs(
             target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids
         )
+        label = target_num_tfs
 
     tsne = TSNE(random_state=1, metric="cosine", perplexity=5.0)
     embs = tsne.fit_transform(embeddings_for_label)
-    import ipdb
-
-    ipdb.set_trace()
     if target_num_tfs == 1:
         legend_names = ["attribute", "color", "object"]
     elif target_num_tfs == 2:
         legend_names = ["a+c", "c+o", "o+a"]
     elif target_num_tfs is None:
         legend_names = ["one_tf", "two_tfs", "three_tfs"]
+    import ipdb
+
+    ipdb.set_trace()
+    unique_labels = sorted(set(label_names))
+    cmap = plt.get_cmap("viridis")
+    colors = cmap(np.linspace(0, 1, len(unique_labels)))
+    label_to_color = dict(zip(unique_labels, colors))
     fig, ax = plt.subplots()
     scatter = ax.scatter(
         embs[:, 0],
         embs[:, 1],
         alpha=0.1,
-        c=label_names,
+        c=[label_to_color[name] for name in label_names],
     )
-    ax.legend(*legend_names)
+    legend_handles = [
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor=color,
+            markersize=10,
+        )
+        for color in colors
+    ]
+    ax.legend(legend_handles, unique_labels, title="Legend")
     plt.savefig("clusterfck" + str(label) + ".png")
 
 
