@@ -94,7 +94,9 @@ def get_embeddings_for_num_tfs(
     return all_embeddings[mask_num_tfs], label_names
 
 
-def plot_embeddings(target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids):
+def plot_embeddings(
+    target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids, args
+):
     if target_num_tfs is None:
         embeddings_for_label = all_embeddings
         label_names = all_num_tfs
@@ -107,14 +109,20 @@ def plot_embeddings(target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids):
     import ipdb
 
     ipdb.set_trace()
-    tsne = TSNE(random_state=1, metric="cosine", perplexity=25.0)
-    embs = tsne.fit_transform(embeddings_for_label)
     if target_num_tfs == 1:
         legend_names = ["attribute", "color", "object"]
+        perplexity = 5.0
     elif target_num_tfs == 2:
         legend_names = ["a+c", "c+o", "o+a"]
+        perplexity = 10.0
     elif target_num_tfs is None:
         legend_names = ["one_tf", "two_tfs", "three_tfs"]
+        perplexity = 25.0
+    tsne = TSNE(
+        random_state=1, metric="cosine", perplexity=float(args.perplexity)
+    )
+    embs = tsne.fit_transform(embeddings_for_label)
+
     import ipdb
 
     ipdb.set_trace()
@@ -182,7 +190,7 @@ def main(args, device):
     delta_z_hat_test = delta_z_hat_test.detach().cpu().numpy()
     delta_z_test = delta_z_test.detach().cpu().numpy()
 
-    plot_embeddings(None, delta_c_test, num_tfs, tf_ids)
+    plot_embeddings(None, delta_c_test, num_tfs, tf_ids, args)
     import ipdb
 
     ipdb.set_trace()
@@ -273,6 +281,7 @@ if __name__ == "__main__":
 
     parser.add_argument("embedding_dir")
     parser.add_argument("models_dir")
+    parser.add_argument("--perplexity", default=5.0)
     parser.add_argument("--sparsity-threshold", default=float(5e-2))
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
