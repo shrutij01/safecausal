@@ -190,7 +190,7 @@ def main(args, device):
     delta_z_hat_test = delta_z_hat_test.detach().cpu().numpy()
     delta_z_test = delta_z_test.detach().cpu().numpy()
 
-    plot_embeddings(None, delta_c_test, num_tfs, tf_ids, args)
+    plot_embeddings(2, delta_c_test, num_tfs, tf_ids, args)
     import ipdb
 
     ipdb.set_trace()
