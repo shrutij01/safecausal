@@ -149,7 +149,7 @@ def plot_embeddings(
         for color in colors
     ]
     ax.legend(legend_handles, legend_names, title="Legend")
-    plt.savefig("clusterfck" + str(label) + ".png")
+    plt.savefig("clusterfck" + str(label) + str(args.perplexity) + ".png")
 
 
 def get_rep_pairs(num_pairs, delta_c_test):
