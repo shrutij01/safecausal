@@ -104,7 +104,9 @@ def plot_embeddings(target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids):
             target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids
         )
         label = target_num_tfs
+    import ipdb
 
+    ipdb.set_trace()
     tsne = TSNE(random_state=1, metric="cosine", perplexity=5.0)
     embs = tsne.fit_transform(embeddings_for_label)
     if target_num_tfs == 1:
@@ -180,7 +182,7 @@ def main(args, device):
     delta_z_hat_test = delta_z_hat_test.detach().cpu().numpy()
     delta_z_test = delta_z_test.detach().cpu().numpy()
 
-    plot_embeddings(1, delta_c_test, num_tfs, tf_ids)
+    plot_embeddings(2, delta_c_test, num_tfs, tf_ids)
     import ipdb
 
     ipdb.set_trace()
