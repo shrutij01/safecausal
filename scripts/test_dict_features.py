@@ -90,10 +90,7 @@ def get_embeddings_for_num_tfs(
 ):
     all_num_tfs_array = np.array(all_num_tfs)
     mask_num_tfs = all_num_tfs_array == target_num_tfs
-    import ipdb
-
-    ipdb.set_trace()
-    label_names = all_tf_ids[mask_num_tfs]
+    label_names = np.array(all_tf_ids)[mask_num_tfs]
     return all_embeddings[mask_num_tfs], label_names
 
 
