@@ -71,12 +71,11 @@ def load_test_data(args, data_config):
                 list_str = match.group(0)
                 parsed_list = ast.literal_eval(list_str)
                 int_list = [int(str(item).strip()) for item in parsed_list]
-                import ipdb
-
-                ipdb.set_trace()
             else:
                 raise ValueError
-            tf_ids.append(int_list)
+            int_list.sort()
+            tf_id = int("".join(str(digit) for digit in int_list))
+            tf_ids.append(tf_id)
             num_tfs.append(cp[0].split(",")[2])
     else:
         raise NotImplementedError(
@@ -151,7 +150,7 @@ def main(args, device):
     )
     sparse_dict_model_dict = torch.load(sparse_dict_model_file)
     sparse_dict_model.load_state_dict(sparse_dict_model_dict)
-    delta_z_test, labels, num_labels = load_test_data(args, data_config)
+    delta_z_test, tf_ids, num_tfs = load_test_data(args, data_config)
     import ipdb
 
     ipdb.set_trace()
@@ -167,7 +166,7 @@ def main(args, device):
 
     ipdb.set_trace()
 
-    plot_embeddings(1, delta_c_test, num_labels, labels)
+    plot_embeddings(1, delta_c_test, num_tfs, tf_ids)
     import ipdb
 
     ipdb.set_trace()
