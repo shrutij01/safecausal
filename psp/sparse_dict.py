@@ -252,6 +252,17 @@ def main(args, device):
                 .tolist()
             )
         )
+        lin_ent_dim = x[0].shape[0]
+
+        def generate_invertible_matrix(size):
+            while True:
+                matrix = np.random.randint(1, size, (size, size))
+                if np.linalg.det(matrix) != 0:
+                    return matrix
+
+        lin_ent_tf = generate_invertible_matrix(lin_ent_dim)
+        x_ent = np.array([lin_ent_tf @ x[i] for i in range(x.shape[0])])
+
         import ipdb
 
         ipdb.set_trace()
