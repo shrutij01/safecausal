@@ -24,51 +24,32 @@ def translate_objects_single_coordinate(
             num_objects_to_translate <= total_objects
         ), f"if passing how many objects to translate {num_objects_to_translate}, can't exceed total_objects {total_objects}"
     total_coordinates = int(2 * total_objects)
-    object_position_columns = [
-        f"object_{i}_position" for i in range(total_objects)
-    ]
+
     object_translation_columns = [
         f"translation_for_object_{i}" for i in range(total_objects)
     ]
+    fixed_columns = [
+        "step",
+        "num_coordinates_translated",
+        "ids_coordinates_translated",
+    ]
+    all_column_names = fixed_columns + object_translation_columns
     data: List[Dict] = []
+    translations_along_axes = [[0, 0] for _ in range(total_objects)]
+    row = {
+        "step": 0,
+        "num_coordinates_translated": 0,
+        "ids_coordinates_translated": None,
+    }
+
+    translations = {
+        f"translation_for_object_{idx}": translations_along_axes[idx][:]
+        for idx in range(total_objects)
+    }
+    row.update(translations)
+    data.append(row)
 
     if dgp == 1:
-        fixed_columns = [
-            "step",
-            "num_objects_translated",
-            "ids_objects_translated",
-        ]
-        all_column_names = (
-            fixed_columns
-            + object_position_columns
-            + object_translation_columns
-        )
-        # Generate initial coordinates
-        positions = [
-            [
-                random.randint(0, max_grid_limit),
-                random.randint(0, max_grid_limit),
-            ]
-            for _ in range(total_objects)
-        ]
-        translations_along_axes = [[0, 0] for _ in range(total_objects)]
-        row = {
-            "step": 0,
-            "num_objects_translated": 0,
-            "ids_objects_translated": None,
-        }
-        object_positions = {
-            f"object_{idx}_position": positions[idx][:]
-            for idx in range(total_objects)
-        }
-        translations = {
-            f"translation_for_object_{idx}": translations_along_axes[idx][:]
-            for idx in range(total_objects)
-        }
-        row.update(object_positions)
-        row.update(translations)
-        data.append(row)
-
         for step in range(0, num_tuples):
             # 1. first indeterminacy: num objects
             current_num_objects_to_translate = (
@@ -80,10 +61,13 @@ def translate_objects_single_coordinate(
             objects_to_translate = random.sample(
                 range(total_objects), current_num_objects_to_translate
             )
+            coordinates_to_translate = []
             # 3. and by how much.
             translations_along_axes = [[0, 0] for _ in range(total_objects)]
             for obj in objects_to_translate:
                 axis = random.randint(0, 1)
+                coordinate = int(obj * 2 + axis)
+                coordinates_to_translate.append(coordinate)
                 if amount_to_translate is None:
                     translations_along_axes[obj][axis] += random.randint(
                         1, max_amount_to_translate
@@ -91,70 +75,22 @@ def translate_objects_single_coordinate(
                 else:
                     translations_along_axes[obj][axis] += amount_to_translate
 
-            positions = [
-                [a + b for a, b in zip(sublist1, sublist2)]
-                for sublist1, sublist2 in zip(
-                    positions, translations_along_axes
-                )
-            ]
-
             row = {
                 "step": step + 1,
-                "num_objects_translated": current_num_objects_to_translate,
-                "ids_objects_translated": objects_to_translate,
+                "num_coordinates_translated": current_num_objects_to_translate,
+                "ids_coordinates_translated": coordinates_to_translate,
             }
-            object_positions = {
-                f"object_{idx}_position": positions[idx][:]
-                for idx in range(total_objects)
-            }
+
             translations = {
                 f"translation_for_object_{idx}": translations_along_axes[idx][
                     :
                 ]
                 for idx in range(total_objects)
             }
-            row.update(object_positions)
             row.update(translations)
             data.append(row)
 
     elif dgp == 2:
-        fixed_columns = [
-            "step",
-            "num_coordinates_translated",
-            "ids_coordinates_translated",
-        ]
-        all_column_names = (
-            fixed_columns
-            + object_position_columns
-            + object_translation_columns
-        )
-        print(all_column_names)
-        # Generate initial coordinates
-        positions = [
-            [
-                random.randint(0, max_grid_limit),
-                random.randint(0, max_grid_limit),
-            ]
-            for _ in range(total_objects)
-        ]
-        translations_along_axes = [[0, 0] for _ in range(total_objects)]
-        row = {
-            "step": 0,
-            "num_coordinates_translated": 0,
-            "ids_coordinates_translated": None,
-        }
-        object_positions = {
-            f"object_{idx}_position": positions[idx][:]
-            for idx in range(total_objects)
-        }
-        translations = {
-            f"translation_for_object_{idx}": translations_along_axes[idx][:]
-            for idx in range(total_objects)
-        }
-        row.update(object_positions)
-        row.update(translations)
-        data.append(row)
-
         for step in range(0, num_tuples):
             # 1. first indeterminacy: num coordinates
             current_num_coordinates_to_translate = random.randint(
@@ -181,21 +117,10 @@ def translate_objects_single_coordinate(
                 flat_translations_along_axes[i : i + 2]
                 for i in range(0, len(flat_translations_along_axes), 2)
             ]
-            positions = [
-                [a + b for a, b in zip(sublist1, sublist2)]
-                for sublist1, sublist2 in zip(
-                    positions, translations_along_axes
-                )
-            ]
-
             row = {
                 "step": step + 1,
                 "num_coordinates_translated": current_num_coordinates_to_translate,
                 "ids_coordinates_translated": coordinates_to_translate,
-            }
-            object_positions = {
-                f"object_{idx}_position": positions[idx][:]
-                for idx in range(total_objects)
             }
             translations = {
                 f"translation_for_object_{idx}": translations_along_axes[idx][
@@ -203,7 +128,6 @@ def translate_objects_single_coordinate(
                 ]
                 for idx in range(total_objects)
             }
-            row.update(object_positions)
             row.update(translations)
             data.append(row)
 
