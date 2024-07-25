@@ -30,17 +30,19 @@ def translate_objects_single_coordinate(
     object_translation_columns = [
         f"translation_for_object_{i}" for i in range(total_objects)
     ]
-    fixed_columns = [
-        "step",
-        "num_objects_translated",
-        "ids_objects_translated",
-    ]
-    all_column_names = (
-        fixed_columns + object_position_columns + object_translation_columns
-    )
     data: List[Dict] = []
 
     if dgp == 1:
+        fixed_columns = [
+            "step",
+            "num_objects_translated",
+            "ids_objects_translated",
+        ]
+        all_column_names = (
+            fixed_columns
+            + object_position_columns
+            + object_translation_columns
+        )
         # Generate initial coordinates
         positions = [
             [
@@ -116,6 +118,16 @@ def translate_objects_single_coordinate(
             data.append(row)
 
     elif dgp == 2:
+        fixed_columns = [
+            "step",
+            "num_coordinates_translated",
+            "ids_coordinates_translated",
+        ]
+        all_column_names = (
+            fixed_columns
+            + object_position_columns
+            + object_translation_columns
+        )
         # Generate initial coordinates
         positions = [
             [
