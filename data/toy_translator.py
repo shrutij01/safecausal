@@ -101,6 +101,7 @@ def translate_objects_single_coordinate(
                 range(total_coordinates), current_num_coordinates_to_translate
             )
             # 3. and by how much.
+            translations_along_axes = [[0, 0] for _ in range(total_objects)]
             flat_translations_along_axes = [
                 x for xs in translations_along_axes for x in xs
             ]
