@@ -22,7 +22,31 @@ and 2. https://transformer-circuits.pub/2024/april-update/index.html#training-sa
 """
 
 
-class SparseDict(nn.Module):
+class LinearInvertible(nn.Module):
+    # explicitly demands WW.T = I, the non-degeneracy condition in linear ICA
+    # objective to train is just the sparsity penalty for this
+    # todo: does this also require whitening?
+    def __init__(self, embedding_size, overcomplete_basis_size):
+        super(LinearInvertible, self).__init__()
+        self.encoder = nn.Linear(
+            embedding_size, overcomplete_basis_size, bias=False
+        )
+        self.decoder = nn.Linear(
+            overcomplete_basis_size, embedding_size, bias=False
+        )
+        nn.init.orthogonal_(self.encoder.weight)
+        self.encoder.weight = nn.Parameter(
+            self.decoder.weight.detach().clone().t()
+        )  # transpose of an orthogonal matrix is also orthogonal
+
+    def forward(self, r_delta_z):
+        delta_c = self.encoder(r_delta_z)  # this is W_e.Tx + b_e
+        r_delta_z_hat = self.decoder(delta_c)  # this is W_d.c + b_d
+        return r_delta_z_hat, delta_c
+
+
+class LinearAutoencoder(nn.Module):
+    # based on RICA, non-degeneracy is handled by the recon error
     """x: differences between the embeddings of two contexts
     which differ in k-concepts
     M: rows of this are the sparse codes which express this diff
@@ -31,7 +55,7 @@ class SparseDict(nn.Module):
     """
 
     def __init__(self, embedding_size, overcomplete_basis_size):
-        super(SparseDict, self).__init__()
+        super(LinearAutoencoder, self).__init__()
         self.encoder = nn.Linear(
             embedding_size, overcomplete_basis_size, bias=False
         )
@@ -54,6 +78,36 @@ class SparseDict(nn.Module):
             self.decoder(delta_c) + self.bias_decoder
         )  # this is W_d.c + b_d
         return r_delta_z_hat, delta_c
+
+
+class NonLinearAutoencoder(nn.Module):
+    def __init__(self, embedding_size, overcomplete_basis_size, act_fxn):
+        super(NonLinearAutoencoder, self).__init__()
+        self.encoder = nn.Linear(
+            embedding_size, overcomplete_basis_size, bias=False
+        )
+        self.decoder = nn.Linear(
+            overcomplete_basis_size, embedding_size, bias=False
+        )
+        self.bias_encoder = nn.Parameter(torch.zeros(overcomplete_basis_size))
+        self.bias_decoder = nn.Parameter(torch.zeros(embedding_size))
+
+        # these implementation tricks below are from anthropic's
+        # most recent paper
+        Wd_initial = torch.randn(overcomplete_basis_size, embedding_size)
+        norms = torch.sqrt(torch.sum(Wd_initial**2, dim=0))
+        desired_norms = torch.rand(embedding_size) * 0.95 + 0.05
+        scale_factors = desired_norms / norms
+        self.decoder.weight = nn.Parameter(Wd_initial * scale_factors)
+
+        self.encoder.weight = nn.Parameter(
+            self.decoder.weight.detach().clone().t()
+        )
+
+    def forward(self, delta_z):
+        delta_c = torch.relu(self.encoder(delta_z))  # this is ReLU(M1.Tx + b)
+        delta_z_hat = self.decoder(delta_c)  # this is M2c
+        return delta_z_hat, delta_c
 
 
 class LinearDecayLR:
@@ -197,6 +251,9 @@ def main(args, device):
                 .tolist()
             )
         )
+        import ipdb
+
+        ipdb.set_trace()
     else:
         raise NotImplementedError
 
@@ -214,10 +271,24 @@ def main(args, device):
     overcomplete_basis_size = (
         int(args.overcomplete_basis_factor) * embedding_dim
     )
-    sparse_dict_model = SparseDict(
-        embedding_size=embedding_dim,
-        overcomplete_basis_size=overcomplete_basis_size,
-    )
+    if args.model_type == "la":
+        sparse_dict_model = LinearAutoencoder(
+            embedding_size=embedding_dim,
+            overcomplete_basis_size=overcomplete_basis_size,
+        )
+    elif args.model_type == "linv":
+        sparse_dict_model = LinearInvertible(
+            embedding_size=embedding_dim,
+            overcomplete_basis_size=overcomplete_basis_size,
+        )
+    elif args.model_type == "nla":
+        sparse_dict_model = NonLinearAutoencoder(
+            embedding_size=embedding_dim,
+            overcomplete_basis_size=overcomplete_basis_size,
+            act_fxn=args.act_fxn,
+        )
+    else:
+        raise NotImplementedError
     sparse_dict_model.to(device)
     optimizer = optim.AdamW(
         sparse_dict_model.parameters(), lr=float(args.lr), weight_decay=1e-5
@@ -266,6 +337,9 @@ if __name__ == "__main__":
 
     parser.add_argument("embedding_dir")
     parser.add_argument("--data-type", default="emb", choices=["emb", "gt"])
+    parser.add_argument(
+        "--model-type", default="linv", choices=["linv", "la", "nla"]
+    )
     parser.add_argument("--num-epochs", type=int, default=2000)
     parser.add_argument("--batch-size", default=32)
     parser.add_argument("--lr", type=float, default=float(5e-5))
@@ -276,6 +350,9 @@ if __name__ == "__main__":
         action=argparse.BooleanOptionalAction,
         default=False,
         help="Enable the feature (default: False) by calling --grad-clip-sae and --no-grad-clip-sae for disabling",
+    )
+    parser.add_argument(
+        "--act_fxn", default="leakyrelu", choices=["leakyrelu", "relu", "gelu"]
     )
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
