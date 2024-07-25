@@ -233,10 +233,12 @@ def main(args):
         f"translation_for_object_{i}" for i in range(args.total_objects)
     ]
     config = {
+        "dgp": args.dgp,
         "num_objects": args.total_objects,
         "cfc_column_names": object_translation_columns,
         "split": 0.9,
         "size": args.num_tuples,
+        "max_amount_to_translate": args.max_amount_to_translate,
     }
     config_path = os.path.join(directory_name, "config.yaml")
     with open(config_path, "w") as file:
