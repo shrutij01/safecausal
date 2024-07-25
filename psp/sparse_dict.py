@@ -354,7 +354,7 @@ if __name__ == "__main__":
 
     parser.add_argument("embedding_dir")
     parser.add_argument(
-        "--data-type", default="emb", choices=["emb", "gt", "gt_ent"]
+        "--data-type", default="emb", choices=["emb", "gt", "gt-ent"]
     )
     parser.add_argument(
         "--model-type", default="linv", choices=["linv", "la", "nla"]
