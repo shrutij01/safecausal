@@ -156,7 +156,7 @@ def main(args):
     if not os.path.exists(directory_name):
         os.makedirs(directory_name)
     df_location = os.path.join(
-        directory_name, "multi_objects_single_coordinate.csv"
+        directory_name, "object_translations" + str(args.dgp) + ".csv"
     )
     if os.path.exists(df_location):
         overwrite = input(
