@@ -222,13 +222,14 @@ def main(args, device):
         std = x.std(axis=0, ddof=1)
         x = (x - mean) / (std + 1e-8)
     elif args.data_type == "gt":
-        df_file = os.path.join(
-            args.embedding_dir, "multi_objects_single_coordinate.csv"
-        )
-
         config_file = os.path.join(args.embedding_dir, "config.yaml")
         with open(config_file, "r") as file:
             config = Box(yaml.safe_load(file))
+        df_file = os.path.join(
+            args.embedding_dir,
+            "object_translations" + str(config.dgp) + ".csv",
+        )
+
         cfc_columns = config.cfc_column_names
         converters = {col: ast.literal_eval for col in cfc_columns}
         x_df = pd.read_csv(df_file, converters=converters)
