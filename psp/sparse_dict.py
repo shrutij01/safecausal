@@ -211,6 +211,7 @@ def train(
 
 
 def main(args, device):
+    x = None
     if args.data_type == "emb":
         embeddings_file = os.path.join(args.embedding_dir, "embeddings.h5")
         with h5py.File(embeddings_file, "r") as f:
@@ -221,7 +222,7 @@ def main(args, device):
         mean = x.mean(axis=0)
         std = x.std(axis=0, ddof=1)
         x = (x - mean) / (std + 1e-8)
-    elif args.data_type == "gt":
+    elif args.data_type == "gt" or args.data_type == "gt_ent":
         config_file = os.path.join(args.embedding_dir, "config.yaml")
         with open(config_file, "r") as file:
             config = Box(yaml.safe_load(file))
@@ -245,14 +246,14 @@ def main(args, device):
                 convert_to_list_of_ints
             )
 
-        x = np.asarray(
+        x_gt = np.asarray(
             (
                 x_df_train[cfc_columns]
                 .apply(lambda row: sum(row, []), axis=1)
                 .tolist()
             )
         )
-        lin_ent_dim = x[0].shape[0]
+        lin_ent_dim = x_gt.shape[1]
 
         def generate_invertible_matrix(size):
             while True:
@@ -261,11 +262,10 @@ def main(args, device):
                     return matrix
 
         lin_ent_tf = generate_invertible_matrix(lin_ent_dim)
-        x_ent = np.array([lin_ent_tf @ x[i] for i in range(x.shape[0])])
+        x_ent = np.array([lin_ent_tf @ x_gt[i] for i in range(x_gt.shape[0])])
+        if args.data_type == "gt_ent":
+            x = x_ent
 
-        import ipdb
-
-        ipdb.set_trace()
     else:
         raise NotImplementedError
 
@@ -342,13 +342,20 @@ def main(args, device):
         sparse_dict_model_dir, "sparse_dict_model.pth"
     )
     torch.save(sparse_dict_model.state_dict(), sparse_dict_model_dict_path)
+    if args.data_type == "gt_ent" or args.data_type == "gt":
+        np.save(os.path.join(modeldir, "x_gt.npy"), x_gt)
+    elif args.data_type == "gt_ent":
+        np.save(os.path.join(modeldir, "x_ent.npy"), x_ent)
+        np.save(os.path.join(modeldir, "lin_ent_tf.npy"), lin_ent_tf)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("embedding_dir")
-    parser.add_argument("--data-type", default="emb", choices=["emb", "gt"])
+    parser.add_argument(
+        "--data-type", default="emb", choices=["emb", "gt", "gt_ent"]
+    )
     parser.add_argument(
         "--model-type", default="linv", choices=["linv", "la", "nla"]
     )
