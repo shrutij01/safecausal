@@ -25,7 +25,6 @@ and 2. https://transformer-circuits.pub/2024/april-update/index.html#training-sa
 class LinearInvertible(nn.Module):
     # explicitly demands WW.T = I, the non-degeneracy condition in linear ICA
     # objective to train is just the sparsity penalty for this
-    # todo: does this also require whitening?
     def __init__(self, embedding_size, overcomplete_basis_size):
         super(LinearInvertible, self).__init__()
         self.encoder = nn.Linear(
@@ -39,8 +38,31 @@ class LinearInvertible(nn.Module):
             self.decoder.weight.detach().clone().t()
         )  # transpose of an orthogonal matrix is also orthogonal
 
-    def forward(self, r_delta_z):
-        delta_c = self.encoder(r_delta_z)  # this is W_e.Tx + b_e
+    def forward(self, delta_z):
+        def whiten(x):
+            mean = x.mean(dim=0, keepdim=True)
+            x_centered = x - mean
+
+            # Step 2: Compute covariance matrix
+            cov = x_centered.t().mm(x_centered) / (x_centered.size(0) - 1)
+
+            # Step 3: Eigenvalue decomposition
+            eigenvalues, eigenvectors = torch.linalg.eigh(cov)
+
+            # Step 4: Compute the transformation matrix
+            # Adding a small constant to avoid division by zero in case of zero eigenvalues
+            epsilon = 1e-5
+            transformation_matrix = eigenvectors / torch.sqrt(
+                eigenvalues + epsilon
+            ).unsqueeze(0)
+
+            # Step 5: Transform the original matrix
+            x_whitened = x_centered.mm(transformation_matrix)
+
+            return x_whitened
+
+        delta_z = whiten(delta_z)
+        delta_c = self.encoder(delta_z)  # this is W_e.Tx + b_e
         r_delta_z_hat = self.decoder(delta_c)  # this is W_d.c + b_d
         return r_delta_z_hat, delta_c
 
@@ -91,6 +113,12 @@ class NonLinearAutoencoder(nn.Module):
         )
         self.bias_encoder = nn.Parameter(torch.zeros(overcomplete_basis_size))
         self.bias_decoder = nn.Parameter(torch.zeros(embedding_size))
+        if act_fxn is "leakyrelu":
+            self.act_fxn = nn.LeakyReLU(0.1)
+        elif act_fxn is "relu":
+            self.act_fxn = nn.ReLU()
+        elif act_fxn is "gelu":
+            self.act_fxn = nn.GELU()
 
         # these implementation tricks below are from anthropic's
         # most recent paper
@@ -105,7 +133,9 @@ class NonLinearAutoencoder(nn.Module):
         )
 
     def forward(self, delta_z):
-        delta_c = torch.relu(self.encoder(delta_z))  # this is ReLU(M1.Tx + b)
+        delta_c = self.act_fxn(
+            self.encoder(delta_z)
+        )  # this is nonlin(M1.Tx + b)
         delta_z_hat = self.decoder(delta_c)  # this is M2c
         return delta_z_hat, delta_c
 
@@ -157,6 +187,15 @@ class AlphaScheduler:
         return self.alpha
 
 
+def orthogonality_penalty(weight):
+    # Calculate WW^T
+    identity = torch.eye(weight.size(0), device=weight.device)
+    wwt = weight @ weight.t()
+    # Penalize the deviation of WW^T from the identity matrix
+    penalty = (wwt - identity).pow(2).sum()
+    return penalty
+
+
 def train(
     dataloader,
     sparse_dict_model,
@@ -187,13 +226,28 @@ def train(
                     reconstruction_error + float(args.alpha) * sparsity_penalty
                 )
                 alpha = alpha_scheduler.get_coeff(epoch)
-                total_loss = reconstruction_error + alpha * sparsity_penalty
+                if args.model_type == "linv":
+                    total_loss = orthogonality_penalty(
+                        sparse_dict_model.encoder.weight
+                    )
+                else:
+                    total_loss = (
+                        reconstruction_error + alpha * sparsity_penalty
+                    )
 
             scaler.scale(total_loss).backward()
 
             scaler.step(optimizer)
             scaler.update()
             optim_scheduler.step(epoch)
+            if args.model_type == "linv":
+                with torch.no_grad():
+                    # SVD based approach to enforce orthogonality
+                    u, _, v = torch.svd(sparse_dict_model.encoder.weight)
+                    sparse_dict_model.encoder.weight.data = u @ v.t()
+                    sparse_dict_model.decoder.weight.data = (
+                        sparse_dict_model.encoder.weight.t()
+                    )
             if args.grad_clip_sae:
                 torch.nn.utils.clip_grad_norm_(
                     parameters=sparse_dict_model.parameters(), max_norm=1
