@@ -128,6 +128,7 @@ def translate_objects_single_coordinate(
             + object_position_columns
             + object_translation_columns
         )
+        print(all_column_names)
         # Generate initial coordinates
         positions = [
             [
