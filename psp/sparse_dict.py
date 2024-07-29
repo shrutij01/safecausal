@@ -320,6 +320,9 @@ def main(args, device):
 
         lin_ent_tf = generate_invertible_matrix(lin_ent_dim)
         x_ent = np.array([lin_ent_tf @ x_gt[i] for i in range(x_gt.shape[0])])
+        import ipdb
+
+        ipdb.set_trace()
         if args.data_type == "gt_ent":
             x = x_ent
 
