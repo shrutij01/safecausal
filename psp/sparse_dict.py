@@ -229,9 +229,7 @@ def train(
                 )
                 alpha = alpha_scheduler.get_coeff(epoch)
                 if args.model_type == "linv":
-                    total_loss = orthogonality_penalty(
-                        sparse_dict_model.encoder.weight
-                    )
+                    total_loss = sparsity_penalty
                 else:
                     total_loss = (
                         reconstruction_error + alpha * sparsity_penalty
