@@ -46,7 +46,7 @@ class LinearInvertible(nn.Module):
             x_centered = x - mean
 
             # Step 2: Compute covariance matrix
-            cov = x_centered.t().mm(x_centered) / (x_centered.size(0) - 1)
+            cov = x_centered.T.mm(x_centered) / (x_centered.size(0) - 1)
 
             # Step 3: Eigenvalue decomposition
             eigenvalues, eigenvectors = torch.linalg.eigh(cov)
