@@ -41,8 +41,8 @@ class LinearInvertible(nn.Module):
 
     def forward(self, delta_z):
         def whiten(x):
-            x = x.detach().cpu().numpy()
-            mean = np.mean(x, axis=0, keepdims=True)
+            x = x.detach().cpu()
+            mean = torch.mean(x, dim=0, keepdim=True)
             x_centered = x - mean
 
             # Step 2: Compute covariance matrix
@@ -60,9 +60,7 @@ class LinearInvertible(nn.Module):
 
             # Step 5: Transform the original matrix
             x_whitened = x_centered @ transformation_matrix
-            x_whitened = (
-                torch.from_numpy(x_whitened).to(device).type(torch.float32)
-            )
+            x_whitened = x_whitened.to(device).type(torch.float32)
             return x_whitened
 
         delta_z = whiten(delta_z)
