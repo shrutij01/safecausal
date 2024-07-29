@@ -1,5 +1,6 @@
 import torch
-from psp.sparse_dict import SparseDict
+from psp.sparse_dict import LinearInvertible
+
 
 import argparse
 import os
@@ -166,7 +167,7 @@ def main(args, device):
     models_config_file = os.path.join(args.models_dir, "models_config.yaml")
     with open(models_config_file, "r") as file:
         models_config = Box(yaml.safe_load(file))
-    sparse_dict_model = SparseDict(
+    sparse_dict_model = LinearInvertible(
         embedding_size=models_config.embedding_size,
         overcomplete_basis_size=models_config.overcomplete_basis_size,
     ).to(device)
