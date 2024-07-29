@@ -42,7 +42,7 @@ class LinearInvertible(nn.Module):
     def forward(self, delta_z):
         def whiten(x):
             x = x.detach().cpu().numpy()
-            mean = x.mean(dim=0, keepdim=True)
+            mean = np.mean(x, axis=0, keepdim=True)
             x_centered = x - mean
 
             # Step 2: Compute covariance matrix
