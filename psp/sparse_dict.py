@@ -114,11 +114,11 @@ class NonLinearAutoencoder(nn.Module):
         )
         self.bias_encoder = nn.Parameter(torch.zeros(overcomplete_basis_size))
         self.bias_decoder = nn.Parameter(torch.zeros(embedding_size))
-        if act_fxn is "leakyrelu":
+        if act_fxn == "leakyrelu":
             self.act_fxn = nn.LeakyReLU(0.1)
-        elif act_fxn is "relu":
+        elif act_fxn == "relu":
             self.act_fxn = nn.ReLU()
-        elif act_fxn is "gelu":
+        elif act_fxn == "gelu":
             self.act_fxn = nn.GELU()
 
         # these implementation tricks below are from anthropic's
