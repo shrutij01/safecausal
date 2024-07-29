@@ -320,9 +320,6 @@ def main(args, device):
 
         lin_ent_tf = generate_invertible_matrix(lin_ent_dim)
         x_ent = np.array([lin_ent_tf @ x_gt[i] for i in range(x_gt.shape[0])])
-        import ipdb
-
-        ipdb.set_trace()
         if args.data_type == "gt_ent":
             x = x_ent
 
@@ -404,9 +401,10 @@ def main(args, device):
         sparse_dict_model_dir, "sparse_dict_model.pth"
     )
     torch.save(sparse_dict_model.state_dict(), sparse_dict_model_dict_path)
-    if args.data_type == "gt_ent" or args.data_type == "gt":
+    if args.data_type == args.data_type == "gt":
         np.save(os.path.join(modeldir, "x_gt.npy"), x_gt)
     elif args.data_type == "gt_ent":
+        np.save(os.path.join(modeldir, "x_gt.npy"), x_gt)
         np.save(os.path.join(modeldir, "x_ent.npy"), x_ent)
         np.save(os.path.join(modeldir, "lin_ent_tf.npy"), lin_ent_tf)
     # small test script here for now
