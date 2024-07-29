@@ -23,65 +23,27 @@ def load_test_data(args, data_config):
     delta_z = None
     tf_ids = []
     num_tfs = []
-    if data_config.dataset == "toy_translator":
-        df_file = os.path.join(
-            args.embedding_dir, "multi_objects_single_coordinate.csv"
-        )
-        cfc_columns = data_config.cfc_column_names
-        converters = {col: ast.literal_eval for col in cfc_columns}
-        x_df = pd.read_csv(df_file, converters=converters)
-        x_df_test = x_df.iloc[int(data_config.split * data_config.size) :]
+    df_file = os.path.join(args.embedding_dir, "object_translations1.csv")
+    cfc_columns = data_config.cfc_column_names
+    converters = {col: ast.literal_eval for col in cfc_columns}
+    x_df = pd.read_csv(df_file, converters=converters)
+    x_df_test = x_df.iloc[int(data_config.split * data_config.size) :]
 
-        def convert_to_list_of_ints(value):
-            if isinstance(value, str):
-                value = ast.literal_eval(value)
-            return [int(delta_z) for delta_z in value]
+    def convert_to_list_of_ints(value):
+        if isinstance(value, str):
+            value = ast.literal_eval(value)
+        return [int(delta_z) for delta_z in value]
 
-        for column in x_df_test[cfc_columns]:
-            x_df_test[column] = x_df_test[column].apply(
-                convert_to_list_of_ints
-            )
+    for column in x_df_test[cfc_columns]:
+        x_df_test[column] = x_df_test[column].apply(convert_to_list_of_ints)
 
-        delta_z = np.asarray(
-            (
-                x_df_test[cfc_columns]
-                .apply(lambda row: sum(row, []), axis=1)
-                .tolist()
-            )
+    delta_z = np.asarray(
+        (
+            x_df_test[cfc_columns]
+            .apply(lambda row: sum(row, []), axis=1)
+            .tolist()
         )
-    elif data_config.dataset == "gradeschooler":
-        embeddings_file = os.path.join(args.embedding_dir, "embeddings.h5")
-        with h5py.File(embeddings_file, "r") as f:
-            cfc1_embeddings_test = np.array(f["cfc1_test"])
-            cfc2_embeddings_test = np.array(f["cfc2_test"])
-        delta_z = cfc2_embeddings_test - cfc1_embeddings_test
-        mean = delta_z.mean(axis=0)
-        std = delta_z.std(axis=0, ddof=1)
-        delta_z = (delta_z - mean) / (std + 1e-8)
-        data_file = os.path.join(args.embedding_dir, "gradeschooler.txt")
-        tf_ids = []
-        num_tfs = []
-        with open(data_file, "r") as f:
-            context_pairs = [
-                line.strip().split("\t") for line in f if line.strip()
-            ]
-        split = int(0.9 * data_config.dataset_length)
-        for cp in context_pairs[split:]:
-            match = re.search(r"\[(.*?)\]$", cp[0])
-            if match:
-                list_str = match.group(0)
-                parsed_list = ast.literal_eval(list_str)
-                int_list = [int(str(item).strip()) for item in parsed_list]
-            else:
-                raise ValueError
-            int_list.sort()
-            tf_id = int("".join(str(digit) for digit in int_list))
-            tf_ids.append(tf_id)
-            num_tfs.append(cp[0].split(",")[2])
-    else:
-        raise NotImplementedError(
-            "Datasets implemented: toy_translator and gradeschooler"
-        )
+    )
     num_tfs = list(map(int, num_tfs))
     return delta_z, tf_ids, num_tfs
 
