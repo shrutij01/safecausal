@@ -14,6 +14,7 @@ import pandas as pd
 import ast
 import datetime
 from terminalplot import plot
+from psp.utils import DisentanglementScores
 
 
 """Implementation tricks from 1. https://transformer-circuits.pub/2023/monosemantic-features/index.html#appendix-autoencoder
@@ -289,6 +290,7 @@ def main(args, device):
         converters = {col: ast.literal_eval for col in cfc_columns}
         x_df = pd.read_csv(df_file, converters=converters)
         x_df_train = x_df.iloc[: int(config.split * config.size)]
+        x_df_test = x_df.iloc[int(config.split * config.size) :]
 
         def convert_to_list_of_ints(value):
             if isinstance(value, str):
@@ -403,6 +405,38 @@ def main(args, device):
     elif args.data_type == "gt_ent":
         np.save(os.path.join(modeldir, "x_ent.npy"), x_ent)
         np.save(os.path.join(modeldir, "lin_ent_tf.npy"), lin_ent_tf)
+    # small test script here for now
+    delta_z_test = np.asarray(
+        (
+            x_df_test[cfc_columns]
+            .apply(lambda row: sum(row, []), axis=1)
+            .tolist()
+        )
+    )  # the gt latents
+    if args.data_type == "gt_ent":
+        delta_z_test_ent = np.array(
+            [
+                lin_ent_tf @ delta_z_test[i]
+                for i in range(delta_z_test.shape[0])
+            ]
+        )  # entangled latents
+    else:
+        raise ValueError
+    sparse_dict_model_dict = torch.load(sparse_dict_model_dict_path)
+    sparse_dict_model.load_state_dict(sparse_dict_model_dict)
+    delta_z_test_ent = (
+        torch.from_numpy(delta_z_test_ent).to(device).type(torch.float32)
+    )
+    delta_z_hat_test, delta_c_test = sparse_dict_model(delta_z_test_ent)
+    delta_z_hat_test = delta_z_hat_test.detach().cpu().numpy()
+    delta_c_test = delta_c_test.detach().cpu().numpy()
+    disentanglement_scores = DisentanglementScores()
+
+    mcc_score = disentanglement_scores.get_mcc_score(
+        delta_z_hat_test,
+        delta_z_test,
+    )
+    print(f"MCC on the test set is: {mcc_score}")
 
 
 if __name__ == "__main__":
