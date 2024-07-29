@@ -152,6 +152,15 @@ def main(args, device):
 
     ipdb.set_trace()
 
+    W_d = sparse_dict_model.decoder.weight.data.cpu()
+    threshold = float(1e-2)
+    rounded_W_d = np.where(W_d < threshold, 0, W_d)
+    print(rounded_W_d)
+
+    import ipdb
+
+    ipdb.set_trace()
+
     # get mcc score
     reps1, reps2 = get_rep_pairs(1000, delta_c_test)
     disentanglement_scores = DisentanglementScores()
