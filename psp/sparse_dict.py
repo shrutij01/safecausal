@@ -41,6 +41,7 @@ class LinearInvertible(nn.Module):
 
     def forward(self, delta_z):
         def whiten(x):
+            x = x.detach().cpu().numpy()
             mean = x.mean(dim=0, keepdim=True)
             x_centered = x - mean
 
@@ -59,7 +60,9 @@ class LinearInvertible(nn.Module):
 
             # Step 5: Transform the original matrix
             x_whitened = x_centered.mm(transformation_matrix)
-
+            x_whitened = (
+                torch.from_numpy(x_whitened).to(device).type(torch.float32)
+            )
             return x_whitened
 
         delta_z = whiten(delta_z)
