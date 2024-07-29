@@ -331,7 +331,7 @@ def main(args, device):
     dataset = TensorDataset(x)
     loader = DataLoader(
         dataset,
-        batch_size=args.batch_size,
+        batch_size=int(args.batch_size),
         shuffle=True,
         num_workers=0,
     )
