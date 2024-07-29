@@ -382,6 +382,8 @@ def main(args, device):
         modeldir, "models_config.yaml"
     )
     sparse_dict_model_config = {
+        "model_type": args.model_type,
+        "act_fxn": args.act_fxn,
         "embedding_size": embedding_dim,
         "overcomplete_basis_size": overcomplete_basis_size,
         "learning_rate": args.lr,
