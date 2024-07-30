@@ -55,7 +55,7 @@ def translate_objects_single_coordinate(
             current_num_objects_to_translate = (
                 num_objects_to_translate
                 if num_objects_to_translate is not None
-                else random.randint(1, total_objects - 1)
+                else random.randint(1, total_objects)
             )
             # 2. which objects
             objects_to_translate = random.sample(
@@ -94,7 +94,7 @@ def translate_objects_single_coordinate(
         for step in range(0, num_tuples):
             # 1. first indeterminacy: num coordinates
             current_num_coordinates_to_translate = random.randint(
-                1, total_coordinates - 1
+                1, total_coordinates
             )
             # 2. which coordinates
             coordinates_to_translate = random.sample(
