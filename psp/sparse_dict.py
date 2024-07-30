@@ -14,7 +14,7 @@ import pandas as pd
 import ast
 import datetime
 from terminalplot import plot
-from psp.utils import DisentanglementScores
+import psp.data_utils as data_utils
 
 
 """Implementation tricks from 1. https://transformer-circuits.pub/2023/monosemantic-features/index.html#appendix-autoencoder
