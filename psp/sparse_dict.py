@@ -289,7 +289,7 @@ def main(args, device):
         cfc_columns = config.cfc_column_names
         converters = {col: ast.literal_eval for col in cfc_columns}
         x_df = pd.read_csv(df_file, converters=converters)
-        x_df_train = x_df.iloc[: int(config.split * config.size)]
+        x_df_train = x_df.iloc[0 : int(config.split * config.size)]
         x_df_test = x_df.iloc[int(config.split * config.size) :]
 
         def convert_to_list_of_ints(value):
@@ -400,11 +400,8 @@ def main(args, device):
         sparse_dict_model_dir, "sparse_dict_model.pth"
     )
     torch.save(sparse_dict_model.state_dict(), sparse_dict_model_dict_path)
-    if args.data_type == args.data_type == "gt":
-        np.save(os.path.join(modeldir, "x_gt.npy"), x_gt)
-    elif args.data_type == "gt_ent":
-        np.save(os.path.join(modeldir, "x_gt.npy"), x_gt)
-        np.save(os.path.join(modeldir, "x_ent.npy"), x_ent)
+
+    if args.data_type == "gt_ent":
         np.save(os.path.join(modeldir, "lin_ent_tf.npy"), lin_ent_tf)
     # small test script here for now
     delta_z_test = np.asarray(
