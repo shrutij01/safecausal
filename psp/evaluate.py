@@ -16,12 +16,12 @@ class Evaluator:
     tf_ids: np.ndarray
 
     def run_evaluations(self, plot=False):
-        if self.delta_c_test:
+        if self.delta_c_test is not None:
             mcc_latents = metrics.mean_corr_coef(
                 self.delta_c_test, self.delta_c_hat_test
             )
             print(f"MCC b/w delta_c and delta_c_hat: {mcc_latents}")
-        if self.w_d_gt:
+        if self.w_d_gt is not None:
             mcc_encoding = metrics.mean_corr_coef(self.w_d, self.w_d_gt)
             print(f"MCC b/w gt_encoding and learnt_encoding: {mcc_encoding}")
 

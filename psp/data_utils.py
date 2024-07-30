@@ -112,9 +112,6 @@ def load_test_data(args, data_config):
         converters = {col: ast.literal_eval for col in cfc_columns}
         x_df = pd.read_csv(df_file, converters=converters)
         x_df_test = x_df.iloc[int(data_config.split * data_config.size) :]
-        import ipdb
-
-        ipdb.set_trace()
 
         def convert_to_list_of_ints(value):
             if isinstance(value, str):
