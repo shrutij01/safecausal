@@ -1,5 +1,5 @@
 import torch
-from psp.sparse_dict import LinearInvertible
+from psp.sparse_dict import LinearAutoencoder
 
 
 import argparse
@@ -26,7 +26,7 @@ def prepare_test_data(args, device):
     model_config_file = os.path.join(args.model_dir, "models_config.yaml")
     with open(model_config_file, "r") as file:
         model_config = Box(yaml.safe_load(file))
-    sparse_dict_model = LinearInvertible(
+    sparse_dict_model = LinearAutoencoder(
         embedding_size=model_config.embedding_size,
         overcomplete_basis_size=model_config.overcomplete_basis_size,
     ).to(device)
