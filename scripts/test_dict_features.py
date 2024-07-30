@@ -35,9 +35,9 @@ def prepare_test_data(args, device):
     )
     sparse_dict_model_dict = torch.load(sparse_dict_model_file)
     sparse_dict_model.load_state_dict(sparse_dict_model_dict)
-    x_test, tf_ids, num_tfs = data_utils.load_test_data(args, data_config)
     delta_z_test = None
     delta_c_test = None
+    x_test, tf_ids, num_tfs = data_utils.load_test_data(args, data_config)
     if data_config.dataset == "toy_translator":
         delta_c_test = x_test
         if model_config.data_type == "gt_ent":

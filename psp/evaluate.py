@@ -16,6 +16,9 @@ class Evaluator:
     tf_ids: np.ndarray
 
     def run_evaluations(self, plot=False):
+        import ipdb
+
+        ipdb.set_trace()
         if self.delta_c_test is not None:
             mcc_latents = metrics.mean_corr_coef(
                 self.delta_c_test, self.delta_c_hat_test
