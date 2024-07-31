@@ -2,10 +2,15 @@ import numpy as np
 import concurrent.futures
 from typing import List
 import scipy
+from sklearn.metrics import r2_score
 import torch
 from numpy.linalg import svd
 from scipy.optimize import linear_sum_assignment
 from scipy.stats import spearmanr
+
+
+def r2(z_true, z):
+    return r2_score(z_true, z, multioutput="variance_weighted")
 
 
 """Below is from the icebeem repo at https://github.com/ilkhem/icebeem/blob/master/metrics/mcc.py"""
