@@ -122,6 +122,7 @@ def load_test_data(args, data_config):
             x_df_test[column] = x_df_test[column].apply(
                 convert_to_list_of_ints
             )
+        x_df_test['']
 
         delta_z = np.asarray(
             (
