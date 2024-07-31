@@ -171,6 +171,7 @@ def main(args):
         f"translation_for_object_{i}" for i in range(args.total_objects)
     ]
     config = {
+        "dataset": 'toy_translator'
         "dgp": args.dgp,
         "num_objects": args.total_objects,
         "cfc_column_names": object_translation_columns,

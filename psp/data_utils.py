@@ -122,7 +122,12 @@ def load_test_data(args, data_config):
             x_df_test[column] = x_df_test[column].apply(
                 convert_to_list_of_ints
             )
-        x_df_test['']
+        x_df_test["num_coordinates_translated"] = x_df_test[
+            "num_coordinates_translated"
+        ].apply(convert_to_list_of_ints)
+        x_df_test["ids_coordinates_translated"] = x_df_test[
+            "ids_coordinates_translated"
+        ].apply(convert_to_list_of_ints)
 
         delta_z = np.asarray(
             (
@@ -131,6 +136,8 @@ def load_test_data(args, data_config):
                 .tolist()
             )
         )
+        num_tfs = np.asarray(x_df_test["num_coordinates_translated"].tolist())
+        tf_ids = np.asarray(x_df_test["ids_coordinates_translated"].tolist())
     elif data_config.dataset == "gradeschooler":
         embeddings_file = os.path.join(args.embedding_dir, "embeddings.h5")
         with h5py.File(embeddings_file, "r") as f:
