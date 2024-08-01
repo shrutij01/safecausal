@@ -72,6 +72,7 @@ def prepare_test_data(args, device):
         delta_z_hat_test,
         lin_ent_tf,
         w_d,
+        numpify(sparse_dict_model_dict["bias_encoder"]),
         num_tfs,
         tf_ids,
     )
@@ -85,6 +86,7 @@ def main(args, device):
         delta_z_hat_test,
         lin_ent_tf,
         w_d,
+        b_e,
         num_tfs,
         tf_ids,
     ) = prepare_test_data(args, device)
@@ -96,6 +98,7 @@ def main(args, device):
         delta_z_hat_test=delta_z_hat_test,
         w_d_gt=lin_ent_tf,
         w_d=w_d,
+        b_e=b_e,
         num_tfs=np.array(num_tfs),
         tf_ids=np.array(tf_ids),
     )
