@@ -39,8 +39,17 @@ class Evaluator:
                 for i in range(self.delta_z_test.shape[0])
             ]
         )
+        delta_c_hat_enc_gt_2 = np.array(
+            [
+                enc_gt @ self.delta_z_test[i]
+                for i in range(self.delta_z_test.shape[0])
+            ]
+        )
         mcc_gt_enc = metrics.mean_corr_coef(
             self.delta_c_test, delta_c_hat_enc_gt
+        )
+        mcc_gt_enc_2 = metrics.mean_corr_coef(
+            self.delta_c_test, delta_c_hat_enc_gt_2
         )
         import ipdb
 
