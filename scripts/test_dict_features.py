@@ -35,6 +35,9 @@ def prepare_test_data(args, device):
     )
     sparse_dict_model_dict = torch.load(sparse_dict_model_file)
     sparse_dict_model.load_state_dict(sparse_dict_model_dict)
+    import ipdb
+
+    ipdb.set_trace()
     delta_z_test = None
     delta_c_test = None
     x_test, tf_ids, num_tfs = data_utils.load_test_data(args, data_config)
