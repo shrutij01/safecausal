@@ -15,6 +15,8 @@ import ast
 import datetime
 from terminalplot import plot
 import psp.data_utils as data_utils
+import wandb
+from psp.metrics import mean_corr_coef
 
 
 """Implementation tricks from 1. https://transformer-circuits.pub/2023/monosemantic-features/index.html#appendix-autoencoder
@@ -22,6 +24,20 @@ and 2. https://transformer-circuits.pub/2024/april-update/index.html#training-sa
 2. over 1. in case of contradictions.
 """
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+
+def set_seeds(seed):
+    """Set seeds for reproducibility."""
+    np.random.seed(seed)  # NumPy random generator
+    torch.manual_seed(seed)  # PyTorch random seed
+    torch.cuda.manual_seed(seed)  # Seeds the GPU if available
+    torch.cuda.manual_seed_all(seed)  # For multi-GPU setups
+
+    # below methods lead to performance issues, check if you want them
+    # torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = False
+    # os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"  # or '4096:8' or '8192:8'
+    # above configures cuBLAS to have 16KB mem banks and 8-way conflict avoidance
 
 
 class LinearInvertible(nn.Module):
@@ -210,10 +226,13 @@ def train(
 ):
     scaler = GradScaler()
     losses = []
+    wandb.watch(sparse_dict_model, log="all", log_freq=100)
     for epoch in range(int(args.num_epochs)):
         epoch_loss = 0.0
         reconstruction_error = 0.0
+        reconstruction_error_total = 0.0
         sparsity_penalty = 0.0
+        sparsity_penalty_total = 0.0
         for delta_z_list in dataloader:
             optimizer.zero_grad()
             with autocast():  # Enables mixed precision
@@ -254,18 +273,41 @@ def train(
                     parameters=sparse_dict_model.parameters(), max_norm=1
                 )
             epoch_loss += total_loss.item()
+            reconstruction_error_total += reconstruction_error_total.item()
+            sparsity_penalty_total += sparsity_penalty.item()
+            if args.model_type == "la" or args.model_type == "nla":
+                wandb.log(
+                    {
+                        "Total Loss": total_loss.item(),
+                        "Reconstruction Error": reconstruction_error.item(),
+                        "Sparsity Penalty": sparsity_penalty.item(),
+                    }
+                )
+            elif args.model_type == "linv":
+                wandb.log(
+                    {
+                        "Total loss aka sparsity penalty for linv": sparsity_penalty.item()
+                    }
+                )
         average_loss = epoch_loss / len(dataloader)
         losses.append(average_loss)
+        wandb.log(
+            {
+                "Epoch Loss": average_loss,
+                "Average Reconstruction Error": reconstruction_error_total
+                / len(dataloader),
+                "Average Sparsity Penalty": sparsity_penalty_total
+                / len(dataloader),
+            }
+        )
         if epoch % 100 == 0:
             print(f"Ending epoch {epoch}, Average Loss: {average_loss:.4f}\n")
-            print(
-                f"Loss breakup as {reconstruction_error:.4f} reconstruction, {sparsity_penalty:.4f} sparsity"
-            )
 
     return losses
 
 
 def main(args, device):
+    set_seeds(int(args.seed))
     x = None
     if args.data_type == "emb":
         embeddings_file = os.path.join(args.embedding_dir, "embeddings.h5")
@@ -290,7 +332,6 @@ def main(args, device):
         converters = {col: ast.literal_eval for col in cfc_columns}
         x_df = pd.read_csv(df_file, converters=converters)
         x_df_train = x_df.iloc[0 : int(config.split * config.size)]
-        x_df_test = x_df.iloc[int(config.split * config.size) :]
 
         def convert_to_list_of_ints(value):
             if isinstance(value, str):
@@ -365,6 +406,21 @@ def main(args, device):
     alpha_scheduler = AlphaScheduler(args.num_epochs, args.alpha)
 
     loss_fxn = torch.nn.MSELoss()
+    sparse_dict_model_config = {
+        "seed": args.seed,
+        "dataset": args.embedding_dir,
+        "data_type": args.data_type,
+        "embedding_size": embedding_dim,
+        "overcomplete_basis_size": overcomplete_basis_size,
+        "model_type": args.model_type,
+        "act_fxn": args.act_fxn,
+        "alpha": args.alpha,
+        "learning_rate": args.lr,
+        "batch_size": args.batch_size,
+        "num_epochs": args.num_epochs,
+        "gradient_clipping_for_dict": args.grad_clip_sae,
+    }
+    wandb.init(project="psp", config=sparse_dict_model_config)
     losses = train(
         dataloader=loader,
         sparse_dict_model=sparse_dict_model,
@@ -383,17 +439,6 @@ def main(args, device):
     sparse_dict_model_config_file = os.path.join(
         modeldir, "models_config.yaml"
     )
-    sparse_dict_model_config = {
-        "model_type": args.model_type,
-        "act_fxn": args.act_fxn,
-        "embedding_size": embedding_dim,
-        "overcomplete_basis_size": overcomplete_basis_size,
-        "learning_rate": args.lr,
-        "alpha": args.alpha,
-        "data_type": args.data_type,
-        "num_epochs": args.num_epochs,
-        "gradient_clipping_for_dict": args.grad_clip_sae,
-    }
     with open(sparse_dict_model_config_file, "w") as file:
         yaml.dump(sparse_dict_model_config, file)
     sparse_dict_model_dict_path = os.path.join(
@@ -407,7 +452,6 @@ def main(args, device):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-
     parser.add_argument("embedding_dir")
     parser.add_argument(
         "--data-type", default="emb", choices=["emb", "gt", "gt_ent"]
@@ -429,6 +473,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--act_fxn", default="leakyrelu", choices=["leakyrelu", "relu", "gelu"]
     )
+    parser.add_argument("--seed", default=42)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     args = parser.parse_args()
