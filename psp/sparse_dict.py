@@ -273,8 +273,8 @@ def train(
                     parameters=sparse_dict_model.parameters(), max_norm=1
                 )
             epoch_loss += total_loss.item()
-            reconstruction_error_total += reconstruction_error_total.item()
-            sparsity_penalty_total += sparsity_penalty.item()
+            reconstruction_error_total += reconstruction_error
+            sparsity_penalty_total += sparsity_penalty
             if args.model_type == "la" or args.model_type == "nla":
                 wandb.log(
                     {
