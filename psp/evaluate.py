@@ -40,25 +40,20 @@ class Evaluator:
                 for i in range(self.delta_z_test.shape[0])
             ]
         )
-        delta_c_hat_enc_gt_2 = np.array(
-            [
-                enc_gt @ self.delta_z_test[i]
-                for i in range(self.delta_z_test.shape[0])
-            ]
-        )
         mcc_gt_enc = metrics.mean_corr_coef(
             self.delta_c_test, delta_c_hat_enc_gt
         )
-        mcc_gt_enc_2 = metrics.mean_corr_coef(
-            self.delta_c_test, delta_c_hat_enc_gt_2
-        )
         reg_1 = LinearRegression().fit(delta_c_hat_enc_gt, self.delta_c_test)
-        reg_2 = LinearRegression().fit(delta_c_hat_enc_gt_2, self.delta_c_test)
-        score_1 = reg_1.score(delta_c_hat_enc_gt, self.delta_c_test)
-        score_2 = reg_2.score(delta_c_hat_enc_gt_2, self.delta_c_test)
-        print(
-            f"MCC b/w delta_c_enc_gt/2 and delta_c: {mcc_gt_enc}, {mcc_gt_enc_2}"
+        reg_2 = LinearRegression().fit(
+            self.delta_c_hat_test, self.delta_c_test
         )
+        score_1 = reg_1.score(delta_c_hat_enc_gt, self.delta_c_test)
+        score_2 = reg_2.score(self.delta_c_hat_test, self.delta_c_test)
+        import ipdb
+
+        ipdb.set_trace()
+        print(f"MCC b/w delta_c_enc_gt and delta_c: {mcc_gt_enc}")
+        print(f"OLS score b/w delta_c_hat and delta_c: {score_2}")
         print(
-            f"OLS score b/w delta_c_enc_gt/2 and delta_c: {score_1}, {score_2}"
+            f"OLS score b/w delta_c_enc_gt and delta_c: {score_1}, {score_2}"
         )
