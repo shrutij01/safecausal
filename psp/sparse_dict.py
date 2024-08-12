@@ -244,10 +244,10 @@ def train(
                 reconstruction_error = loss_fxn(delta_z_hat, delta_z)
 
                 sparsity_penalty = torch.sum(torch.norm(delta_c, p=1, dim=1))
-                total_loss = (
-                    reconstruction_error + float(args.alpha) * sparsity_penalty
-                )
                 alpha = alpha_scheduler.get_coeff(epoch)
+                total_loss = (
+                    reconstruction_error + float(alpha) * sparsity_penalty
+                )
                 if args.model_type == "linv":
                     total_loss = sparsity_penalty
                 else:
@@ -316,6 +316,7 @@ def main(args, device):
             cfc2_train = np.array(f["cfc2_train"]).squeeze()
 
         x = cfc2_train - cfc1_train
+        # centered embeddings
         mean = x.mean(axis=0)
         std = x.std(axis=0, ddof=1)
         x = (x - mean) / (std + 1e-8)
