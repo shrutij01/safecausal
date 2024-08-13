@@ -96,7 +96,7 @@ class Evaluator:
             self.w_d[0], self.w_d[1], method="pearson"
         )
         print(
-            f"MCC between delta_c from a couple different runs {mcc_encoding}..."
+            f"MCC between the encoding function from a couple different runs {mcc_encoding}..."
         )
         reg = LinearRegression().fit(self.w_d[0], self.w_d[1])
         score = reg.score(self.w_d[0], self.w_d[1])
