@@ -144,7 +144,7 @@ class Evaluator:
         def get_cosine_similarities(embeddings_1, embeddings_2):
             assert embeddings_1.shape[0] == embeddings_2.shape[0]
             random_indices = np.random.choice(
-                embeddings_1.shape[0], 20, replace=False
+                embeddings_1.shape[0], 700, replace=False
             )
             similarities = cosine_similarity(
                 embeddings_1[random_indices], embeddings_2[random_indices]
