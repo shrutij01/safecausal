@@ -103,6 +103,9 @@ def main(args, device):
         tf_ids=np.array(tf_ids),
         seeds=seeds,
     )
+    import ipdb
+
+    ipdb.set_trace()
     evaluator.get_mcc()
     import ipdb
 
