@@ -82,9 +82,6 @@ class Evaluator:
         z_1, z_2 = data_utils.get_rep_pairs(
             5, self.delta_c_hat_test[0], self.delta_c_hat_test[1]
         )
-        import ipdb
-
-        ipdb.set_trace()
         mcc_latents = metrics.mean_corr_coef(z_1, z_2, method="pearson")
         print(
             f"MCC between delta_c from a couple different runs {mcc_latents}..."
@@ -129,7 +126,7 @@ class Evaluator:
         plt.xlabel("Cosine Similarity")
         plt.ylabel("Density")
         plt.legend()
-        plt.savefig("kde_ac.png")
+        plt.savefig("kde_ac_nosp.png")
         plt.close()
 
     def objects_compare_with_md(self):
@@ -159,5 +156,5 @@ class Evaluator:
         plt.xlabel("Cosine Similarity")
         plt.ylabel("Density")
         plt.legend()
-        plt.savefig("kde_objects.png")
+        plt.savefig("kde_objects_nosp.png")
         plt.close()
