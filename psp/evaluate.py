@@ -92,7 +92,9 @@ class Evaluator:
         reg = LinearRegression().fit(z_1, z_2)
         score = reg.score(z_1, z_2)
         print(f"... and its OLS score {score}")
-        mcc_encoding = metrics.mean_corr_coef(self.w_d[0], self.w_d[1])
+        mcc_encoding = metrics.mean_corr_coef(
+            self.w_d[0], self.w_d[1], method="pearson"
+        )
         print(
             f"MCC between delta_c from a couple different runs {mcc_encoding}..."
         )
