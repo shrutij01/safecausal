@@ -74,7 +74,7 @@ class Evaluator:
 
     def get_mcc(self):
         z_1, z_2 = data_utils.get_rep_pairs(
-            700, self.delta_c_hat_test[0], self.delta_c_hat_test[1]
+            50, self.delta_c_hat_test[0], self.delta_c_hat_test[1]
         )
         mcc_latents = metrics.mean_corr_coef(z_1, z_2)
         print(
