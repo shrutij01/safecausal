@@ -84,16 +84,17 @@ def append_instruction(contexts, instruction):
     return instruction_plus_contexts
 
 
-def get_rep_pairs(num_pairs, delta_c_test):
-    total_samples = delta_c_test.shape[0]
-    m = delta_c_test.shape[1]
+def get_rep_pairs(num_pairs, data1, data2):
+    assert data1.shape[0] == data2.shape[0]
+    assert data1.shape[1] == data2.shape[1]
+    total_samples = data1.shape[0]
+    m = data1.shape[1]
     reps1 = np.zeros((num_pairs, m))
     reps2 = np.zeros((num_pairs, m))
     for i in range(num_pairs):
         id1, id2 = np.random.choice(total_samples, size=2, replace=False)
-
-        reps1[i] = delta_c_test[id1]
-        reps2[i] = delta_c_test[id2]
+        reps1[i] = data1[id1]
+        reps2[i] = data2[id2]
     return reps1, reps2
 
 

@@ -3,10 +3,11 @@ import psp.metrics as metrics
 from sklearn.linear_model import LinearRegression
 
 from dataclasses import dataclass
+import psp.data_utils as data_utils
 
 
 @dataclass
-class Evaluator:
+class EvaluatorGT:
     delta_c_test: np.ndarray
     delta_z_test: np.ndarray
     delta_c_hat_test: np.ndarray
@@ -57,3 +58,35 @@ class Evaluator:
         print(
             f"OLS score b/w delta_c_enc_gt and delta_c: {score_1}, {score_2}"
         )
+
+
+@dataclass
+class Evaluator:
+    # data to be a list with seeds as indices
+    delta_z_test: list
+    delta_c_hat_test: list
+    delta_z_hat_test: list
+    w_d: list
+    b_e: list
+    num_tfs: np.ndarray
+    tf_ids: np.ndarray
+    seeds: list
+
+    def get_mcc(self):
+        z_1, z_2 = data_utils.get_rep_pairs(
+            700, self.delta_c_hat_test[0], self.delta_c_hat_test[1]
+        )
+        mcc_latents = metrics.mean_corr_coef(z_1, z_2)
+        print(
+            f"MCC between delta_c from a couple different runs {mcc_latents}..."
+        )
+        reg = LinearRegression().fit(z_1, z_2)
+        score = reg.score(z_1, z_2)
+        print(f"... and its OLS score {score}")
+        mcc_encoding = metrics.mean_corr_coef(self.w_d[0], self.w_d[1])
+        print(
+            f"MCC between delta_c from a couple different runs {mcc_encoding}..."
+        )
+        reg = LinearRegression().fit(self.w_d[0], self.w_d[1])
+        score = reg.score(self.w_d[0], self.w_d[1])
+        print(f"... and its OLS score {score}")

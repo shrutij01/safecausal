@@ -16,7 +16,7 @@ import psp.data_utils as data_utils
 from psp.data_utils import tensorify, numpify
 
 import psp.plot as psp_plot
-from psp.evaluate import Evaluator
+from psp.evaluate import EvaluatorGT
 
 
 def prepare_test_data(args, device):
@@ -89,7 +89,7 @@ def main(args, device):
         tf_ids,
     ) = prepare_test_data(args, device)
 
-    evaluator = Evaluator(
+    evaluator = EvaluatorGT(
         delta_c_test=delta_c_test,
         delta_z_test=delta_z_test,
         delta_c_hat_test=delta_c_hat_test,
