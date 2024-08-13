@@ -90,3 +90,8 @@ class Evaluator:
         reg = LinearRegression().fit(self.w_d[0], self.w_d[1])
         score = reg.score(self.w_d[0], self.w_d[1])
         print(f"... and its OLS score {score}")
+
+    def compare_with_md(self):
+        import ipdb
+
+        ipdb.set_trace()
