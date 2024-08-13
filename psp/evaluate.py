@@ -85,7 +85,7 @@ class Evaluator:
         import ipdb
 
         ipdb.set_trace()
-        mcc_latents = metrics.mean_corr_coef(z_1, z_2)
+        mcc_latents = metrics.mean_corr_coef(z_1, z_2, method="pearson")
         print(
             f"MCC between delta_c from a couple different runs {mcc_latents}..."
         )
