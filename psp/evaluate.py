@@ -130,7 +130,7 @@ class Evaluator:
         plt.savefig("kde_ac.png")
 
     def objects_compare_with_md(self):
-        object_tf_ids = self.tf_ids == 2
+        object_tf_ids = self.tf_ids == 3
         md_objects = np.mean(self.delta_z_test[0][object_tf_ids], axis=0)
         delta_c_objects = np.mean(
             self.delta_c_hat_test[0][object_tf_ids], axis=0
