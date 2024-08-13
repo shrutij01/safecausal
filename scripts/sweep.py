@@ -25,7 +25,7 @@ if __name__ == "__main__":
         ["--num-epochs 1100"],
     ]
 
-    init_commands = 'source /home/mila/j/joshi.shruti/venvs/eqm/bin/activate && module load miniconda/3 && conda activate pytorch && export PYTHONPATH="/home/mila/j/joshi.shruti/causalrepl_space/psp:$PYTHONPATH" && cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp'
+    init_commands = '. /home/mila/j/joshi.shruti/venvs/eqm/bin/activate && module load miniconda/3 && conda activate pytorch && export PYTHONPATH="/home/mila/j/joshi.shruti/causalrepl_space/psp:$PYTHONPATH" && cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp'
 
     python_command = "python sparse_dict.py"
     sbatch_command = "sbatch --gres=gpu:1 --time=1:00:0 --mem=100G"
