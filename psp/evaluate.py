@@ -128,6 +128,7 @@ class Evaluator:
         plt.ylabel("Density")
         plt.legend()
         plt.savefig("kde_ac.png")
+        plt.close()
 
     def objects_compare_with_md(self):
         object_tf_ids = self.tf_ids == 3
@@ -159,3 +160,4 @@ class Evaluator:
         plt.ylabel("Density")
         plt.legend()
         plt.savefig("kde_objects.png")
+        plt.close()
