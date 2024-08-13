@@ -2,7 +2,6 @@
 #SBATCH --job-name=test
 #SBATCH --output=job_output.txt
 #SBATCH --error=job_error.txt
-#SBATCH --ntasks=1
 #SBATCH --time=1:00:00
 #SBATCH --mem=100Gb
 
@@ -12,4 +11,4 @@ conda activate pytorch
 export PYTHONPATH="/home/mila/j/joshi.shruti/causalrepl_space/psp:$PYTHONPATH"
 cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp
 
-python sparse_dict.py "$@"
+python sparse_dict.py /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-07-08_17-03-30 --data-type emb --model-type nla --act_fxn leakyrelu --num-epochs 700 --alpha 0.001 --seed 0
