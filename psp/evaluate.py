@@ -114,13 +114,13 @@ class Evaluator:
         z_tilde_md = z_objects + md_objects
         z_tilde_delta_c = z_objects + delta_c_objects
 
-        def get_cosine_similarities(embeddings, mean_embedding):
+        def get_cosine_similarities(embeddings_1, embeddings_2):
+            assert embeddings_1.shape[0] == embeddings_2.shape[0]
             random_indices = np.random.choice(
-                embeddings.shape[0], 20, replace=False
+                embeddings_1.shape[0], 20, replace=False
             )
-            random_embeddings = embeddings[random_indices]
             similarities = cosine_similarity(
-                mean_embedding.reshape((1, 4096)), random_embeddings
+                embeddings_1[random_indices], embeddings_2[random_indices]
             )[0]
             return similarities
 
