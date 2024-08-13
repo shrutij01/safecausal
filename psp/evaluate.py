@@ -74,8 +74,11 @@ class Evaluator:
 
     def get_mcc(self):
         z_1, z_2 = data_utils.get_rep_pairs(
-            50, self.delta_c_hat_test[0], self.delta_c_hat_test[1]
+            5, self.delta_c_hat_test[0], self.delta_c_hat_test[1]
         )
+        import ipdb
+
+        ipdb.set_trace()
         mcc_latents = metrics.mean_corr_coef(z_1, z_2)
         print(
             f"MCC between delta_c from a couple different runs {mcc_latents}..."
