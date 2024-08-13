@@ -108,6 +108,8 @@ def main(args, device):
         num_tfs=np.array(num_tfs),
         tf_ids=np.array(tf_ids),
         seeds=seeds,
+        cfc1_test,
+        cfc2_test,
     )
     import ipdb
 
