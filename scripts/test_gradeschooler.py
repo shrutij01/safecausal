@@ -114,7 +114,7 @@ def main(args, device):
     import ipdb
 
     ipdb.set_trace()
-    evaluator.compare_with_md()
+    # evaluator.objects_compare_with_md()
     import ipdb
 
     ipdb.set_trace()

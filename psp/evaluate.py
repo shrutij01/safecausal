@@ -100,10 +100,36 @@ class Evaluator:
         score = reg.score(self.w_d[0], self.w_d[1])
         print(f"... and its OLS score {score}")
 
-    def compare_with_md(self):
-        import ipdb
+    def ac_compare_with_md(self):
+        ac_tf_ids = self.tf_ids == 12
+        md_ac = np.mean(self.delta_z_test[0][ac_tf_ids], axis=0)
+        delta_c_ac = np.mean(self.delta_c_hat_test[0][ac_tf_ids], axis=0)
+        z_ac = self.z_test[ac_tf_ids]
+        z_tilde_ac = self.z_tilde_test[ac_tf_ids]
+        z_tilde_md = z_ac + md_ac
+        z_tilde_delta_c = z_ac + delta_c_ac
 
-        ipdb.set_trace()
+        def get_cosine_similarities(embeddings_1, embeddings_2):
+            assert embeddings_1.shape[0] == embeddings_2.shape[0]
+            random_indices = np.random.choice(
+                embeddings_1.shape[0], 20, replace=False
+            )
+            similarities = cosine_similarity(
+                embeddings_1[random_indices], embeddings_2[random_indices]
+            )[0]
+            return similarities
+
+        sim_md = get_cosine_similarities(z_tilde_md, z_tilde_ac)
+        sim_delta_c = get_cosine_similarities(z_tilde_delta_c, z_tilde_ac)
+        sns.kdeplot(sim_md, fill=True, color="blue", label="z + md")
+        sns.kdeplot(sim_delta_c, fill=True, color="green", label="z + delta_c")
+        plt.title("KDE of Cosine Similarities")
+        plt.xlabel("Cosine Similarity")
+        plt.ylabel("Density")
+        plt.legend()
+        plt.savefig("kde_ac.png")
+
+    def objects_compare_with_md(self):
         object_tf_ids = self.tf_ids == 2
         md_objects = np.mean(self.delta_z_test[0][object_tf_ids], axis=0)
         delta_c_objects = np.mean(
