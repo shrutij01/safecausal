@@ -1,9 +1,13 @@
 import numpy as np
 import psp.metrics as metrics
 from sklearn.linear_model import LinearRegression
+from sklearn.metrics.pairwise import cosine_similarity
+
 
 from dataclasses import dataclass
 import psp.data_utils as data_utils
+import seaborn as sns
+import matplotlib.pyplot as plt
 
 
 @dataclass
@@ -71,6 +75,8 @@ class Evaluator:
     num_tfs: np.ndarray
     tf_ids: np.ndarray
     seeds: list
+    z_test: np.ndarray
+    z_tilde_test: np.ndarray
 
     def get_mcc(self):
         z_1, z_2 = data_utils.get_rep_pairs(
@@ -98,3 +104,32 @@ class Evaluator:
         import ipdb
 
         ipdb.set_trace()
+        object_tf_ids = self.tf_ids == 2
+        md_objects = np.mean(self.delta_z_test[0][object_tf_ids], axis=0)
+        delta_c_objects = np.mean(
+            self.delta_c_hat_test[0][object_tf_ids], axis=0
+        )
+        z_objects = self.z_test[object_tf_ids]
+        z_tilde_objects = self.z_tilde_test[object_tf_ids]
+        z_tilde_md = z_objects + md_objects
+        z_tilde_delta_c = z_objects + delta_c_objects
+
+        def get_cosine_similarities(embeddings, mean_embedding):
+            random_indices = np.random.choice(
+                embeddings.shape[0], 20, replace=False
+            )
+            random_embeddings = embeddings[random_indices]
+            similarities = cosine_similarity(
+                mean_embedding.reshape((1, 4096)), random_embeddings
+            )[0]
+            return similarities
+
+        sim_md = get_cosine_similarities(z_tilde_md, z_tilde_objects)
+        sim_delta_c = get_cosine_similarities(z_tilde_delta_c, z_tilde_objects)
+        sns.kdeplot(sim_md, fill=True, color="blue", label="z + md")
+        sns.kdeplot(sim_delta_c, fill=True, color="green", label="z + delta_c")
+        plt.title("KDE of Cosine Similarities")
+        plt.xlabel("Cosine Similarity")
+        plt.ylabel("Density")
+        plt.legend()
+        plt.savefig("kde_objects.png")

@@ -8,7 +8,7 @@ import yaml
 from box import Box
 import numpy as np
 import pandas as pd
-
+import h5py
 
 import psp.data_utils as data_utils
 from psp.data_utils import tensorify, numpify
@@ -50,7 +50,9 @@ def prepare_test_data(args, device):
     seeds.append(model_2_config.seed)
 
     delta_z_test = None
-    x_test, tf_ids, num_tfs = data_utils.load_test_data(args, data_config)
+    x_test, tf_ids, num_tfs, cfc1_test, cfc2_test = data_utils.load_test_data(
+        args, data_config
+    )
     delta_z_test = x_test
     delta_z_test = tensorify(delta_z_test, device)
     delta_z_hat_test_1, delta_c_hat_test_1 = model_1(delta_z_test)
@@ -78,6 +80,8 @@ def prepare_test_data(args, device):
         num_tfs,
         tf_ids,
         seeds,
+        cfc1_test,
+        cfc2_test,
     )
 
 
@@ -91,6 +95,8 @@ def main(args, device):
         num_tfs,
         tf_ids,
         seeds,
+        cfc1_test,
+        cfc2_test,
     ) = prepare_test_data(args, device)
 
     evaluator = Evaluator(

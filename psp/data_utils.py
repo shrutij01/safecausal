@@ -173,7 +173,13 @@ def load_test_data(args, data_config):
             "Datasets implemented: toy_translator and gradeschooler"
         )
     num_tfs = list(map(int, num_tfs))
-    return delta_z, tf_ids, num_tfs
+    return (
+        delta_z,
+        tf_ids,
+        num_tfs,
+        cfc1_embeddings_test,
+        cfc2_embeddings_test,
+    )
 
 
 def get_embeddings_for_num_tfs(
