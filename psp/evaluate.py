@@ -37,7 +37,7 @@ class EvaluatorGT:
         enc_gt = np.linalg.inv(self.w_d_gt)
         delta_c_hat_enc_gt = np.array(
             [
-                enc_gt @ self.delta_z_test[i] + self.b_e
+                enc_gt @ self.delta_z_test[i]
                 for i in range(self.delta_z_test.shape[0])
             ]
         )
