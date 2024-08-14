@@ -139,6 +139,12 @@ def load_test_data(args, data_config):
         )
         # num_tfs = np.asarray(x_df_test["num_coordinates_translated"].tolist())
         # tf_ids = np.asarray(x_df_test["ids_coordinates_translated"].tolist())
+        return (
+            delta_z,
+            tf_ids,
+            num_tfs,
+        )
+
     elif data_config.dataset == "gradeschooler":
         embeddings_file = os.path.join(args.embedding_dir, "embeddings.h5")
         with h5py.File(embeddings_file, "r") as f:
@@ -168,18 +174,18 @@ def load_test_data(args, data_config):
             tf_id = int("".join(str(digit) for digit in int_list))
             tf_ids.append(tf_id)
             num_tfs.append(cp[0].split(",")[2])
+            num_tfs = list(map(int, num_tfs))
+            return (
+                delta_z,
+                tf_ids,
+                num_tfs,
+                cfc1_embeddings_test,
+                cfc2_embeddings_test,
+            )
     else:
         raise NotImplementedError(
             "Datasets implemented: toy_translator and gradeschooler"
         )
-    num_tfs = list(map(int, num_tfs))
-    return (
-        delta_z,
-        tf_ids,
-        num_tfs,
-        cfc1_embeddings_test,
-        cfc2_embeddings_test,
-    )
 
 
 def get_embeddings_for_num_tfs(
