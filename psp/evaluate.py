@@ -32,7 +32,6 @@ class EvaluatorGT:
         if self.w_d_gt is not None:
             mcc_encoding = metrics.mean_corr_coef(self.w_d, self.w_d_gt)
             print(f"MCC b/w gt_encoding and learnt_encoding: {mcc_encoding}")
-        import ipdb; ipdb.set_trace()
 
     def get_metric_bounds(self):
         enc_gt = np.linalg.inv(self.w_d_gt)
@@ -42,6 +41,9 @@ class EvaluatorGT:
                 for i in range(self.delta_z_test.shape[0])
             ]
         )
+        import ipdb
+
+        ipdb.set_trace()
         mcc_gt_enc = metrics.mean_corr_coef(
             self.delta_c_test, delta_c_hat_enc_gt
         )
