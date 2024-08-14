@@ -28,14 +28,11 @@ class EvaluatorGT:
                 self.delta_c_test, self.delta_c_hat_test
             )
             print(f"MCC b/w delta_c and delta_c_hat: {mcc_latents}")
-            r2_latents = metrics.r2(self.delta_c_test, self.delta_c_hat_test)
-            print(f"R2 b/w delta_c and delta_c_hat: {r2_latents}")
 
         if self.w_d_gt is not None:
             mcc_encoding = metrics.mean_corr_coef(self.w_d, self.w_d_gt)
             print(f"MCC b/w gt_encoding and learnt_encoding: {mcc_encoding}")
-            r2_encoding = metrics.r2(self.delta_c_test, self.delta_c_hat_test)
-            print(f"R2 b/w gt_encoding and learnt_encoding: {r2_encoding}")
+        import ipdb; ipdb.set_trace()
 
     def get_metric_bounds(self):
         enc_gt = np.linalg.inv(self.w_d_gt)
