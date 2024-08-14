@@ -25,12 +25,14 @@ class EvaluatorGT:
     def run_evaluations(self, plot=False):
         if self.delta_c_test is not None:
             mcc_latents = metrics.mean_corr_coef(
-                self.delta_c_test, self.delta_c_hat_test
+                self.delta_c_test, self.delta_c_hat_test, method="pearson"
             )
             print(f"MCC b/w delta_c and delta_c_hat: {mcc_latents}")
 
         if self.w_d_gt is not None:
-            mcc_encoding = metrics.mean_corr_coef(self.w_d, self.w_d_gt)
+            mcc_encoding = metrics.mean_corr_coef(
+                self.w_d, self.w_d_gt, method="pearson"
+            )
             print(f"MCC b/w gt_encoding and learnt_encoding: {mcc_encoding}")
 
     def get_metric_bounds(self):
@@ -41,12 +43,24 @@ class EvaluatorGT:
                 for i in range(self.delta_z_test.shape[0])
             ]
         )
+        delta_c_hat_enc_gt_2 = np.array(
+            [
+                enc_gt @ self.delta_z_test[i] + self.b_e
+                for i in range(self.delta_z_test.shape[0])
+            ]
+        )
+        mcc_gt_enc = metrics.mean_corr_coef(
+            self.delta_c_test, delta_c_hat_enc_gt, method="pearson"
+        )
         import ipdb
 
         ipdb.set_trace()
-        mcc_gt_enc = metrics.mean_corr_coef(
-            self.delta_c_test, delta_c_hat_enc_gt
-        )
+        # metrics.mean_corr_coef(self.delta_c_test, self.delta_c_test) # 1.0000000000000002
+        # metrics.mean_corr_coef(delta_c_hat_enc_gt, delta_c_hat_enc_gt) # 1.0000000000000002
+        # self.delta_c_test.all() == delta_c_hat_enc_gt.all() # True
+        # metrics.mean_corr_coef(self.delta_c_test, delta_c_hat_enc_gt) # 0.937802229649176
+        # metrics.mean_corr_coef(self.delta_c_test, delta_c_hat_enc_gt) # 0.9999999999999999
+        # metrics.mean_corr_coef(self.delta_c_test, delta_c_hat_enc_gt, method="spearman") # 0.7557189483824308
         reg_1 = LinearRegression().fit(delta_c_hat_enc_gt, self.delta_c_test)
         reg_2 = LinearRegression().fit(
             self.delta_c_hat_test, self.delta_c_test
