@@ -255,10 +255,10 @@ def sae_loss(
     :param l1_weight: weight of L1 loss
     :return: loss (shape: [1])
     """
-    return (
-        normalized_mean_squared_error(reconstruction, original_input)
-        + normalized_L1_loss(latent_activations, original_input) * l1_weight
-    )
+    recon_error = normalized_mean_squared_error(reconstruction, original_input)
+    l1_error = normalized_L1_loss(latent_activations, original_input)
+    total_error = recon_error + l1_error * l1_weight
+    return total_error, recon_error, l1_error
 
 
 def normalized_mean_squared_error(
@@ -391,6 +391,10 @@ def train(sae, dataloader, num_epochs, lr, eps=6.25e-10, logger=None):
     optim_scheduler = LinearDecayLR(opt, args.num_epochs)
     alpha_scheduler = AlphaScheduler(args.num_epochs, args.alpha)
     for epoch in range(int(num_epochs)):
+        epoch_loss = 0.0
+        reconstruction_error = 0.0
+        l0_delta_c_hat = 0.0
+        l1_delta_c_hat = 0.0
         for delta_z_list in dataloader:
             assert len(delta_z_list) == 1
             delta_z = delta_z_list[0]
@@ -398,9 +402,18 @@ def train(sae, dataloader, num_epochs, lr, eps=6.25e-10, logger=None):
             with autocast_ctx_manager:
                 delta_z_hat, delta_c_hat = sae(delta_z)
                 alpha = alpha_scheduler.get_coeff(epoch)
-                loss = sae_loss(delta_z_hat, delta_z, delta_c_hat, alpha)
+                loss, recon, l1 = sae_loss(
+                    delta_z_hat, delta_z, delta_c_hat, alpha
+                )
+                l0 = (
+                    delta_c_hat.ne(0).sum(dim=1).float() / delta_z.norm(dim=1)
+                ).mean()
 
             print(epoch, loss)
+            epoch_loss += loss.item()
+            reconstruction_error += recon
+            l1_delta_c_hat += l1
+            l0_delta_c_hat += l0
             logger.logkv("loss_scale", scaler.get_scale())
             loss = scaler.scale(loss)
             loss.backward()
@@ -411,8 +424,11 @@ def train(sae, dataloader, num_epochs, lr, eps=6.25e-10, logger=None):
             scaler.step(opt)
             scaler.update()
             optim_scheduler.step(epoch)
-
-            logger.dumpkvs()
+        logger.logkv("total_loss", epoch_loss / len(dataloader))
+        logger.logkv("recon_error", reconstruction_error / len(dataloader))
+        logger.logkv("l1_delta_c_hat", l1_delta_c_hat / len(dataloader))
+        logger.logkv("l0_delta_c_hat", l0_delta_c_hat / len(dataloader))
+        logger.dumpkvs()
 
 
 def save(sae, config_dict, modeldir):
