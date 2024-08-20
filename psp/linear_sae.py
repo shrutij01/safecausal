@@ -168,9 +168,7 @@ class LinearSAE(nn.Module):
             ret = ret * info["std"] + info["mu"]
         return ret
 
-    def forward(
-        self, x: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """
         :param x: input data (shape: [batch, n_inputs])
         :return:  autoencoder latents pre activation (shape: [batch, n_latents])
@@ -186,7 +184,7 @@ class LinearSAE(nn.Module):
         self.stats_last_nonzero *= (latents == 0).all(dim=0).long()
         self.stats_last_nonzero += 1
 
-        return latents_pre_act, latents, recons
+        return recons, latents
 
 
 def unit_norm_decoder_(autoencoder: LinearSAE) -> None:
