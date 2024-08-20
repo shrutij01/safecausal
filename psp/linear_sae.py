@@ -114,7 +114,9 @@ class LinearSAE(nn.Module):
         self.decoder = nn.Linear(rep_dim, input_dim, bias=False)
         self.normalize = normalize
 
-        self.stats_last_nonzero: torch.Tensor
+        self.stats_last_nonzero: torch.Tensor = torch.zeros(
+            rep_dim, dtype=torch.long
+        )
         self.latents_activation_frequency: torch.Tensor
         self.latents_mean_square: torch.Tensor
 
