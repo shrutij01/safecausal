@@ -106,6 +106,7 @@ class LinearSAE(nn.Module):
         :param activation: activation function
         :param normalize: whether to preprocess data with layer norm
         """
+        super(LinearSAE, self).__init__
         self.pre_bias = nn.Parameter(torch.zeros(input_dim))
         self.encoder: nn.Module = nn.Linear(input_dim, rep_dim, bias=False)
         self.latent_bias = nn.Parameter(torch.zeros(rep_dim))
