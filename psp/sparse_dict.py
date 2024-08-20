@@ -19,10 +19,6 @@ import wandb
 from psp.metrics import mean_corr_coef
 
 
-"""Implementation tricks from 1. https://transformer-circuits.pub/2023/monosemantic-features/index.html#appendix-autoencoder
-and 2. https://transformer-circuits.pub/2024/april-update/index.html#training-saes.
-2. over 1. in case of contradictions.
-"""
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 

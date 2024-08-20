@@ -60,6 +60,8 @@ class EvaluatorGT:
         # self.delta_c_test.all() == delta_c_hat_enc_gt.all() # True
         # metrics.mean_corr_coef(self.delta_c_test, delta_c_hat_enc_gt) # 0.937802229649176
         # metrics.mean_corr_coef(self.delta_c_test, delta_c_hat_enc_gt) # 0.9999999999999999
+        # delta_c_hat_enc_gt_2.all() == self.delta_c_test.all() # False
+        # metrics.mean_corr_coef(self.delta_c_test, delta_c_hat_enc_gt_2, method="pearson") # with the bias term # 1.0
         # metrics.mean_corr_coef(self.delta_c_test, delta_c_hat_enc_gt, method="spearman") # 0.7557189483824308
         reg_1 = LinearRegression().fit(delta_c_hat_enc_gt, self.delta_c_test)
         reg_2 = LinearRegression().fit(
