@@ -212,9 +212,6 @@ def unit_norm_decoder_grad_adjustment_(autoencoder) -> None:
         if not b.is_cuda:
             b = b.cuda()
 
-        if not c.is_cuda:
-            c = c.cuda()
-
         # Perform the operation
         x += a * b * c
 
