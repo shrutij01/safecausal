@@ -116,7 +116,7 @@ class LinearSAE(nn.Module):
 
         self.stats_last_nonzero: torch.Tensor = torch.zeros(
             rep_dim, dtype=torch.long
-        )
+        ).to(device)
         self.latents_activation_frequency: torch.Tensor
         self.latents_mean_square: torch.Tensor
 
