@@ -247,7 +247,7 @@ def sae_loss(
     original_input: torch.Tensor,
     latent_activations: torch.Tensor,
     l1_weight: float,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     :param reconstruction: output of Autoencoder.decode (shape: [batch, n_inputs])
     :param original_input: input of Autoencoder.encode (shape: [batch, n_inputs])
@@ -256,9 +256,8 @@ def sae_loss(
     :return: loss (shape: [1])
     """
     recon_error = normalized_mean_squared_error(reconstruction, original_input)
-    l1_error = normalized_L1_loss(latent_activations, original_input)
-    total_error = recon_error + l1_error * l1_weight
-    return total_error, recon_error, l1_error
+    l0_error = normalized_L0_loss(latent_activations, original_input)
+    return recon_error, l0_error
 
 
 def normalized_mean_squared_error(
@@ -287,6 +286,15 @@ def normalized_L1_loss(
     """
     return (
         latent_activations.abs().sum(dim=1) / original_input.norm(dim=1)
+    ).mean()
+
+
+def normalized_L0_loss(
+    latent_activations: torch.Tensor, original_input: torch.Tensor
+) -> torch.Tensor:
+    return (
+        latent_activations.ne(0).sum(dim=1).float()
+        / original_input.norm(dim=1)
     ).mean()
 
 
@@ -392,9 +400,7 @@ def train(sae, dataloader, num_epochs, lr, eps=6.25e-10, logger=None):
     alpha_scheduler = AlphaScheduler(args.num_epochs, args.alpha)
     for epoch in range(int(num_epochs)):
         epoch_loss = 0.0
-        reconstruction_error = 0.0
         l0_delta_c_hat = 0.0
-        l1_delta_c_hat = 0.0
         for delta_z_list in dataloader:
             assert len(delta_z_list) == 1
             delta_z = delta_z_list[0]
@@ -402,17 +408,13 @@ def train(sae, dataloader, num_epochs, lr, eps=6.25e-10, logger=None):
             with autocast_ctx_manager:
                 delta_z_hat, delta_c_hat = sae(delta_z)
                 alpha = alpha_scheduler.get_coeff(epoch)
-                loss, recon, l1 = sae_loss(
-                    delta_z_hat, delta_z, delta_c_hat, alpha
-                )
+                loss, l0 = sae_loss(delta_z_hat, delta_z, delta_c_hat, alpha)
                 l0 = (
                     delta_c_hat.ne(0).sum(dim=1).float() / delta_z.norm(dim=1)
                 ).mean()
 
             print(epoch, loss)
             epoch_loss += loss.item()
-            reconstruction_error += recon
-            l1_delta_c_hat += l1
             l0_delta_c_hat += l0
             logger.logkv("loss_scale", scaler.get_scale())
             loss = scaler.scale(loss)
@@ -425,8 +427,6 @@ def train(sae, dataloader, num_epochs, lr, eps=6.25e-10, logger=None):
             scaler.update()
             optim_scheduler.step(epoch)
         logger.logkv("total_loss", epoch_loss / len(dataloader))
-        logger.logkv("recon_error", reconstruction_error / len(dataloader))
-        logger.logkv("l1_delta_c_hat", l1_delta_c_hat / len(dataloader))
         logger.logkv("l0_delta_c_hat", l0_delta_c_hat / len(dataloader))
         logger.dumpkvs()
 
