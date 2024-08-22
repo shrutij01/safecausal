@@ -136,7 +136,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "dataset_name", choices=["ana", "gradeschooler", "truthful_qa"]
     )
-    parser.add_argument("model_id", default="meta-llama/Llama-2-7b-hf")
+    parser.add_argument(
+        "model_id", default="meta-llama/Meta-Llama-3.1-8B-Instruct"
+    )
     parser.add_argument(
         "--task-type", default="swap", choices=["swap", "cycle"]
     )
