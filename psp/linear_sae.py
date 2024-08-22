@@ -391,7 +391,6 @@ def load_training_data(args):
 
 
 def train(sae, dataloader, num_epochs, lr, eps=6.25e-10, logger=None):
-    logger = Logger()
     scaler = torch.cuda.amp.GradScaler()
     autocast_ctx_manager = torch.cuda.amp.autocast()
 

@@ -11,7 +11,7 @@ epochs=(
     "--num-epochs 1100"
 )
 ks=(
-    "--k 3"
+    "--k 60"
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2"
