@@ -1,5 +1,5 @@
 import torch
-from psp.sparse_dict import LinearAutoencoder
+from psp.linear_sae import LinearSAE
 
 
 import argparse
@@ -27,13 +27,13 @@ def prepare_test_data(args, device):
         model_1_config = Box(yaml.safe_load(file))
     with open(model_2_config_file, "r") as file:
         model_2_config = Box(yaml.safe_load(file))
-    model_1 = LinearAutoencoder(
-        embedding_size=model_1_config.embedding_size,
-        overcomplete_basis_size=model_1_config.overcomplete_basis_size,
+    model_1 = LinearSAE(
+        input_dim=model_1_config.embedding_size,
+        rep_dim=model_1_config.overcomplete_basis_size,
     ).to(device)
-    model_2 = LinearAutoencoder(
-        embedding_size=model_1_config.embedding_size,
-        overcomplete_basis_size=model_1_config.overcomplete_basis_size,
+    model_2 = LinearSAE(
+        input_dim=model_1_config.embedding_size,
+        rep_dim=model_1_config.overcomplete_basis_size,
     ).to(device)
     model_1_file = os.path.join(
         args.model_dir_1, "sparse_dict_model", "sparse_dict_model.pth"
@@ -114,12 +114,8 @@ def main(args, device):
     import ipdb
 
     ipdb.set_trace()
-    evaluator.objects_compare_with_md()
-    evaluator.ac_compare_with_md()
-    import ipdb
 
-    ipdb.set_trace()
-    evaluator.get_mcc()
+    evaluator.get_mcc_udr()
     import ipdb
 
     ipdb.set_trace()
@@ -131,6 +127,7 @@ if __name__ == "__main__":
     parser.add_argument("embedding_dir")
     parser.add_argument("model_dir_1")
     parser.add_argument("model_dir_2")
+    parser.add_argument("model_dir_3")
     parser.add_argument("--perplexity", default=5.0)
     parser.add_argument("--sparsity-threshold", default=float(5e-2))
 

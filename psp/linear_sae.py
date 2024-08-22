@@ -431,14 +431,23 @@ def save(sae, config_dict, modeldir):
     sae_dir = os.path.join(modeldir, "sparse_dict_model")
     if not os.path.exists(sae_dir):
         os.makedirs(sae_dir)
-    sae_config_file = os.path.join(modeldir, "models_config.yaml")
-    with open(sae_config_file, "w") as file:
+    config_file = os.path.join(modeldir, "models_config.yaml")
+    with open(config_file, "w") as file:
         yaml.dump(config_dict, file)
     sae_dict_path = os.path.join(sae_dir, "sparse_dict_model.pth")
     torch.save(sae.state_dict(), sae_dict_path)
 
 
-def main(args, config_dict):
+def main(args):
+    config_dict = {
+        "seed": args.seed,
+        "dataset": args.embedding_dir,
+        "data_type": args.data_type,
+        "alpha": args.alpha,
+        "learning_rate": args.lr,
+        "batch_size": args.batch_size,
+        "num_epochs": args.num_epochs,
+    }
     set_seeds(int(args.seed))
     logger = Logger(project="psp", config=config_dict)
     dataloader, input_dim, modeldir = load_training_data(args)
@@ -462,7 +471,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-epochs", type=int, default=1100)
-    parser.add_argument("--lr", type=float, default=float(5e-5))
+    parser.add_argument("--lr", type=float, default=0.0001)
     parser.add_argument("--alpha", type=float, default=float(0.00))
     parser.add_argument("--k", type=int, default=60)
     parser.add_argument(
@@ -473,8 +482,5 @@ if __name__ == "__main__":
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     args, unknown = parser.parse_known_args()
-    config_dict = {
-        k.strip("--"): v for k, v in zip(unknown[0::2], unknown[1::2])
-    }
 
-    main(args, config_dict)
+    main(args)

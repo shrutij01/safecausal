@@ -9,6 +9,9 @@ import psp.data_utils as data_utils
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+import itertools
+import statistics
+
 
 @dataclass
 class EvaluatorGT:
@@ -93,26 +96,20 @@ class Evaluator:
     z_test: np.ndarray
     z_tilde_test: np.ndarray
 
-    def get_mcc(self):
-        z_1, z_2 = data_utils.get_rep_pairs(
-            5, self.delta_c_hat_test[0], self.delta_c_hat_test[1]
-        )
-        mcc_latents = metrics.mean_corr_coef(z_1, z_2, method="pearson")
-        print(
-            f"MCC between delta_c from a couple different runs {mcc_latents}..."
-        )
-        reg = LinearRegression().fit(z_1, z_2)
-        score = reg.score(z_1, z_2)
-        print(f"... and its OLS score {score}")
-        mcc_encoding = metrics.mean_corr_coef(
-            self.w_d[0], self.w_d[1], method="pearson"
-        )
-        print(
-            f"MCC between the encoding function from a couple different runs {mcc_encoding}..."
-        )
-        reg = LinearRegression().fit(self.w_d[0], self.w_d[1])
-        score = reg.score(self.w_d[0], self.w_d[1])
-        print(f"... and its OLS score {score}")
+    def compute_pairwise_mcc(self):
+        pairs = list(itertools.combinations(self.seeds, 2))
+        mccs = []
+        for pair in pairs:
+            mccs.append(
+                metrics.mean_corr_coef(self.w_d[pair[0]], self.w_d[pair[1]]),
+            )
+        return mccs
+
+    def get_mcc_udr(self):
+        mccs = self.compute_pairwise_mcc()
+        print(f"Max MCC [w_d_i, w_d_j] {max(mccs)}")
+        udr = statistics.median(mccs)
+        print(f"UDR Score {udr}")
 
     def ac_compare_with_md(self):
         ac_tf_ids = self.tf_ids == 12
