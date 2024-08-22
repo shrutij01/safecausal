@@ -33,7 +33,7 @@ gpu_req="gpu:1"
 python_command="python linear_sae.py"
 
 # Initial setup commands
-init_commands="source /home/mila/j/joshi.shruti/venvs/eqm/bin/activate && module load miniconda/3 && conda activate pytorch && export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:$PYTHONPATH\" && cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp"
+init_commands=". /home/mila/j/joshi.shruti/venvs/eqm/bin/activate && module load miniconda/3 && conda activate pytorch && export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:$PYTHONPATH\" && cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp"
 
 # Iterate over all combinations of hyperparameters
 for path in "${paths[@]}"; do
