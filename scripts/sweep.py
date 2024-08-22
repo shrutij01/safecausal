@@ -15,19 +15,14 @@ if __name__ == "__main__":
         # ],
         # ["--data-type gt_ent"],
         ["--data-type emb"],
-        [
-            # "--model-type linv",
-            "--model-type la",
-            # "--model-type nla --act_fxn relu",
-            # "--model-type nla --act_fxn leakyrelu",
-            # "--model-type nla --act_fxn gelu",
-        ],
         ["--num-epochs 1100"],
+        ["--k 3"],
     ]
+    print(len(hyperparams))
 
     init_commands = '. /home/mila/j/joshi.shruti/venvs/eqm/bin/activate && module load miniconda/3 && conda activate pytorch && export PYTHONPATH="/home/mila/j/joshi.shruti/causalrepl_space/psp:$PYTHONPATH" && cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp'
 
-    python_command = "python sparse_dict.py"
+    python_command = "python linear_sae.py"
     sbatch_command = "sbatch --gres=gpu:1 --time=1:00:0 --mem=100G"
     all_args = list(itertools.product(*hyperparams))
     print(f"Total jobs = {len(all_args)}")

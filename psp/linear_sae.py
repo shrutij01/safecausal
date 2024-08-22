@@ -466,7 +466,7 @@ if __name__ == "__main__":
     )
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-epochs", type=int, default=1100)
-    parser.add_argument("--lr", type=float, default=float(1e-4))
+    parser.add_argument("--lr", type=float, default=float(5e-5))
     parser.add_argument("--alpha", type=float, default=float(0.00))
     parser.add_argument("--k", type=int, default=60)
     parser.add_argument(
