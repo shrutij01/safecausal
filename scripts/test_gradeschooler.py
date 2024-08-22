@@ -115,7 +115,6 @@ def main(args, device):
         delta_c_hat_test=delta_c_hat_test,
         delta_z_hat_test=delta_z_hat_test,
         w_d=w_d,
-        b_e=b_e,
         num_tfs=np.array(num_tfs),
         tf_ids=np.array(tf_ids),
         seeds=seeds,
