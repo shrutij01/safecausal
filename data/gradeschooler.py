@@ -101,10 +101,13 @@ def write_to_txt_file(filename, list_of_lists):
 
 
 if __name__ == "__main__":
-    datadir = "/network/scratch/j/joshi.shruti/psp/gradeschooler"
+    dir = "/network/scratch/j/joshi.shruti/psp/gradeschooler"
     current_datetime = datetime.datetime.now()
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    filename = os.path.join(datadir, timestamp_str, "gradeschooler.txt")
+    datadir = os.path.join(dir, timestamp_str)
+    if not os.path.exists(datadir):
+        os.makedirs(datadir)
+    filename = os.path.join(datadir, "gradeschooler.txt")
     size = 10000
     dataset = generate_data(size)
     write_to_txt_file(filename, dataset)
