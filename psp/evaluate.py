@@ -103,7 +103,9 @@ class Evaluator:
 
             ipdb.set_trace()
             mccs.append(
-                metrics.mean_corr_coef(self.w_d[pair[0]], self.w_d[pair[1]]),
+                metrics.mean_corr_coef(
+                    int(self.w_d[pair[0]]), int(self.w_d[pair[1]])
+                ),
             )
         return mccs
 
