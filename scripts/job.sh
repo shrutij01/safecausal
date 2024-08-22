@@ -25,6 +25,9 @@ time_limit="0:30:00"
 memory="16Gb"
 gpu_req="gpu:1"
 
+# Directory to store generated job scripts
+mkdir -p generated_jobs
+
 # Counter for unique job names
 counter=0
 
@@ -34,17 +37,32 @@ for path in "${paths[@]}"; do
         for epoch in "${epochs[@]}"; do
             for k in "${ks[@]}"; do
                 for seed in "${seeds[@]}"; do
-                    # Construct the full command for the wrap, including a shebang
-                    full_command="#!/bin/bash\nsource /home/mila/j/joshi.shruti/venvs/eqm/bin/activate && module load miniconda/3 && conda activate pytorch && export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:\$PYTHONPATH\" && cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp && python linear_sae.py ${path} ${data_type} ${epoch} ${k} ${seed}"
+                    # Define a script name
+                    script_name="generated_jobs/job_${counter}.sh"
 
-                    # Construct the sbatch command
-                    sbatch_command="sbatch --job-name=${job_name}_${counter} --output=${output} --error=${error} --time=${time_limit} --mem=${memory} --gres=${gpu_req} --wrap=\"$full_command\""
+                    # Create a batch script for each job
+                    echo "#!/bin/bash" > "${script_name}"
+                    echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
+                    echo "#SBATCH --output=${output}" >> "${script_name}"
+                    echo "#SBATCH --error=${error}" >> "${script_name}"
+                    echo "#SBATCH --time=${time_limit}" >> "${script_name}"
+                    echo "#SBATCH --mem=${memory}" >> "${script_name}"
+                    echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
+                    echo "" >> "${script_name}"
+                    echo "source /home/mila/j/joshi.shruti/venvs/eqm/bin/activate" >> "${script_name}"
+                    echo "module load miniconda/3" >> "${script_name}"
+                    echo "conda activate pytorch" >> "${script_name}"
+                    echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:\$PYTHONPATH\"" >> "${script_name}"
+                    echo "cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp" >> "${script_name}"
+                    echo "python linear_sae.py ${path} ${data_type} ${epoch} ${k} ${seed}" >> "${script_name}"
 
-                    # Echo command to terminal (for debugging)
-                    echo "Submitting job: $sbatch_command"
+                    # Make the script executable
+                    chmod +x "${script_name}"
 
                     # Submit the job
-                    eval "$sbatch_command"
+                    sbatch "${script_name}"
+
+                    # Increment counter
                     ((counter++))
                 done
             done
