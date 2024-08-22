@@ -99,6 +99,9 @@ class Evaluator:
         pairs = list(itertools.combinations(self.seeds, 2))
         mccs = []
         for pair in pairs:
+            import ipdb
+
+            ipdb.set_trace()
             mccs.append(
                 metrics.mean_corr_coef(self.w_d[pair[0]], self.w_d[pair[1]]),
             )
