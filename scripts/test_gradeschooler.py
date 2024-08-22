@@ -59,7 +59,7 @@ def prepare_test_data(args, device):
     model_3_dict = torch.load(model_3_file)
     model_1.load_state_dict(model_1_dict)
     model_2.load_state_dict(model_2_dict)
-    model_3_config.load_state_dict(model_3_dict)
+    model_3.load_state_dict(model_3_dict)
     seeds = []
     seeds.append(model_1_config.seed)
     seeds.append(model_2_config.seed)
