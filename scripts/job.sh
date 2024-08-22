@@ -18,7 +18,7 @@ ks=(
 )
 
 seeds=(
-    "--seed 0", "--seed 1", "--seed 2",
+    "--seed 0" "--seed 1" "--seed 2"
 )
 
 # Job settings
@@ -49,6 +49,7 @@ for path in "${paths[@]}"; do
 
                     # Submit the job
                     eval "${sbatch_command}"
+                done
             done
         done
     done
