@@ -89,7 +89,6 @@ class Evaluator:
     delta_c_hat_test: list
     delta_z_hat_test: list
     w_d: list
-    b_e: list
     num_tfs: np.ndarray
     tf_ids: np.ndarray
     seeds: list

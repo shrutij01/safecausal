@@ -84,17 +84,11 @@ def prepare_test_data(args, device):
     delta_z_hat_test = [delta_z_hat_test_1, delta_z_hat_test_2]
     delta_c_hat_test = [delta_c_hat_test_1, delta_c_hat_test_2]
     w_d = [wd_1, wd_2, wd_3]
-    b_e = [
-        numpify(model_1_dict["bias_encoder"]),
-        numpify(model_2_dict["bias_encoder"]),
-        numpify(model_3_dict["bias_encoder"]),
-    ]
     return (
         delta_z_test,
         delta_c_hat_test,
         delta_z_hat_test,
         w_d,
-        b_e,
         num_tfs,
         tf_ids,
         seeds,
@@ -109,7 +103,6 @@ def main(args, device):
         delta_c_hat_test,
         delta_z_hat_test,
         w_d,
-        b_e,
         num_tfs,
         tf_ids,
         seeds,
