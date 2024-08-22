@@ -256,7 +256,7 @@ def sae_loss(
     :return: loss (shape: [1])
     """
     recon_error = normalized_mean_squared_error(reconstruction, original_input)
-    l0_error = normalized_L0_loss(latent_activations, original_input)
+    l0_error = non_normalized_L0_loss(latent_activations, original_input)
     return recon_error, l0_error
 
 
@@ -289,13 +289,10 @@ def normalized_L1_loss(
     ).mean()
 
 
-def normalized_L0_loss(
+def non_normalized_L0_loss(
     latent_activations: torch.Tensor, original_input: torch.Tensor
 ) -> torch.Tensor:
-    return (
-        latent_activations.ne(0).sum(dim=1).float()
-        / original_input.norm(dim=1)
-    ).mean()
+    return (latent_activations.ne(0).sum(dim=1).float()).mean()
 
 
 class Logger:

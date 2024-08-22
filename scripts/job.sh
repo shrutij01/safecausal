@@ -8,10 +8,13 @@ data_types=(
     "--data-type emb"
 )
 epochs=(
-    "--num-epochs 1100"
+    "--num-epochs 700"
 )
 ks=(
     "--k 60"
+)
+lrs=(
+    "--lr float(1e-4)" "--lr float(3e-4)" "--lr float(7e-5)"
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2"
@@ -37,33 +40,35 @@ for path in "${paths[@]}"; do
         for epoch in "${epochs[@]}"; do
             for k in "${ks[@]}"; do
                 for seed in "${seeds[@]}"; do
-                    # Define a script name
-                    script_name="generated_jobs/job_${counter}.sh"
+                    for lr in "${lrs[@]}"; do
+                        # Define a script name
+                        script_name="generated_jobs/job_${counter}.sh"
 
-                    # Create a batch script for each job
-                    echo "#!/bin/bash" > "${script_name}"
-                    echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
-                    echo "#SBATCH --output=${output}" >> "${script_name}"
-                    echo "#SBATCH --error=${error}" >> "${script_name}"
-                    echo "#SBATCH --time=${time_limit}" >> "${script_name}"
-                    echo "#SBATCH --mem=${memory}" >> "${script_name}"
-                    echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
-                    echo "" >> "${script_name}"
-                    echo "source /home/mila/j/joshi.shruti/venvs/eqm/bin/activate" >> "${script_name}"
-                    echo "module load miniconda/3" >> "${script_name}"
-                    echo "conda activate pytorch" >> "${script_name}"
-                    echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:\$PYTHONPATH\"" >> "${script_name}"
-                    echo "cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp" >> "${script_name}"
-                    echo "python linear_sae.py ${path} ${data_type} ${epoch} ${k} ${seed}" >> "${script_name}"
+                        # Create a batch script for each job
+                        echo "#!/bin/bash" > "${script_name}"
+                        echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
+                        echo "#SBATCH --output=${output}" >> "${script_name}"
+                        echo "#SBATCH --error=${error}" >> "${script_name}"
+                        echo "#SBATCH --time=${time_limit}" >> "${script_name}"
+                        echo "#SBATCH --mem=${memory}" >> "${script_name}"
+                        echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
+                        echo "" >> "${script_name}"
+                        echo "source /home/mila/j/joshi.shruti/venvs/eqm/bin/activate" >> "${script_name}"
+                        echo "module load miniconda/3" >> "${script_name}"
+                        echo "conda activate pytorch" >> "${script_name}"
+                        echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:\$PYTHONPATH\"" >> "${script_name}"
+                        echo "cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp" >> "${script_name}"
+                        echo "python linear_sae.py ${path} ${data_type} ${epoch} ${lr} ${k} ${seed}" >> "${script_name}"
 
-                    # Make the script executable
-                    chmod +x "${script_name}"
+                        # Make the script executable
+                        chmod +x "${script_name}"
 
-                    # Submit the job
-                    sbatch "${script_name}"
+                        # Submit the job
+                        sbatch "${script_name}"
 
-                    # Increment counter
-                    ((counter++))
+                        # Increment counter
+                        ((counter++))
+                    done
                 done
             done
         done
