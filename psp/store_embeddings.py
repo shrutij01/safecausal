@@ -8,7 +8,7 @@ import datetime
 import os
 import yaml
 
-import utils
+import psp.data_utils as utils
 
 ACCESS_TOKEN = "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"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
