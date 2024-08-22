@@ -44,7 +44,7 @@ for path in "${paths[@]}"; do
                     cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp
 
                     python linear_sae.py $path $data_type $epoch $k $seed
-
+EOM
 
                     # Submit the batch job
                     sbatch "$script_name"
