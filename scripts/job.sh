@@ -14,7 +14,7 @@ ks=(
     "--k 60"
 )
 lrs=(
-    "--lr float(1e-4)" "--lr float(3e-4)" "--lr float(7e-5)"
+    "--lr 0.0001" "--lr 0.0003" "--lr 0.00007"
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2"
