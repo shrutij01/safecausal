@@ -17,37 +17,34 @@ seeds=(
     "--seed 0" "--seed 1" "--seed 2"
 )
 
-# Directory for batch scripts
-mkdir -p batch_scripts
+# Job settings
+job_name="test"
+output="job_output_%j.txt"  # %j will be replaced by the job ID
+error="job_error_%j.txt"
+time_limit="1:00:00"
+memory="100Gb"
+gpu_req="gpu:1"
 
-# Create and submit a batch script for each combination of hyperparameters
+# Counter for unique job names
 counter=0
+
+# Loop through all combinations of hyperparameters
 for path in "${paths[@]}"; do
     for data_type in "${data_types[@]}"; do
         for epoch in "${epochs[@]}"; do
             for k in "${ks[@]}"; do
                 for seed in "${seeds[@]}"; do
-                    script_name="batch_scripts/job_${counter}.sh"
-                    cat > "$script_name" <<- EOM
-                    #!/bin/bash
-                    #SBATCH --job-name=test_${counter}
-                    #SBATCH --output=job_output_${counter}.txt
-                    #SBATCH --error=job_error_${counter}.txt
-                    #SBATCH --time=0:30:00
-                    #SBATCH --mem=16Gb
-                    #SBATCH --gres=gpu:1
+                    # Construct the full command for the wrap, including a shebang
+                    full_command="#!/bin/bash\nsource /home/mila/j/joshi.shruti/venvs/eqm/bin/activate && module load miniconda/3 && conda activate pytorch && export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:\$PYTHONPATH\" && cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp && python linear_sae.py ${path} ${data_type} ${epoch} ${k} ${seed}"
 
-                    source /home/mila/j/joshi.shruti/venvs/eqm/bin/activate
-                    module load miniconda/3
-                    conda activate pytorch
-                    export PYTHONPATH="/home/mila/j/joshi.shruti/causalrepl_space/psp:\$PYTHONPATH"
-                    cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp
+                    # Construct the sbatch command
+                    sbatch_command="sbatch --job-name=${job_name}_${counter} --output=${output} --error=${error} --time=${time_limit} --mem=${memory} --gres=${gpu_req} --wrap=\"$full_command\""
 
-                    python linear_sae.py $path $data_type $epoch $k $seed
-EOM
+                    # Echo command to terminal (for debugging)
+                    echo "Submitting job: $sbatch_command"
 
-                    # Submit the batch job
-                    sbatch "$script_name"
+                    # Submit the job
+                    eval "$sbatch_command"
                     ((counter++))
                 done
             done
