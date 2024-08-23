@@ -312,7 +312,10 @@ class Logger:
 def load_training_data(args):
     current_datetime = datetime.datetime.now()
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    modeldir = os.path.join(args.embedding_dir, timestamp_str + "_models")
+    modeldir = os.path.join(
+        args.embedding_dir,
+        str(args.k) + str(args.seed) + timestamp_str,
+    )
     x = None
     if args.data_type == "emb":
         embeddings_file = os.path.join(args.embedding_dir, "embeddings.h5")
@@ -444,6 +447,7 @@ def main(args):
         "dataset": args.embedding_dir,
         "data_type": args.data_type,
         "alpha": args.alpha,
+        "k": args.k,
         "learning_rate": args.lr,
         "batch_size": args.batch_size,
         "num_epochs": args.num_epochs,
