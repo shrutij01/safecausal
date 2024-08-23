@@ -2,7 +2,7 @@
 
 # Define hyperparameters
 paths=(
-    "/network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25"
+    "/network/scratch/j/joshi.shruti/psp/gradeschooler/2024-07-08_17-03-30"
 )
 data_types=(
     "--data-type emb"
