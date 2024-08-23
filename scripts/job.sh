@@ -11,7 +11,7 @@ epochs=(
     "--num-epochs 700"
 )
 ks=(
-    "--k 135"
+    "--k 3"
 )
 lrs=(
     "--lr 0.0001"
