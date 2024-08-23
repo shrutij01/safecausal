@@ -2,7 +2,7 @@
 
 # Define hyperparameters
 paths=(
-    "/network/scratch/j/joshi.shruti/psp/gradeschooler/2024-07-08_17-03-30"
+    "/network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25"
 )
 data_types=(
     "--data-type emb"
@@ -24,7 +24,7 @@ seeds=(
 job_name="test"
 output="job_output_%j.txt"  # %j will be replaced by the job ID
 error="job_error_%j.txt"
-time_limit="0:30:00"
+time_limit="1:00:00"
 memory="16Gb"
 gpu_req="gpu:1"
 
