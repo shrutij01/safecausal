@@ -131,7 +131,7 @@ def main(args):
 
 
 def store_eval_embeddings(args):
-    embeddings_path = os.path.join(args.embedding_dir, "eval_embeddings_2.h5")
+    embeddings_path = os.path.join(args.embedding_dir, "eval_embeddings_0.h5")
     tokenizer = transformers.LlamaTokenizerFast.from_pretrained(
         args.model_id, token=ACCESS_TOKEN
     )
@@ -161,9 +161,14 @@ def store_eval_embeddings(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-
     parser.add_argument(
-        "dataset_name", choices=["ana", "gradeschooler", "truthful_qa"]
+        "--gradeschooler-file-path",
+    )
+    parser.add_argument("--eval", default=False)
+    parser.add_argument(
+        "dataset_name",
+        choices=["ana", "gradeschooler", "truthful_qa"],
+        default="gradeschooler",
     )
     parser.add_argument(
         "model_id", default="meta-llama/Meta-Llama-3.1-8B-Instruct"
@@ -176,17 +181,12 @@ if __name__ == "__main__":
         default=10000,
     )
     parser.add_argument(
-        "--gradeschooler-file-path",
-        default="/network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/gradeschooler.txt",
-    )
-    parser.add_argument(
         "--embedding_dir",
         default="/network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25",
     )
     parser.add_argument("--string-length", default=3)
     parser.add_argument("--cycle-distance", default=1)
     parser.add_argument("--append-instruction", default=False)
-    parser.add_argument("--eval", default=False)
 
     args = parser.parse_args()
     print(args.eval)
