@@ -14,7 +14,7 @@ import psp.data_utils as data_utils
 from psp.data_utils import tensorify, numpify
 
 import psp.plot as psp_plot
-from psp.evaluate import Evaluator
+from psp.evaluate import EvaluatorSeeds, EvaluatorMD
 
 
 def prepare_test_data(args, device):
@@ -36,14 +36,17 @@ def prepare_test_data(args, device):
     model_1 = LinearSAE(
         input_dim=x_test.shape[1],
         rep_dim=x_test.shape[1],
+        normalize=True,
     ).to(device)
     model_2 = LinearSAE(
         input_dim=x_test.shape[1],
         rep_dim=x_test.shape[1],
+        normalize=True,
     ).to(device)
     model_3 = LinearSAE(
         input_dim=x_test.shape[1],
         rep_dim=x_test.shape[1],
+        normalize=True,
     ).to(device)
     model_1_file = os.path.join(
         args.model_dir_1, "sparse_dict_model", "sparse_dict_model.pth"
@@ -97,6 +100,36 @@ def prepare_test_data(args, device):
     )
 
 
+def prepare_eval_by_one_contrasts(args, device):
+    cfc1_eval_1, cfc2_eval_1, cfc1_eval_2, cfc2_eval_2 = (
+        data_utils.load_eval_by_one_contrasts(args)
+    )
+    md_1 = tensorify(cfc2_eval_1 - cfc1_eval_1, device).mean(dim=0)
+    md_2 = tensorify(cfc2_eval_2 - cfc1_eval_2, device).mean(dim=0)
+    model = LinearSAE(
+        input_dim=md_1.shape[1],
+        rep_dim=md_1.shape[1],
+        normalize=True,
+    ).to(device)
+    model_file = os.path.join(
+        args.model_dir_1, "sparse_dict_model", "sparse_dict_model.pth"
+    )
+    model_dict = torch.load(model_file)
+    model.load_state_dict(model_dict)
+    model.eval()
+    encoded_md_1 = model(md_1)
+    encoded_md_2 = model(md_2)
+    delta_c_hat_1 = model(tensorify(cfc2_eval_1 - cfc1_eval_1, device))
+    delta_c_hat_2 = model(tensorify(cfc2_eval_2 - cfc1_eval_2, device))
+    md_1 = numpify(md_1)
+    md_2 = numpify(md_2)
+    encoded_md_1 = numpify(encoded_md_1)
+    encoded_md_2 = numpify(encoded_md_2)
+    delta_c_hat_1 = numpify(delta_c_hat_1)
+    delta_c_hat_2 = numpify(delta_c_hat_2)
+    return md_1, md_2, encoded_md_1, encoded_md_2, delta_c_hat_1, delta_c_hat_2
+
+
 def main(args, device):
     (
         delta_z_test,
@@ -109,8 +142,11 @@ def main(args, device):
         cfc1_test,
         cfc2_test,
     ) = prepare_test_data(args, device)
+    md_1, md_2, encoded_md_1, encoded_md_2, delta_c_hat_1, delta_c_hat_2 = (
+        prepare_eval_by_one_contrasts(args, device)
+    )
 
-    evaluator = Evaluator(
+    evaluator_seeds = EvaluatorSeeds(
         delta_z_test=delta_z_test,
         delta_c_hat_test=delta_c_hat_test,
         delta_z_hat_test=delta_z_hat_test,
@@ -121,14 +157,21 @@ def main(args, device):
         z_test=cfc1_test,
         z_tilde_test=cfc2_test,
     )
+
+    evaluator_md = EvaluatorMD(
+        md_1=md_1,
+        md_2=md_2,
+        encoded_md_1=encoded_md_1,
+        encoded_md_2=encoded_md_2,
+        delta_c_hat_1=delta_c_hat_1,
+        delta_c_hat_2=delta_c_hat_2,
+    )
+
+    evaluator_seeds.get_mcc_udr()
     import ipdb
 
     ipdb.set_trace()
-
-    evaluator.get_mcc_udr()
-    import ipdb
-
-    ipdb.set_trace()
+    evaluator_md.get_hotnesses()
 
 
 if __name__ == "__main__":
@@ -136,8 +179,10 @@ if __name__ == "__main__":
 
     parser.add_argument("embedding_dir")
     parser.add_argument("model_dir_1")
-    parser.add_argument("model_dir_2")
-    parser.add_argument("model_dir_3")
+    parser.add_argument("model_dir_2", required=False)
+    parser.add_argument("model_dir_3", required=False)
+    parser.add_argument("--key_1", required=False)
+    parser.add_argument("--key_2", required=False)
     parser.add_argument("--perplexity", default=5.0)
     parser.add_argument("--sparsity-threshold", default=float(5e-2))
 

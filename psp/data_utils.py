@@ -1,6 +1,7 @@
 import torch
 
 from datasets import load_dataset as hf_load_dataset
+from psp.linear_sae import layer_normalise
 
 from data import ana
 
@@ -10,6 +11,8 @@ import ast
 import re
 import pandas as pd
 import h5py
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def tensorify(np_array, device):
@@ -151,9 +154,6 @@ def load_test_data(args, data_config):
             cfc1_embeddings_test = np.array(f["cfc1_test"])
             cfc2_embeddings_test = np.array(f["cfc2_test"])
         delta_z = cfc2_embeddings_test - cfc1_embeddings_test
-        mean = delta_z.mean(axis=0)
-        std = delta_z.std(axis=0, ddof=1)
-        delta_z = (delta_z - mean) / (std + 1e-8)
         data_file = os.path.join(args.embedding_dir, "gradeschooler.txt")
         tf_ids = []
         num_tfs = []
@@ -186,6 +186,20 @@ def load_test_data(args, data_config):
         raise NotImplementedError(
             "Datasets implemented: toy_translator and gradeschooler"
         )
+
+
+def load_eval_by_one_contrasts(args):
+    eval_file_name_1 = "eval_embeddings_" + str(args.key_1) + ".h5"
+    embeddings_file_1 = os.path.join(args.embedding_dir, eval_file_name_1)
+    eval_file_name_2 = "eval_embeddings_" + str(args.key_2) + ".h5"
+    embeddings_file_2 = os.path.join(args.embedding_dir, eval_file_name_2)
+    with h5py.File(embeddings_file_1, "r") as f:
+        cfc1_eval_1 = np.array(f["cfc1_eval"])
+        cfc2_eval_1 = np.array(f["cfc2_eval"])
+    with h5py.File(embeddings_file_2, "r") as f:
+        cfc1_eval_2 = np.array(f["cfc1_eval"])
+        cfc2_eval_2 = np.array(f["cfc2_eval"])
+    return (cfc1_eval_1, cfc2_eval_1, cfc1_eval_2, cfc2_eval_2)
 
 
 def get_embeddings_for_num_tfs(

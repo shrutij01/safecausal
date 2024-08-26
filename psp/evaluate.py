@@ -83,7 +83,7 @@ class EvaluatorGT:
 
 
 @dataclass
-class Evaluator:
+class EvaluatorSeeds:
     # data to be a list with seeds as indices
     delta_z_test: list
     delta_c_hat_test: list
@@ -114,62 +114,25 @@ class Evaluator:
         udr = statistics.median(mccs)
         print(f"UDR Score {udr}")
 
-    def ac_compare_with_md(self):
-        ac_tf_ids = self.tf_ids == 12
-        md_ac = np.mean(self.delta_z_test[0][ac_tf_ids], axis=0)
-        delta_c_ac = np.mean(self.delta_c_hat_test[0][ac_tf_ids], axis=0)
-        z_ac = self.z_test[ac_tf_ids]
-        z_tilde_ac = self.z_tilde_test[ac_tf_ids]
-        z_tilde_md = z_ac + md_ac
-        z_tilde_delta_c = z_ac + delta_c_ac
 
-        def get_cosine_similarities(embeddings_1, embeddings_2):
-            assert embeddings_1.shape[0] == embeddings_2.shape[0]
-            random_indices = np.random.choice(
-                embeddings_1.shape[0], 20, replace=False
-            )
-            similarities = cosine_similarity(
-                embeddings_1[random_indices], embeddings_2[random_indices]
-            )[0]
-            return similarities
+@dataclass
+class EvaluatorMD:
+    md_1: np.ndarray
+    md_2: np.ndarray
+    encoded_md_1: np.ndarray
+    encoded_md_2: np.ndarray
+    delta_c_hat_1: np.ndarray
+    delta_c_hat_2: np.ndarray
 
-        sim_md = get_cosine_similarities(z_tilde_md, z_tilde_ac)
-        sim_delta_c = get_cosine_similarities(z_tilde_delta_c, z_tilde_ac)
-        sns.kdeplot(sim_md, fill=True, color="blue", label="z + md")
-        sns.kdeplot(sim_delta_c, fill=True, color="green", label="z + delta_c")
-        plt.title("KDE of Cosine Similarities")
-        plt.xlabel("Cosine Similarity")
-        plt.ylabel("Density")
-        plt.legend()
-        plt.savefig("kde_ac_nosp.png")
-        plt.close()
+    def get_hotnesses(self, threshold=0.01):
+        def l0(arr):
+            return np.count_nonzero(np.where(arr < threshold, 0, arr))
 
-    def objects_compare_with_md(self):
-        object_tf_ids = self.tf_ids == 3
-        md_objects = np.mean(self.delta_z_test[0][object_tf_ids], axis=0)
-        delta_c_objects = np.mean(
-            self.delta_c_hat_test[0][object_tf_ids], axis=0
+        print(f"hotness of MD(orange --> purple) {l0(self.encoded_md_1)}")
+        print(f"hotness of MD(pruple --> pink) {l0(self.encoded_md_2)}")
+        print(
+            f"by contrast, hotness of delta_c_hat(orange --> purple) {l0(self.delta_c_hat_1)}"
         )
-        z_objects = self.z_test[object_tf_ids]
-        z_tilde_objects = self.z_tilde_test[object_tf_ids]
-        z_tilde_md = z_objects + md_objects
-        z_tilde_delta_c = z_objects + delta_c_objects
-
-        def get_cosine_similarities(embeddings_1, embeddings_2):
-            assert embeddings_1.shape[0] == embeddings_2.shape[0]
-            # random_indices = np.random.choice(
-            #     embeddings_1.shape[0], 700, replace=False
-            # )
-            similarities = cosine_similarity(embeddings_1, embeddings_2)[0]
-            return similarities
-
-        sim_md = get_cosine_similarities(z_tilde_md, z_tilde_objects)
-        sim_delta_c = get_cosine_similarities(z_tilde_delta_c, z_tilde_objects)
-        sns.kdeplot(sim_md, fill=True, color="blue", label="z + md")
-        sns.kdeplot(sim_delta_c, fill=True, color="green", label="z + delta_c")
-        plt.title("KDE of Cosine Similarities")
-        plt.xlabel("Cosine Similarity")
-        plt.ylabel("Density")
-        plt.legend()
-        plt.savefig("kde_objects_nosp.png")
-        plt.close()
+        print(
+            f"by contrast, hotness of delta_c_hat(purple --> pink) {l0(self.delta_c_hat_2)}"
+        )
