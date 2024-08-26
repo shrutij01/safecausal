@@ -179,8 +179,8 @@ if __name__ == "__main__":
 
     parser.add_argument("embedding_dir")
     parser.add_argument("model_dir_1")
-    parser.add_argument("model_dir_2", required=False)
-    parser.add_argument("model_dir_3", required=False)
+    parser.add_argument("model_dir_2")
+    parser.add_argument("model_dir_3")
     parser.add_argument("--key_1", required=False)
     parser.add_argument("--key_2", required=False)
     parser.add_argument("--perplexity", default=5.0)
