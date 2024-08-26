@@ -128,6 +128,9 @@ class EvaluatorMD:
         def l0(arr):
             return np.count_nonzero(np.where(arr < threshold, 0, arr))
 
+        import ipdb
+
+        ipdb.set_trace()
         print(f"hotness of MD(orange --> purple) {l0(self.encoded_md_1)}")
         print(f"hotness of MD(pruple --> pink) {l0(self.encoded_md_2)}")
         print(
