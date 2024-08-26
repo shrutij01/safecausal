@@ -171,7 +171,7 @@ if __name__ == "__main__":
         default="gradeschooler",
     )
     parser.add_argument(
-        "model_id", default="meta-llama/Meta-Llama-3.1-8B-Instruct"
+        "--model_id", default="meta-llama/Meta-Llama-3.1-8B-Instruct"
     )
     parser.add_argument(
         "--task-type", default="swap", choices=["swap", "cycle"]
