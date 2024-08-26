@@ -4,43 +4,7 @@ import copy
 import os
 import datetime
 
-CODEBOOK = {
-    "object": [
-        "Sofa",
-        "Lamp",
-        "Microwave",
-        "Television",
-        "Chair",
-        "Bookshelf",
-        "Clock",
-        "Towel",
-        "Kettle",
-    ],
-    "color": [
-        "Orange",
-        "Purple",
-        "Pink",
-        "Magenta",
-        "Teal",
-        "Maroon",
-        "Olive",
-        "Navy",
-        "Lavender",
-        "Turquoise",
-    ],
-    "attribute": [
-        "Vintage",
-        "Loud",
-        "Bohemian",
-        "Contemporary",
-        "Strong",
-        "Weak",
-        "Deep",
-        "Shallow",
-        "Ancient",
-        "Modern",
-    ],
-}
+from base import CODEBOOK
 
 
 def sample_excluding_elements(list, exclude):
