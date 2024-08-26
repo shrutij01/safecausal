@@ -189,7 +189,11 @@ if __name__ == "__main__":
     parser.add_argument("--eval", default=False)
 
     args = parser.parse_args()
+    print(args.eval)
     if args.eval:
+        import ipdb
+
+        ipdb.set_trace()
         store_eval_embeddings(args)
     else:
         main(args)
