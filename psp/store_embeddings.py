@@ -131,7 +131,7 @@ def main(args):
 
 
 def store_eval_embeddings(args):
-    embeddings_path = os.path.join(args.embedding_dir, "eval_embeddings.h5")
+    embeddings_path = os.path.join(args.embedding_dir, "eval_embeddings_2.h5")
     tokenizer = transformers.LlamaTokenizerFast.from_pretrained(
         args.model_id, token=ACCESS_TOKEN
     )

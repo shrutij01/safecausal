@@ -14,8 +14,8 @@ def sample_excluding_elements(list, exclude):
 
 
 def generate_clusterable_with_color_change(eval_length=100):
-    color_1 = CODEBOOK["color"][0]
-    color_2 = CODEBOOK["color"][1]
+    color_1 = CODEBOOK["color"][1]
+    color_2 = CODEBOOK["color"][2]
     data = []
 
     for _ in range(eval_length):
@@ -56,6 +56,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("embedding_dir")
     args = parser.parse_args()
-    filename = os.path.join(args.embedding_dir, "eval_gradeschooler.txt")
+    filename = os.path.join(args.embedding_dir, "eval_gradeschooler_2.txt")
     data = generate_clusterable_with_color_change()
     write_to_txt_file(filename, data)
