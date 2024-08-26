@@ -1,5 +1,5 @@
 import torch
-from psp.linear_sae import LinearSAE
+from psp.linear_sae import LinearSAE, TopK
 
 
 import argparse
@@ -33,20 +33,27 @@ def prepare_test_data(args, device):
         model_2_config = Box(yaml.safe_load(file))
     with open(model_3_config_file, "r") as file:
         model_3_config = Box(yaml.safe_load(file))
+    assert (
+        int(model_1_config.k) == int(model_2_config.k) == int(model_3_config.k)
+    )
+    topk = TopK(k=int(model_1_config.k))
     model_1 = LinearSAE(
         input_dim=x_test.shape[1],
         rep_dim=x_test.shape[1],
         normalize=True,
+        activation=topk,
     ).to(device)
     model_2 = LinearSAE(
         input_dim=x_test.shape[1],
         rep_dim=x_test.shape[1],
         normalize=True,
+        activation=topk,
     ).to(device)
     model_3 = LinearSAE(
         input_dim=x_test.shape[1],
         rep_dim=x_test.shape[1],
         normalize=True,
+        activation=topk,
     ).to(device)
     model_1_file = os.path.join(
         args.model_dir_1, "sparse_dict_model", "sparse_dict_model.pth"
@@ -113,10 +120,15 @@ def prepare_eval_by_one_contrasts(args, device):
     import ipdb
 
     ipdb.set_trace()
+    model_config_file = os.path.join(args.model_dir_1, "models_config.yaml")
+    with open(model_config_file, "r") as file:
+        model_config = Box(yaml.safe_load(file))
+    topk = TopK(k=int(model_config.k))
     model = LinearSAE(
         input_dim=md_1.shape[0],
         rep_dim=md_1.shape[0],
         normalize=True,
+        activation=topk,
     ).to(device)
     model_file = os.path.join(
         args.model_dir_1, "sparse_dict_model", "sparse_dict_model.pth"
