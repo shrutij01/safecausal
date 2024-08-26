@@ -126,7 +126,14 @@ class EvaluatorMD:
 
     def get_hotnesses(self, threshold=0.01):
         def l0(arr):
-            return np.count_nonzero(np.where(arr < threshold, 0, arr))
+            # arr of batch_size x features
+            l0_batch = np.array(
+                [
+                    arr[i][arr[i] >= threshold].shape[0]
+                    for i in range(arr.shape[0])
+                ]
+            )
+            return np.mean(l0_batch)
 
         import ipdb
 

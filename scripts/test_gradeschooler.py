@@ -112,10 +112,10 @@ def prepare_eval_by_one_contrasts(args, device):
         data_utils.load_eval_by_one_contrasts(args)
     )
     md_1 = (
-        tensorify(cfc2_eval_1 - cfc1_eval_1, device).mean(dim=0).unsqueeze(1)
+        tensorify(cfc2_eval_1 - cfc1_eval_1, device).mean(dim=0).unsqueeze(0)
     )
     md_2 = (
-        tensorify(cfc2_eval_2 - cfc1_eval_2, device).mean(dim=0).unsqueeze(1)
+        tensorify(cfc2_eval_2 - cfc1_eval_2, device).mean(dim=0).unsqueeze(0)
     )
     import ipdb
 
