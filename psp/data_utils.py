@@ -2,7 +2,7 @@ import torch
 
 from datasets import load_dataset as hf_load_dataset
 
-from data import ana, gradeschooler
+from data import ana
 
 import numpy as np
 import os
