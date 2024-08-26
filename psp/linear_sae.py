@@ -324,10 +324,6 @@ def load_training_data(args):
             cfc2_train = np.array(f["cfc2_train"]).squeeze()
 
         x = cfc2_train - cfc1_train
-        # centered embeddings
-        mean = x.mean(axis=0)
-        std = x.std(axis=0, ddof=1)
-        x = (x - mean) / (std + 1e-8)
     elif args.data_type == "gt" or args.data_type == "gt_ent":
         config_file = os.path.join(args.embedding_dir, "config.yaml")
         with open(config_file, "r") as file:
@@ -460,7 +456,7 @@ def main(args):
         input_dim=input_dim,
         rep_dim=input_dim,
         activation=topk,
-        normalize=args.normalize,
+        normalize=True,
     )
     sae.cuda()
     train(sae, dataloader, args.num_epochs, lr=args.lr, logger=logger)
