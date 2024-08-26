@@ -106,6 +106,9 @@ def prepare_eval_by_one_contrasts(args, device):
     )
     md_1 = tensorify(cfc2_eval_1 - cfc1_eval_1, device).mean(dim=0)
     md_2 = tensorify(cfc2_eval_2 - cfc1_eval_2, device).mean(dim=0)
+    import ipdb
+
+    ipdb.set_trace()
     model = LinearSAE(
         input_dim=md_1.shape[1],
         rep_dim=md_1.shape[1],
