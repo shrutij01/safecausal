@@ -104,14 +104,18 @@ def prepare_eval_by_one_contrasts(args, device):
     cfc1_eval_1, cfc2_eval_1, cfc1_eval_2, cfc2_eval_2 = (
         data_utils.load_eval_by_one_contrasts(args)
     )
-    md_1 = tensorify(cfc2_eval_1 - cfc1_eval_1, device).mean(dim=0)
-    md_2 = tensorify(cfc2_eval_2 - cfc1_eval_2, device).mean(dim=0)
+    md_1 = (
+        tensorify(cfc2_eval_1 - cfc1_eval_1, device).mean(dim=0).unsqueeze(0)
+    )
+    md_2 = (
+        tensorify(cfc2_eval_2 - cfc1_eval_2, device).mean(dim=0).unsqueeze(0)
+    )
     import ipdb
 
     ipdb.set_trace()
     model = LinearSAE(
-        input_dim=md_1.shape[1],
-        rep_dim=md_1.shape[1],
+        input_dim=md_1.shape[0],
+        rep_dim=md_1.shape[0],
         normalize=True,
     ).to(device)
     model_file = os.path.join(
