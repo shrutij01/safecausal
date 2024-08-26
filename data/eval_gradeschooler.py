@@ -1,5 +1,7 @@
 from base import CODEBOOK
 import random
+import os
+import argparse
 
 
 def sample_excluding_elements(list, exclude):
@@ -41,3 +43,19 @@ def generate_clusterable_with_color_change(eval_length=100):
         tilde_x = f"{tilde_attribute} {color_2} {tilde_object}"
         data.append([x, tilde_x, num_tfs, tf_ids])
     return data
+
+
+def write_to_txt_file(filename, list_of_lists):
+    with open(filename, "w") as file:
+        for single_list in list_of_lists:
+            row = ", ".join(map(str, single_list)) + "\n"
+            file.write(row)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("embedding_dir")
+    args = parser.parse_args()
+    filename = os.path.join(args.embedding_dir, "eval_gradeschooler.txt")
+    data = generate_clusterable_with_color_change()
+    write_to_txt_file(filename, data)
