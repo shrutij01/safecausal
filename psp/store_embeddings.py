@@ -130,6 +130,35 @@ def main(args):
         yaml.dump(config, file)
 
 
+def store_eval_embeddings(args):
+    embeddings_path = os.path.join(args.embedding_dir, "eval_embeddings.h5")
+    tokenizer = transformers.LlamaTokenizerFast.from_pretrained(
+        args.model_id, token=ACCESS_TOKEN
+    )
+    model = transformers.LlamaForCausalLM.from_pretrained(
+        args.model_id,
+        token=ACCESS_TOKEN,
+        low_cpu_mem_usage=True,
+        device_map="auto",
+        # attn_implementation="flash_attention_2",
+        # torch_dtype=torch.bfloat16,  # check compatibility
+    )
+    cfc1_tuples, cfc2_tuples, _ = utils.load_dataset(
+        dataset_name=args.dataset_name,
+        task_type=args.task_type,
+        d_type="str",
+        n=args.dataset_length,
+        string_length=args.string_length,
+        cycle_distance=args.cycle_distance,
+        file_path=args.gradeschooler_file_path,
+    )
+    cfc1_eval = extract_embeddings(cfc1_tuples, model, tokenizer)
+    cfc2_eval = extract_embeddings(cfc2_tuples, model, tokenizer)
+    with h5py.File(embeddings_path, "w") as hdf_file:
+        hdf_file.create_dataset("cfc1_eval", data=cfc1_eval)
+        hdf_file.create_dataset("cfc2_eval", data=cfc2_eval)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
@@ -148,13 +177,21 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--gradeschooler-file-path",
-        default="/home/mila/j/joshi.shruti/causalrepl_space/psp/data/gradeschooler.txt",
+        default="/network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/gradeschooler.txt",
+    )
+    parser.add_argument(
+        "--embedding_dir",
+        default="/network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25",
     )
     parser.add_argument("--string-length", default=3)
     parser.add_argument("--cycle-distance", default=1)
     parser.add_argument("--append-instruction", default=False)
+    parser.add_argument("--eval", default=False)
 
     args = parser.parse_args()
-    main(args)
+    if args.eval:
+        store_eval_embeddings(args)
+    else:
+        main(args)
 
 # export PYTHONPATH=${PYTHONPATH}:/home/mila/j/joshi.shruti/causalrepl_space/psp
