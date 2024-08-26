@@ -162,11 +162,11 @@ def store_eval_embeddings(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--gradeschooler-file-path",
+        "gradeschooler-file-path",
     )
     parser.add_argument("--eval", default=False)
     parser.add_argument(
-        "dataset_name",
+        "--dataset_name",
         choices=["ana", "gradeschooler", "truthful_qa"],
         default="gradeschooler",
     )
