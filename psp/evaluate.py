@@ -125,7 +125,7 @@ class EvaluatorMD:
     delta_c_hat_2: np.ndarray
 
     def get_hotnesses(self, threshold=0.01):
-        def l0(arr):
+        def l0(arr, threshold):
             # arr of batch_size x features
             l0_batch = np.array(
                 [
@@ -138,11 +138,15 @@ class EvaluatorMD:
         import ipdb
 
         ipdb.set_trace()
-        print(f"hotness of MD(orange --> purple) {l0(self.encoded_md_1)}")
-        print(f"hotness of MD(pruple --> pink) {l0(self.encoded_md_2)}")
         print(
-            f"by contrast, hotness of delta_c_hat(orange --> purple) {l0(self.delta_c_hat_1)}"
+            f"hotness of MD(orange --> purple) {l0(self.encoded_md_1, threshold)}"
         )
         print(
-            f"by contrast, hotness of delta_c_hat(purple --> pink) {l0(self.delta_c_hat_2)}"
+            f"hotness of MD(pruple --> pink) {l0(self.encoded_md_2, threshold)}"
+        )
+        print(
+            f"by contrast, hotness of delta_c_hat(orange --> purple) {l0(self.delta_c_hat_1, threshold)}"
+        )
+        print(
+            f"by contrast, hotness of delta_c_hat(purple --> pink) {l0(self.delta_c_hat_2, threshold)}"
         )
