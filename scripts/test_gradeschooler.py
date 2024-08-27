@@ -125,8 +125,8 @@ def prepare_eval_by_one_contrasts(args, device):
         model_config = Box(yaml.safe_load(file))
     topk = TopK(k=int(model_config.k))
     model = LinearSAE(
-        input_dim=md_1.shape[0],
-        rep_dim=md_1.shape[0],
+        input_dim=md_1.shape[1],
+        rep_dim=md_1.shape[1],
         normalize=True,
         activation=topk,
     ).to(device)
