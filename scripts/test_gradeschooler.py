@@ -91,8 +91,16 @@ def prepare_test_data(args, device):
     wd_1 = numpify(model_1.decoder.weight.data)
     wd_2 = numpify(model_2.decoder.weight.data)
     wd_3 = numpify(model_3.decoder.weight.data)
-    delta_z_hat_test = [delta_z_hat_test_1, delta_z_hat_test_2]
-    delta_c_hat_test = [delta_c_hat_test_1, delta_c_hat_test_2]
+    delta_z_hat_test = [
+        delta_z_hat_test_1,
+        delta_z_hat_test_2,
+        delta_z_hat_test_3,
+    ]
+    delta_c_hat_test = [
+        delta_c_hat_test_1,
+        delta_c_hat_test_2,
+        delta_c_hat_test_3,
+    ]
     w_d = [wd_1, wd_2, wd_3]
     return (
         delta_z_test,
