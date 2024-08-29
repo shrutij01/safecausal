@@ -247,7 +247,7 @@ def sae_loss(
     original_input: torch.Tensor,
     latent_activations: torch.Tensor,
     l1_weight: float,
-) -> tuple[torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     :param reconstruction: output of Autoencoder.decode (shape: [batch, n_inputs])
     :param original_input: input of Autoencoder.encode (shape: [batch, n_inputs])
@@ -257,7 +257,10 @@ def sae_loss(
     """
     recon_error = normalized_mean_squared_error(reconstruction, original_input)
     l0_error = non_normalized_L0_loss(latent_activations, original_input)
-    return recon_error, l0_error
+    l1_loss = normalized_L1_loss(latent_activations, original_input)
+    sparsity_penalty = l1_weight * l1_loss
+    total_loss = recon_error + sparsity_penalty
+    return total_loss, recon_error, l0_error, sparsity_penalty
 
 
 def normalized_mean_squared_error(
@@ -386,7 +389,7 @@ def load_training_data(args):
     return loader, embedding_dim, modeldir
 
 
-def train(sae, dataloader, num_epochs, lr, eps=6.25e-10, logger=None):
+def train(sae, dataloader, logger, num_epochs, lr, eps=6.25e-10):
     scaler = torch.cuda.amp.GradScaler()
     autocast_ctx_manager = torch.cuda.amp.autocast()
 
@@ -396,6 +399,8 @@ def train(sae, dataloader, num_epochs, lr, eps=6.25e-10, logger=None):
     for epoch in range(int(num_epochs)):
         epoch_loss = 0.0
         l0_delta_c_hat = 0.0
+        recon = 0.0
+        sparsity_penalty = 0.0
         for delta_z_list in dataloader:
             assert len(delta_z_list) == 1
             delta_z = delta_z_list[0]
@@ -403,14 +408,15 @@ def train(sae, dataloader, num_epochs, lr, eps=6.25e-10, logger=None):
             with autocast_ctx_manager:
                 delta_z_hat, delta_c_hat = sae(delta_z)
                 alpha = alpha_scheduler.get_coeff(epoch)
-                loss, l0 = sae_loss(delta_z_hat, delta_z, delta_c_hat, alpha)
-                l0 = (
-                    delta_c_hat.ne(0).sum(dim=1).float() / delta_z.norm(dim=1)
-                ).mean()
+                loss, recon_error, l0, l1 = sae_loss(
+                    delta_z_hat, delta_z, delta_c_hat, alpha
+                )
 
             print(epoch, loss)
             epoch_loss += loss.item()
-            l0_delta_c_hat += l0
+            l0_delta_c_hat += l0.item()
+            recon += recon_error.item()
+            sparsity_penalty += l1.item()
             logger.logkv("loss_scale", scaler.get_scale())
             loss = scaler.scale(loss)
             loss.backward()
@@ -422,7 +428,9 @@ def train(sae, dataloader, num_epochs, lr, eps=6.25e-10, logger=None):
             scaler.update()
             optim_scheduler.step(epoch)
         logger.logkv("total_loss", epoch_loss / len(dataloader))
+        logger.logkv("recon_error", recon / len(dataloader))
         logger.logkv("l0_delta_c_hat", l0_delta_c_hat / len(dataloader))
+        logger.logkv("sparsity_penalty", sparsity_penalty / len(dataloader))
         logger.dumpkvs()
 
 
@@ -459,7 +467,13 @@ def main(args):
         normalize=True,
     )
     sae.cuda()
-    train(sae, dataloader, args.num_epochs, lr=args.lr, logger=logger)
+    train(
+        sae=sae,
+        dataloader=dataloader,
+        logger=logger,
+        num_epochs=args.num_epochs,
+        lr=args.lr,
+    )
     save(sae, config_dict, modeldir)
 
 
