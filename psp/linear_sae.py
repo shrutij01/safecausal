@@ -255,6 +255,9 @@ def sae_loss(
     :param l1_weight: weight of L1 loss
     :return: loss (shape: [1])
     """
+    import ipdb
+
+    ipdb.set_trace()
     recon_error = normalized_mean_squared_error(reconstruction, original_input)
     l0_error = non_normalized_L0_loss(latent_activations, original_input)
     l1_loss = normalized_L1_loss(latent_activations, original_input)
@@ -368,6 +371,9 @@ def load_training_data(args):
                 if np.linalg.det(matrix) != 0:
                     return matrix
 
+        import ipdb
+
+        ipdb.set_trace()
         lin_ent_tf = generate_invertible_matrix(lin_ent_dim)
         x_ent = np.array([lin_ent_tf @ x_gt[i] for i in range(x_gt.shape[0])])
         if args.data_type == "gt_ent":
@@ -408,6 +414,9 @@ def train(sae, dataloader, logger, num_epochs, lr, eps=6.25e-10):
             delta_z = delta_z_list[0]
             assert isinstance(delta_z, torch.Tensor)
             with autocast_ctx_manager:
+                import ipdb
+
+                ipdb.set_trace()
                 delta_z_hat, delta_c_hat = sae(delta_z)
                 alpha = alpha_scheduler.get_coeff(epoch)
                 loss, recon_error, l0, l1 = sae_loss(
