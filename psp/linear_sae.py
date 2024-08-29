@@ -319,6 +319,8 @@ def load_training_data(args):
         args.embedding_dir,
         str(args.k) + str(args.seed) + timestamp_str,
     )
+    if not os.path.exists(modeldir):
+        os.makedirs(modeldir)
     x = None
     if args.data_type == "emb":
         embeddings_file = os.path.join(args.embedding_dir, "embeddings.h5")
