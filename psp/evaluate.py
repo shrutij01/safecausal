@@ -111,8 +111,9 @@ class EvaluatorSeeds:
     def get_mcc_udr(self):
         mccs = self.compute_pairwise_mcc()
         print(f"Max MCC [w_d_i, w_d_j] {max(mccs)}")
-        udr = statistics.median(mccs)
-        print(f"UDR Score {udr}")
+        reg = LinearRegression().fit(self.w_d[0], self.w_d[1])
+        score = reg.fit(self.w_d[0], self.w_d[1])
+        print(f"ols score {score}")
 
 
 @dataclass
