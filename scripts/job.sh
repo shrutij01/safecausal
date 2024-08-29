@@ -2,17 +2,16 @@
 
 # Define hyperparameters
 paths=(
-    "/network/scratch/j/joshi.shruti/psp/toy_translator/2024-07-30_22-25-14_dgp2dense"
-    "/network/scratch/j/joshi.shruti/psp/toy_translator/2024-07-25_14-37-56_dgp1"
+    "/network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25"
 )
 data_types=(
-    "--data-type gt_ent"
+    "--data-type emb"
 )
 epochs=(
     "--num-epochs 700"
 )
 ks=(
-    "--k 6"
+    "--k 135" "--k 300"
 )
 lrs=(
     "--lr 0.0001"
