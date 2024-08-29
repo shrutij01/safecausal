@@ -98,6 +98,9 @@ class EvaluatorSeeds:
     def compute_pairwise_mcc(self):
         pairs = list(itertools.combinations(self.seeds, 2))
         mccs = []
+        import ipdb
+
+        ipdb.set_trace()
         for pair in pairs:
             mccs.append(
                 metrics.mean_corr_coef(
@@ -136,9 +139,6 @@ class EvaluatorMD:
             )
             return np.mean(l0_batch)
 
-        import ipdb
-
-        ipdb.set_trace()
         print(
             f"hotness of MD(orange --> purple) {l0(self.encoded_md_1, threshold)}"
         )
