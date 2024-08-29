@@ -62,7 +62,7 @@ for path in "${paths[@]}"; do
                             echo "conda activate pytorch" >> "${script_name}"
                             echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:\$PYTHONPATH\"" >> "${script_name}"
                             echo "cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp" >> "${script_name}"
-                            echo "python linear_sae.py ${path} ${data_type} ${epoch} ${lr} ${k} ${seed}" >> "${script_name}"
+                            echo "python linear_sae.py ${path} ${data_type} ${epoch} ${lr} ${k} ${alpha} ${seed}" >> "${script_name}"
 
                             # Make the script executable
                             chmod +x "${script_name}"
