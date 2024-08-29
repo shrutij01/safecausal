@@ -433,15 +433,15 @@ def train(sae, dataloader, logger, num_epochs, lr, eps=6.25e-10):
             loss.backward()
 
             unit_norm_decoder_(sae)
-            unit_norm_decoder_grad_adjustment_(sae)
+            # unit_norm_decoder_grad_adjustment_(sae)
             scaler.unscale_(opt)
             scaler.step(opt)
             scaler.update()
             optim_scheduler.step(epoch)
-        logger.logkv("total_loss", epoch_loss / len(dataloader))
-        logger.logkv("recon_error", recon / len(dataloader))
-        logger.logkv("l0_delta_c_hat", l0_delta_c_hat / len(dataloader))
-        logger.logkv("sparsity_penalty", sparsity_penalty / len(dataloader))
+        logger.logkv("total_loss", epoch_loss)
+        logger.logkv("recon_error", recon)
+        logger.logkv("l0_delta_c_hat", l0_delta_c_hat)
+        logger.logkv("sparsity_penalty", sparsity_penalty)
         logger.dumpkvs()
 
 
