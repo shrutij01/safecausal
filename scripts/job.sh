@@ -3,7 +3,7 @@
 # Define hyperparameters
 paths=(
     "/network/scratch/j/joshi.shruti/psp/toy_translator/2024-07-30_22-25-14_dgp2dense"
-    ""/network/scratch/j/joshi.shruti/psp/toy_translator/2024-07-25_14-37-56_dgp1"
+    "/network/scratch/j/joshi.shruti/psp/toy_translator/2024-07-25_14-37-56_dgp1"
 )
 data_types=(
     "--data-type gt_ent"
