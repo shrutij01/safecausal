@@ -112,7 +112,7 @@ class EvaluatorSeeds:
         mccs = self.compute_pairwise_mcc()
         print(f"Max MCC [w_d_i, w_d_j] {max(mccs)}")
         reg = LinearRegression().fit(self.w_d[0], self.w_d[1])
-        score = reg.fit(self.w_d[0], self.w_d[1])
+        score = reg.score(self.w_d[0], self.w_d[1])
         print(f"ols score {score}")
 
 
