@@ -101,6 +101,11 @@ class EvaluatorSeeds:
         import ipdb
 
         ipdb.set_trace()
+        metrics.mean_corr_coef(
+            self.delta_c_hat_test[0],
+            self.delta_c_hat_test[1],
+            method="pearson",
+        )
         for pair in pairs:
             mccs.append(
                 metrics.mean_corr_coef(
