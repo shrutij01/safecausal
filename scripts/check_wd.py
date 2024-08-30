@@ -25,7 +25,7 @@ def main(args):
                 activation=topk,
             ).to(device)
             model_file = os.path.join(
-                args.model_dir, "sparse_dict_model", "sparse_dict_model.pth"
+                modeldir, "sparse_dict_model", "sparse_dict_model.pth"
             )
             model_dict = torch.load(model_file)
             model.load_state_dict(model_dict)
