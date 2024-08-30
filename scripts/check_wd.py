@@ -39,6 +39,7 @@ def main(args):
                 if np.array_equal(arrays[i], arrays[j]):
                     print(f"Array at index {i} is equal to array at index {j}")
                     return True
+        print("none of the arrays are equal")
         return False
 
     check_equal_arrays(wd)
