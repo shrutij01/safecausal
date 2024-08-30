@@ -42,3 +42,5 @@ if __name__ == "__main__":
         "model_dir",
         nargs="+",
     )
+    args = parser.parse_args()
+    main(args)
