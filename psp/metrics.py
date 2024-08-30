@@ -345,6 +345,9 @@ def corrcoef_pt(x, y=None, rowvar=False):
         # scalar covariance
         return c / c
     stddev = torch.sqrt(d)
+    import ipdb
+
+    ipdb.set_trace()
     c /= stddev[:, None]
     c /= stddev[None, :]
 
