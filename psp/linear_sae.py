@@ -424,7 +424,7 @@ def train(sae, dataloader, logger, num_epochs, lr, eps=6.25e-10):
             loss.backward()
 
             unit_norm_decoder_(sae)
-            # unit_norm_decoder_grad_adjustment_(sae)
+            unit_norm_decoder_grad_adjustment_(sae)
             scaler.unscale_(opt)
             scaler.step(opt)
             scaler.update()

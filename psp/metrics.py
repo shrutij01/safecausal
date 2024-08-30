@@ -345,9 +345,9 @@ def corrcoef_pt(x, y=None, rowvar=False):
         # scalar covariance
         return c / c
     stddev = torch.sqrt(d)
-    import ipdb
+    # import ipdb
 
-    ipdb.set_trace()
+    # ipdb.set_trace()
     c /= stddev[:, None]
     c /= stddev[None, :]
 
@@ -437,9 +437,9 @@ def mean_corr_coef_np(x, y, method="rdc"):
     else:
         raise ValueError("not a valid method: {}".format(method))
     cc = np.abs(cc)
-    import ipdb
+    # import ipdb
 
-    ipdb.set_trace()
+    # ipdb.set_trace()
     score = cc[linear_sum_assignment(-1 * cc)].mean()
     return score
 
