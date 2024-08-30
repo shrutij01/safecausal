@@ -1,5 +1,6 @@
 import torch
 from psp.linear_sae import LinearSAE, TopK
+import numpy as np
 
 import argparse
 import os
@@ -30,9 +31,17 @@ def main(args):
             model_dict = torch.load(model_file)
             model.load_state_dict(model_dict)
             wd.append(numpify(model.decoder.weight.data))
-    import ipdb
 
-    ipdb.set_trace()
+    def check_equal_arrays(arrays):
+        n = len(arrays)
+        for i in range(n):
+            for j in range(i + 1, n):
+                if np.array_equal(arrays[i], arrays[j]):
+                    print(f"Array at index {i} is equal to array at index {j}")
+                    return True
+        return False
+
+    check_equal_arrays(wd)
 
 
 if __name__ == "__main__":
