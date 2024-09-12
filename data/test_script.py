@@ -1,4 +1,4 @@
-ga import torch
+import torch
 
 # Step 1: Generate binary vectors
 vectors = torch.randint(0, 2, (100, 6))
