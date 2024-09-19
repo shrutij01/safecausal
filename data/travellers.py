@@ -47,6 +47,7 @@ def generate_overlapping_block_binary_vectors(
         if num_samples == 1:
             return sampled_vectors[0]
         # Otherwise, return the sum of the sampled vectors
+        print("wtf")
         import ipdb
 
         ipdb.set_trace()
