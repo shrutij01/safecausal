@@ -97,6 +97,10 @@ def generate_distinct_block_binary_vectors(
 
 
 def generate_binary_vectors(travellers_K, num_tuples):
+    column_names = ["Tx", "x", "delta_C"]
+    data = []
+    lin_ent_tf = generate_invertible_matrix(travellers_K)
+
     # Initialize an array to hold all vectors
     vectors = np.zeros((num_tuples, travellers_K), dtype=int)
 
@@ -107,19 +111,15 @@ def generate_binary_vectors(travellers_K, num_tuples):
     for i in range(num_tuples):
         indices = np.random.choice(travellers_K, ones_counts[i], replace=False)
         vectors[i, indices] = 1
+        transformed_vector = np.dot(vectors[i], lin_ent_tf.T)
+        row = {
+            "Tx": transformed_vector,
+            "x": vectors[i],
+            "delta_C": vectors[i],
+        }
+        data.append(row)
 
-    # Generate a linear transformation matrix
-    lin_ent_tf = generate_invertible_matrix(travellers_K)
-
-    # Apply the transformation
-    transformed_vectors = np.dot(vectors, lin_ent_tf.T)
-    data = {
-        "Tx": list(transformed_vectors),
-        "x": list(vectors),
-        "delta_C": list(vectors),
-    }
-
-    df = pd.DataFrame(data)
+    df = pd.DataFrame(data, columns=column_names)
     return df
 
 
