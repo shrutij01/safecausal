@@ -48,7 +48,6 @@ def generate_overlapping_block_binary_vectors(
             return sampled_vectors[0], sampled_vectors
         # Otherwise, return the sum of the sampled vectors
         x = np.sum(sampled_vectors, axis=0).tolist()
-        print(x, sampled_vectors)
         return x, sampled_vectors
 
     column_names = ["Tx", "x", "delta_C"]
@@ -76,13 +75,15 @@ def generate_distinct_block_binary_vectors(
     lin_ent_tf = generate_invertible_matrix(travellers_N)
     for _ in range(num_tuples):
         total_length = travellers_N * travellers_K
-        vector = torch.zeros(total_length, dtype=torch.int)
+        vector = np.zeros(total_length, dtype=int)
 
         # Randomly choose how many blocks to fill with ones (1 to K blocks)
-        num_blocks_to_fill = torch.randint(1, travellers_K + 1, (1,)).item()
+        num_blocks_to_fill = np.random.randint(1, travellers_K + 1, (1,))
 
         # Randomly choose which blocks to fill
-        blocks_to_fill = torch.randperm(travellers_N)[:num_blocks_to_fill]
+        blocks_to_fill = np.random.permutation(travellers_N)[
+            :num_blocks_to_fill
+        ]
 
         # Set the chosen blocks to all ones
         for block_index in blocks_to_fill:
