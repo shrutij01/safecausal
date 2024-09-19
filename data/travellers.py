@@ -72,7 +72,7 @@ def generate_distinct_block_binary_vectors(
 ):
     column_names = ["Tx", "x", "delta_C"]
     data: List[Dict] = []
-    lin_ent_tf = generate_invertible_matrix(travellers_N)
+    lin_ent_tf = generate_invertible_matrix(travellers_N * travellers_K)
     for _ in range(num_tuples):
         total_length = travellers_N * travellers_K
         vector = np.zeros(total_length, dtype=int)
