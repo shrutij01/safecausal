@@ -13,10 +13,16 @@ import torch
 
 
 def generate_invertible_matrix(size):
-    while True:
-        matrix = np.random.randint(1, size, (size, size))
-        if np.linalg.det(matrix) != 0:
-            return matrix
+    if size == 2:
+        theta = np.radians(30)
+        c, s = np.cos(theta), np.sin(theta)
+        matrix = np.array(((c, -s), (s, c)))
+        return matrix
+    else:
+        while True:
+            matrix = np.random.randint(1, size, (size, size))
+            if np.linalg.det(matrix) != 0:
+                return matrix
 
 
 def generate_overlapping_block_binary_vectors(
