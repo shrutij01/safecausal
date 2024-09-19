@@ -96,39 +96,30 @@ def generate_distinct_block_binary_vectors(
     return df
 
 
-def generate_binary_vectors(num_tuples, travellers_K):
-    def generate_binary_vector(N, K):
-        """Generate a binary vector of length N with exactly K ones."""
-        vector = np.zeros(N, dtype=int)
+def generate_binary_vectors(travellers_K, num_tuples):
+    # Initialize an array to hold all vectors
+    vectors = np.zeros((num_tuples, travellers_K), dtype=int)
 
-        indices = np.random.permutation(N)[:K]
-        vector[indices] = 1
+    # Generate random number of ones for each vector
+    ones_counts = np.random.randint(1, travellers_K + 1, size=num_tuples)
 
-        return vector
+    # Populate the vectors with ones
+    for i in range(num_tuples):
+        indices = np.random.choice(travellers_K, ones_counts[i], replace=False)
+        vectors[i, indices] = 1
 
-    xs = []
-    Txs = []
+    # Generate a linear transformation matrix
     lin_ent_tf = generate_invertible_matrix(travellers_K)
-    num_vectors_per_group = num_tuples // travellers_K
 
-    for k in range(1, travellers_K + 1):
-        for _ in range(num_vectors_per_group):
-            x = generate_binary_vector(travellers_K, k)
-            xs.append(x)
-            Txs.append(lin_ent_tf @ x)
+    # Apply the transformation
+    transformed_vectors = np.dot(vectors, lin_ent_tf.T)
+    data = {
+        "Tx": list(transformed_vectors),
+        "x": list(vectors),
+        "delta_C": list(vectors),
+    }
 
-    xs = np.stack(xs)
-    Txs = np.stack(Txs)
-    shuffled_indices = np.random.permutation(num_tuples)
-    xs = xs[shuffled_indices]
-    Txs = Txs[shuffled_indices]
-    df = pd.DataFrame(
-        {
-            "Tx": Txs,
-            "x": xs,
-            "delta_C": xs,
-        }
-    )
+    df = pd.DataFrame(data)
     return df
 
 
