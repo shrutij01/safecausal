@@ -125,7 +125,7 @@ def generate_binary_vectors(travellers_K, num_tuples):
 
 def main(args):
     if args.dgp == 1:
-        data_df = generate_binary_vectors(args.num_tuples, args.travellers_K)
+        data_df = generate_binary_vectors(args.travellers_K, args.num_tuples)
     elif args.dgp == 2:
         data_df = generate_distinct_block_binary_vectors(
             args.num_tuples, args.travellers_K, args.travellers_N
