@@ -60,6 +60,7 @@ def generate_overlapping_block_binary_vectors(
     # Generate vectors and perform sampling
     binary_vectors = generate_binary_vectors(travellers_N, travellers_K)
     for _ in range(num_tuples):
+        print(binary_vectors)
         result, delta_c = sample_and_sum_vectors(binary_vectors, travellers_N)
         row = {
             "Tx": lin_ent_tf @ result,
