@@ -48,6 +48,9 @@ def generate_overlapping_block_binary_vectors(
             return sampled_vectors[0]
         # Otherwise, return the sum of the sampled vectors
         x = np.sum(sampled_vectors, axis=0).tolist()
+        import ipdb
+
+        ipdb.set_trace()
         return x, sampled_vectors
 
     column_names = ["Tx", "x", "delta_C"]
