@@ -44,14 +44,14 @@ def generate_overlapping_block_binary_vectors(
         # Sample without replacement
         sampled_vectors = random.sample(vectors, num_samples)
         # If only one vector is sampled, return it
+        import ipdb
+
+        ipdb.set_trace()
         if num_samples == 1:
             return sampled_vectors[0]
         # Otherwise, return the sum of the sampled vectors
         x = np.sum(sampled_vectors, axis=0).tolist()
         print(x, sampled_vectors)
-        import ipdb
-
-        ipdb.set_trace()
         return x, sampled_vectors
 
     column_names = ["Tx", "x", "delta_C"]
@@ -60,7 +60,6 @@ def generate_overlapping_block_binary_vectors(
     # Generate vectors and perform sampling
     binary_vectors = generate_binary_vectors(travellers_N, travellers_K)
     for _ in range(num_tuples):
-        print(binary_vectors)
         result, delta_c = sample_and_sum_vectors(binary_vectors, travellers_N)
         row = {
             "Tx": lin_ent_tf @ result,
