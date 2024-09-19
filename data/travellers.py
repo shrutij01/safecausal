@@ -175,7 +175,7 @@ def main(args):
         "dgp": args.dgp,
         "travellers_K": args.travellers_K,
         "travellers_N": args.travellers_N,
-        "cfc_column_names": ["Tx"],
+        "cfc_column_names": ["Tx", "x", "delta_C"],
         "split": 0.9,
     }
     config_path = os.path.join(directory_name, "data_config.yaml")
@@ -188,9 +188,9 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--num-tuples", type=int, default=1000000)
-    parser.add_argument("--travellers-K", type=int, default=7)
-    parser.add_argument("--travellers-N", type=int, default=10)
+    parser.add_argument("--num-tuples", type=int, default=100000)
+    parser.add_argument("--travellers-K", type=int, default=2)
+    parser.add_argument("--travellers-N", type=int, default=3)
     parser.add_argument("--dgp", type=int, default=1, choices=[1, 2, 3])
 
     args = parser.parse_args()
