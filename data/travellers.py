@@ -78,7 +78,7 @@ def generate_distinct_block_binary_vectors(
         vector = np.zeros(total_length, dtype=int)
 
         # Randomly choose how many blocks to fill with ones (1 to K blocks)
-        num_blocks_to_fill = np.random.randint(1, travellers_K + 1, (1,))
+        num_blocks_to_fill = np.random.randint(1, travellers_K + 1)
 
         # Randomly choose which blocks to fill
         blocks_to_fill = np.random.permutation(travellers_N)[
