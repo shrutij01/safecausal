@@ -164,18 +164,6 @@ def main(args):
         dataset_name = "synth3"
     else:
         raise ValueError
-    config = {
-        "dataset_name": dataset_name,
-        "size": args.num_tuples,
-        "dgp": args.dgp,
-        "rep_dim": rep_dim,
-        "num_concepts": num_concepts,
-        "travellers_K": args.travellers_K,
-        "travellers_N": args.travellers_N,
-        "cfc_column_names": ["Tx", "x", "delta_C"],
-        "train_split": 0.8,
-        "eval_split": 0.9,
-    }
     current_datetime = datetime.datetime.now()
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
     dir_location = "/network/scratch/j/joshi.shruti/psp/travellers/"
@@ -192,13 +180,26 @@ def main(args):
         if overwrite.lower() != "yes":
             print("Skipping dataset creation and saving.")
             exit()
-    config_path = os.path.join(directory_name, "data_config.yaml")
-    with open(config_path, "w") as file:
-        yaml.dump(config, file)
     pickle_path = os.path.join(directory_name, "global_C.pkl")
     with open(pickle_path, "wb") as file:
         pickle.dump(global_C, file)
     data_df.to_csv(df_location)
+    config = {
+        "dataset_name": dataset_name,
+        "size": args.num_tuples,
+        "dgp": args.dgp,
+        "rep_dim": rep_dim,
+        "num_concepts": num_concepts,
+        "travellers_K": args.travellers_K,
+        "travellers_N": args.travellers_N,
+        "cfc_column_names": ["Tx", "x", "delta_C"],
+        "train_split": 0.8,
+        "eval_split": 0.9,
+        "pickle_path": pickle_path,
+    }
+    config_path = os.path.join(directory_name, "data_config.yaml")
+    with open(config_path, "w") as file:
+        yaml.dump(config, file)
 
 
 if __name__ == "__main__":
