@@ -49,12 +49,14 @@ def generate_overlapping_block_binary_vectors(
         num_samples = random.randint(1, N)
         # Sample without replacement
         sampled_vectors = random.sample(vectors, num_samples)
+        output_vectors = [np.zeros_like(vectors[0]) for _ in range(N)]
+        output_vectors[:num_samples] = sampled_vectors
         # If only one vector is sampled, return it
         if num_samples == 1:
-            return sampled_vectors[0], sampled_vectors
+            return sampled_vectors[0], output_vectors
         # Otherwise, return the sum of the sampled vectors
         x = np.sum(sampled_vectors, axis=0).tolist()
-        return x, sampled_vectors
+        return x, output_vectors
 
     column_names = ["Tx", "x", "delta_C"]
     data: List[Dict] = []
