@@ -331,7 +331,7 @@ def train(
             # effect for gn or ln
             sae_model.train()
             coop_optimizer.zero_grad()
-            lagrangian, state = formulation.composite_objective(
+            lagrangian = formulation.composite_objective(
                 cmp_model.closure, delta_z
             )
             formulation.custom_backward(lagrangian)
@@ -342,9 +342,12 @@ def train(
 
             # Adjust the gradients post-optimization step to maintain unit norms
             unit_norm_decoder_columns_grad_adjustment_(cmp_model.model)
+            delta_z_hat, _ = sae_model(delta_z)
+            import ipdb
 
-            epoch_loss += state.loss.item()
-            sparsity_penalty_total += state.ineq_defect.item()
+            ipdb.set_trace()
+            epoch_loss += cmp_model.compute_loss(delta_z_hat, delta_z)
+            sparsity_penalty_total += cmp_model.ineq_defect.item()
         logger.logkv("total_loss", epoch_loss)
         logger.logkv("sparsity_penalty", sparsity_penalty_total)
         if epoch % 100 == 0:
