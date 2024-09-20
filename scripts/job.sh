@@ -5,7 +5,7 @@ paths=(
     "/network/scratch/j/joshi.shruti/psp/travellers/2024-09-19_23-00-51"
 )
 alphas=(
-    "--alpha 0.0001" "--alpha 0.0005" "--alpha 0.001" "--alpha 0.01"
+    "--alpha 0.0001" # "--alpha 0.0005" "--alpha 0.001" "--alpha 0.01"
 )
 epochs=(
     "--num-epochs 700"
@@ -17,7 +17,7 @@ indicator_thresholds=(
     "--indicator-threshold 0.1"
 )
 norm_types=(
-    "--norm_type bn" "--norm_type ln"
+    "--norm_type bn" # "--norm_type ln"
 )
 dual_lrs=(
     "--dual-lr 0.00005"
