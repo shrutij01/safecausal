@@ -111,14 +111,12 @@ def generate_binary_vectors(travellers_K, num_tuples):
     column_names = ["Tx", "x", "delta_C"]
     data = []
     lin_ent_tf = generate_invertible_matrix(travellers_K)
-    print(lin_ent_tf)
 
     # Initialize an array to hold all vectors
     vectors = np.zeros((num_tuples, travellers_K), dtype=int)
 
     # Generate random number of ones for each vector
     ones_counts = np.random.randint(1, travellers_K + 1, size=num_tuples)
-    print(ones_counts)
     # Populate the vectors with ones
     for i in range(num_tuples):
         indices = np.random.choice(travellers_K, ones_counts[i], replace=False)
@@ -197,7 +195,8 @@ def main(args):
     config_path = os.path.join(directory_name, "data_config.yaml")
     with open(config_path, "w") as file:
         yaml.dump(config, file)
-    with open("global_C.pkl", "wb") as file:
+    pickle_path = os.path.join(directory_name, "global_C.pkl")
+    with open(pickle_path, "wb") as file:
         pickle.dump(global_C, file)
     data_df.to_csv(df_location)
 
