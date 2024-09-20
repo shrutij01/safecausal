@@ -2,22 +2,25 @@
 
 # Define hyperparameters
 paths=(
-    "/network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25"
+    "/network/scratch/j/joshi.shruti/psp/travellers/2024-09-19_23-00-51"
 )
-data_types=(
-    "--data-type emb"
+alphas=(
+    "--alpha 0.0001" "--alpha 0.0005" "--alpha 0.001" "--alpha 0.01"
 )
 epochs=(
     "--num-epochs 700"
 )
-ks=(
-    "--k 135" "--k 300"
+primal_lrs=(
+    "--primal-lr 0.0001"
 )
-lrs=(
-    "--lr 0.0001"
+indicator_thresholds=(
+    "--indicator-threshold 0.1"
 )
-alphas=(
-    "--alpha 0.0001"
+norm_types=(
+    "--norm_type bn" "--norm_type ln"
+)
+dual_lrs=(
+    "--dual-lr 0.00005"
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2"
@@ -28,7 +31,7 @@ job_name="test"
 output="job_output_%j.txt"  # %j will be replaced by the job ID
 error="job_error_%j.txt"
 time_limit="1:00:00"
-memory="16Gb"
+memory="32Gb"
 gpu_req="gpu:1"
 
 # Directory to store generated job scripts
@@ -39,12 +42,12 @@ counter=0
 
 # Loop through all combinations of hyperparameters
 for path in "${paths[@]}"; do
-    for data_type in "${data_types[@]}"; do
-        for epoch in "${epochs[@]}"; do
-            for k in "${ks[@]}"; do
-                for seed in "${seeds[@]}"; do
-                    for lr in "${lrs[@]}"; do
-                        for alpha in "${alphas[@]}"; do
+    for alpha in "${alphas[@]}"; do
+        for primal_lr in "${primal_lrs[@]}"; do
+            for indicator_threshold in "${indicator_thresholds[@]}"; do
+                for norm_type in "${norm_types[@]}"; do
+                    for dual_lr in "${dual_lrs[@]}"; do
+                        for seed in "${seeds[@]}"; do
                             # Define a script name
                             script_name="generated_jobs/job_${counter}.sh"
 
@@ -62,7 +65,7 @@ for path in "${paths[@]}"; do
                             echo "conda activate pytorch" >> "${script_name}"
                             echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:\$PYTHONPATH\"" >> "${script_name}"
                             echo "cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp" >> "${script_name}"
-                            echo "python linear_sae.py ${path} ${data_type} ${epoch} ${lr} ${k} ${alpha} ${seed}" >> "${script_name}"
+                            echo "python linear_sae.py ${path} ${alpha} ${primal_lr} ${dual_lr} ${norm_type} ${indicator_threshold} ${seed}" >> "${script_name}"
 
                             # Make the script executable
                             chmod +x "${script_name}"
@@ -79,3 +82,7 @@ for path in "${paths[@]}"; do
         done
     done
 done
+
+
+
+python check_wd.py /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/2024-08-22_23-37-25/13522024-08-29_13-44-02 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/13512024-08-29_13-44-02 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/2024-08-22_23-37-25/13502024-08-29_13-44-02 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/2024-08-22_23-37-25/000113502024-08-28_23-58-56 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/2024-08-22_23-37-25/000113512024-08-28_23-58-55 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/000113522024-08-29_00-14-39 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/30022024-08-29_13-44-02 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/30012024-08-29_13-44-11 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/30002024-08-29_13-44-09
