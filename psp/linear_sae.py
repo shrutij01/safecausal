@@ -359,7 +359,7 @@ def train(
                     )
                     concept_indicator_ones = (
                         concept_indicators > indicator_threshold
-                    ).int()
+                    ).float()
                     global_C_hat = sae_model.decoder.weight.data
                     sigma_c_hat = global_C_hat @ concept_indicator_ones.T
                     delta_c_hat = global_C_hat[
