@@ -58,19 +58,23 @@ class LinearSAE(nn.Module):
         norm_type: str,
     ) -> None:
         super(LinearSAE, self).__init__()
-        self.encoder: nn.Module = nn.Linear(rep_dim, num_concepts, bias=False)
+        self.encoder: nn.Module = nn.Linear(
+            rep_dim, num_concepts, bias=False, device=device
+        )
         if norm_type == "ln":
-            self.encoder_ln = nn.LayerNorm(num_concepts)
+            self.encoder_ln = nn.LayerNorm(num_concepts, device=device)
         elif norm_type == "gn":
-            self.encoder_ln = nn.GroupNorm(1, num_concepts)
+            self.encoder_ln = nn.GroupNorm(1, num_concepts, device=device)
         elif norm_type == "bn":
-            self.encoder_ln = nn.BatchNorm1d(num_concepts)
+            self.encoder_ln = nn.BatchNorm1d(num_concepts, device=device)
         else:
             raise ValueError("Invalid norm type, pass ln, gn, or bn")
         self.encoder_bias = nn.Parameter(
             torch.zeros(num_concepts, device=device)
         )
-        self.decoder = nn.Linear(num_concepts, rep_dim, bias=False)
+        self.decoder = nn.Linear(
+            num_concepts, rep_dim, bias=False, device=device
+        )
         self.decoder_bias = nn.Parameter(torch.zeros(rep_dim, device=device))
         self.decoder.weight.data = self.encoder.weight.data.T.clone()
         unit_norm_decoder_columns(self)
