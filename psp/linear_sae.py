@@ -367,10 +367,7 @@ def train(
                         delta_c_hat.append(
                             global_C_hat[:, concept_indicator_ones_indices[i]]
                         )
-                    import ipdb
-
-                    ipdb.set_trace()
-                    delta_c_hat = tensorify(np.array(delta_c_hat), device)
+                    delta_c_hat = torch.stack(delta_c_hat, dim=0)
                     max_cols = max(delta_c_hat.shape[1], delta_c.shape[1])
 
                     def pad_matrix(matrix, target_cols):
