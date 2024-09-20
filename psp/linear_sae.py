@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.utils.data import TensorDataset, DataLoader
+import cooper
 
 import numpy as np
 
@@ -10,12 +10,14 @@ import wandb
 import h5py
 import os
 import yaml
+import pickle
 from box import Box
 import pandas as pd
 import ast
 import datetime
 import argparse
-from dataclasses import dataclass
+from psp.data_utils import tensorify
+from psp.metrics import mean_corr_coef
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -39,164 +41,76 @@ def layer_normalise(
     return x, mu, std
 
 
-class LinearDecayLR:
-    def __init__(self, optimizer, total_steps, last_percentage=0.2):
-        self.optimizer = optimizer
-        self.total_steps = total_steps
-        self.decay_start_step = int(total_steps * (1 - last_percentage))
-        self.decay_steps = total_steps - self.decay_start_step
-        self.initial_lrs = [group["lr"] for group in optimizer.param_groups]
-
-    def step(self, current_step):
-        if current_step < self.decay_start_step:
-            # No decay needed before the last 20% of the steps
-            lr = self.initial_lrs[0]
-        else:
-            # Calculate decayed lr
-            decayed_lr = (
-                (self.total_steps - current_step)
-                / self.decay_steps
-                * self.initial_lrs[0]
-            )
-            lr = max(decayed_lr, 0)  # Ensure lr does not go below 0
-
-        # Apply the decayed learning rate
-        for param_group, initial_lr in zip(
-            self.optimizer.param_groups, self.initial_lrs
-        ):
-            param_group["lr"] = lr
-
-
-class AlphaScheduler:
-    def __init__(self, total_steps, max_value, increase_percentage=0.05):
-        self.total_steps = total_steps
-        self.max_value = max_value
-        self.increase_end_step = int(total_steps * increase_percentage)
-        self.alpha = 0  # Start at zero
-
-    def get_coeff(self, current_step):
-        if current_step <= self.increase_end_step:
-            # Linearly increase
-            self.alpha = (
-                current_step / self.increase_end_step
-            ) * self.max_value
-        else:
-            # Stay at max value
-            self.alpha = self.max_value
-        return self.alpha
-
-
 class LinearSAE(nn.Module):
     """
     Implements:
-        latents = activation(encoder(x - pre_bias) + latent_bias)
-        recons = decoder(latents) + pre_bias
+        coefficients = encoder(delta_z) + encoder_bias
+        recons = decoder(coefficients) + decoder_bias
+        delta_z --> rep_dim x 1, coefficients --> num_concepts x 1
+        encoder --> num_concepts x rep_dim, decoder --> rep_dim x num_concepts
+        encoder_bias --> num_concepts x 1, decoder_bias --> rep_dim x 1
     """
 
     def __init__(
         self,
-        input_dim: int,
         rep_dim: int,
-        activation: Callable = nn.ReLU(),
-        normalize: bool = False,
+        num_concepts: int,
+        norm_type: str,
     ) -> None:
-        """
-        :param input_dim: dimensionality of delta_z
-        :param rep_dim: dimension of delta_c
-        :param activation: activation function
-        :param normalize: whether to preprocess data with layer norm
-        """
         super(LinearSAE, self).__init__()
-        self.pre_bias = nn.Parameter(torch.zeros(input_dim))
-        self.encoder: nn.Module = nn.Linear(input_dim, rep_dim, bias=False)
-        self.latent_bias = nn.Parameter(torch.zeros(rep_dim))
-        self.activation = activation
-        self.decoder = nn.Linear(rep_dim, input_dim, bias=False)
-        self.normalize = normalize
-
-        self.stats_last_nonzero: torch.Tensor = torch.zeros(
-            rep_dim, dtype=torch.long
-        ).to(device)
-        self.latents_activation_frequency: torch.Tensor
-        self.latents_mean_square: torch.Tensor
-
+        self.encoder: nn.Module = nn.Linear(rep_dim, num_concepts, bias=False)
+        if norm_type == "ln":
+            self.encoder_ln = nn.LayerNorm(num_concepts)
+        elif norm_type == "gn":
+            self.encoder_ln = nn.GroupNorm(1, num_concepts)
+        elif norm_type == "bn":
+            self.encoder_ln = nn.BatchNorm1d(num_concepts)
+        else:
+            raise ValueError("Invalid norm type, pass ln, gn, or bn")
+        self.encoder_bias = nn.Parameter(torch.zeros(num_concepts))
+        self.decoder = nn.Linear(num_concepts, rep_dim, bias=False)
+        self.decoder_bias = nn.Parameter(torch.zeros(rep_dim))
         self.decoder.weight.data = self.encoder.weight.data.T.clone()
-        unit_norm_decoder_(self)
-
-    def encode_pre_act(
-        self,
-        x: torch.Tensor,
-    ) -> torch.Tensor:
-        """
-        :param x: input data (shape: [batch, n_inputs])
-        :return: autoencoder latents before activation (shape: [batch, n_latents])
-        """
-        x = x - self.pre_bias
-        latents_pre_act = F.linear(
-            x,
-            self.encoder.weight,
-            self.latent_bias,
-        )
-        return latents_pre_act
+        unit_norm_decoder_columns(self)
 
     def preprocess(
-        self, x: torch.Tensor
+        self, delta_z: torch.Tensor
     ) -> tuple[torch.Tensor, dict[str, Any]]:
         if not self.normalize:
-            return x, dict()
-        x, mu, std = layer_normalise(x)
-        return x, dict(mu=mu, std=std)
+            return delta_z, dict()
+        delta_z, mu, std = layer_normalise(delta_z)
+        return delta_z, dict(mu=mu, std=std)
 
-    def encode(self, x: torch.Tensor) -> tuple[torch.Tensor, dict[str, Any]]:
+    def forward(
+        self, delta_z: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """
-        :param x: input data (shape: [batch, n_inputs])
-        :return: autoencoder latents (shape: [batch, n_latents])
-        """
-        x, info = self.preprocess(x)
-        return self.activation(self.encode_pre_act(x)), info
-
-    def decode(
-        self, latents: torch.Tensor, info: dict[str, Any] | None = None
-    ) -> torch.Tensor:
-        """
-        :param latents: autoencoder latents (shape: [batch, n_latents])
-        :return: reconstructed data (shape: [batch, n_inputs])
-        """
-        ret = self.decoder(latents) + self.pre_bias
-        if self.normalize:
-            assert info is not None
-            ret = ret * info["std"] + info["mu"]
-        return ret
-
-    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        :param x: input data (shape: [batch, n_inputs])
+        :param delta_z: input data (shape: [batch, n_inputs])
         :return:  autoencoder latents pre activation (shape: [batch, n_latents])
                 autoencoder latents (shape: [batch, n_latents])
                 reconstructed data (shape: [batch, n_inputs])
         """
-        x, info = self.preprocess(x)
-        latents_pre_act = self.encode_pre_act(x)
-        latents = self.activation(latents_pre_act)
-        recons = self.decode(latents, info)
+        delta_z, info = self.preprocess(delta_z)
 
-        # set all indices of self.stats_last_nonzero where (latents != 0) to 0
-        self.stats_last_nonzero *= (latents == 0).all(dim=0).long()
-        self.stats_last_nonzero += 1
+        concept_indicators = (
+            self.encoder_ln(self.encoder(delta_z)) + self.encoder_bias
+        )
+        delta_z_hat = self.decoder(concept_indicators) + self.decoder_bias
+        delta_z_hat = delta_z_hat * info["std"] + info["mu"]
 
-        return recons, latents
+        return delta_z_hat, concept_indicators
 
 
-def unit_norm_decoder_(autoencoder: LinearSAE) -> None:
+def unit_norm_decoder_columns(autoencoder: LinearSAE) -> None:
     """
-    Unit normalize the decoder weights of an autoencoder.
+    Unit normalize the columns of the decoder weights of an autoencoder.
     """
     autoencoder.decoder.weight.data /= autoencoder.decoder.weight.data.norm(
-        dim=0
+        dim=0, keepdim=True
     )
 
 
-def unit_norm_decoder_grad_adjustment_(autoencoder) -> None:
+def unit_norm_decoder_columns_grad_adjustment_(autoencoder) -> None:
     """project out gradient information parallel to the dictionary vectors - assumes that the decoder is already unit normed"""
 
     assert autoencoder.decoder.weight.grad is not None
@@ -217,85 +131,50 @@ def unit_norm_decoder_grad_adjustment_(autoencoder) -> None:
 
         return x
 
-    update_x(
-        autoencoder.decoder.weight.grad,
-        torch.einsum(
-            "bn,bn->n",
-            autoencoder.decoder.weight.data,
-            autoencoder.decoder.weight.grad,
-        ),
-        autoencoder.decoder.weight.data,
-        c=-1,
-    )
+    # Calculate the gradient adjustment for each column of the decoder
+    for i in range(autoencoder.decoder.weight.shape[1]):
+        column = autoencoder.decoder.weight[:, i]
+        grad = autoencoder.decoder.weight.grad[:, i]
+        update_x(
+            grad,
+            torch.einsum("b,b->", column, grad),
+            column,
+            c=-1,
+        )
 
 
-class TopK(nn.Module):
-    def __init__(self, k: int) -> None:
-        super().__init__()
-        self.k = k
+class ConstrainedLinearSAE(cooper.ConstrainedMinimizationProblem):
+    def __init__(self, model, sparse_level, batch_size, num_concepts):
+        super().__init__(is_constrained=True)
+        self.model = model
+        self.criterion = nn.MSELoss(reduction="mean")
+        self.sparse_level = sparse_level
+        self.batch_size = batch_size
+        self.num_concepts = num_concepts
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        topk = torch.topk(x, k=self.k, dim=-1)
-        # make all other values 0
-        result = torch.zeros_like(x)
-        result.scatter_(-1, topk.indices, topk.values)
-        return result
+    def compute_loss(self, delta_z, delt_z_hat):
+        return self.criterion(delta_z, delt_z_hat)
 
+    def closure(self, delta_z):
+        """
+        This closure function computes the model's loss and the constraints.
+        :param inputs: Input tensor to the model
+        :param targets: Target tensor for reconstruction comparison
+        """
+        delta_z_hat, concept_indicators = self.model(delta_z)
 
-def sae_loss(
-    reconstruction: torch.Tensor,
-    original_input: torch.Tensor,
-    latent_activations: torch.Tensor,
-    l1_weight: float,
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-    """
-    :param reconstruction: output of Autoencoder.decode (shape: [batch, n_inputs])
-    :param original_input: input of Autoencoder.encode (shape: [batch, n_inputs])
-    :param latent_activations: output of Autoencoder.encode (shape: [batch, n_latents])
-    :param l1_weight: weight of L1 loss
-    :return: loss (shape: [1])
-    """
-    recon_error = normalized_mean_squared_error(reconstruction, original_input)
-    l0_error = non_normalized_L0_loss(latent_activations, original_input)
-    l1_loss = normalized_L1_loss(latent_activations, original_input)
-    sparsity_penalty = l1_weight * l1_loss
-    total_loss = recon_error + sparsity_penalty
-    return total_loss, recon_error, l0_error, sparsity_penalty
+        self.loss = self.compute_loss(delta_z, delta_z_hat)
+        # Compute the sparsity constraint as an inequality defect
+        self.ineq_defect = (
+            torch.sum(torch.abs(concept_indicators))
+            / self.batch_size
+            / self.num_concepts
+            - self.sparse_level
+        )
 
-
-def normalized_mean_squared_error(
-    reconstruction: torch.Tensor,
-    original_input: torch.Tensor,
-) -> torch.Tensor:
-    """
-    :param reconstruction: output of Autoencoder.decode (shape: [batch, n_inputs])
-    :param original_input: input of Autoencoder.encode (shape: [batch, n_inputs])
-    :return: normalized mean squared error (shape: [1])
-    """
-    return (
-        ((reconstruction - original_input) ** 2).mean(dim=1)
-        / (original_input**2).mean(dim=1)
-    ).mean()
-
-
-def normalized_L1_loss(
-    latent_activations: torch.Tensor,
-    original_input: torch.Tensor,
-) -> torch.Tensor:
-    """
-    :param latent_activations: output of Autoencoder.encode (shape: [batch, n_latents])
-    :param original_input: input of Autoencoder.encode (shape: [batch, n_inputs])
-    :return: normalized L1 loss (shape: [1])
-    """
-    return (
-        latent_activations.abs().sum(dim=1) / original_input.norm(dim=1)
-    ).mean()
-
-
-def non_normalized_L0_loss(
-    latent_activations: torch.Tensor, original_input: torch.Tensor
-) -> torch.Tensor:
-    return (latent_activations.ne(0).sum(dim=1).float()).mean()
+        return cooper.CMPState(
+            loss=self.loss, ineq_defect=self.ineq_defect, eq_defect=None
+        )
 
 
 class Logger:
@@ -312,191 +191,318 @@ class Logger:
         self.vals = {}
 
 
-def load_training_data(args):
-    current_datetime = datetime.datetime.now()
-    timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    modeldir = os.path.join(
-        args.embedding_dir,
-        str(args.k) + str(args.seed) + timestamp_str,
-    )
-    if not os.path.exists(modeldir):
-        os.makedirs(modeldir)
-    x = None
-    if args.data_type == "emb":
-        embeddings_file = os.path.join(args.embedding_dir, "embeddings.h5")
+def load_training_data(
+    args,
+) -> tuple[DataLoader, DataLoader, np.ndarray, int, int]:
+    config_file = os.path.join(args.datadir, "data_config.yaml")
+    with open(config_file, "r") as file:
+        config = Box(yaml.safe_load(file))
+    delta_z_train = None
+    delta_z_eval = None
+    rep_dim = config.rep_dim
+    num_concepts = config.num_concepts
+    if config.dataset_name == "lang":
+        embeddings_file = os.path.join(args.datadir, "embeddings.h5")
         with h5py.File(embeddings_file, "r") as f:
             cfc1_train = np.array(f["cfc1_train"]).squeeze()
             cfc2_train = np.array(f["cfc2_train"]).squeeze()
+            cfc1_eval = np.array(f["cfc1_eval"]).squeeze()
+            cfc2_eval = np.array(f["cfc2_eval"]).squeeze()
 
-        x = cfc2_train - cfc1_train
-    elif args.data_type == "gt" or args.data_type == "gt_ent":
-        config_file = os.path.join(args.embedding_dir, "config.yaml")
-        with open(config_file, "r") as file:
-            config = Box(yaml.safe_load(file))
+        delta_z_train = tensorify(cfc2_train - cfc1_train, device)
+        delta_z_eval = tensorify(cfc2_eval - cfc1_eval, device)
+
+    elif config.dataset_name in ["synth1", "synth2", "synth3"]:
         df_file = os.path.join(
-            args.embedding_dir,
-            "object_translations" + str(config.dgp) + ".csv",
+            args.datadir,
+            str(config.dataset_name) + ".csv",
         )
-
         cfc_columns = config.cfc_column_names
         converters = {col: ast.literal_eval for col in cfc_columns}
-        x_df = pd.read_csv(df_file, converters=converters)
-        x_df_train = x_df.iloc[0 : int(config.split * config.size)]
+        df = pd.read_csv(df_file, converters=converters)
+        df_train = df.iloc[0 : int(config.train_split * config.size)]
+        df_eval = df.iloc[
+            int(config.train_split * config.size) : int(
+                config.eval_split * config.size
+            )
+        ]
 
         def convert_to_list_of_ints(value):
             if isinstance(value, str):
                 value = ast.literal_eval(value)
             return [int(x) for x in value]
 
-        for column in x_df_train[cfc_columns]:
-            x_df_train[column] = x_df_train[column].apply(
-                convert_to_list_of_ints
-            )
+        for column in df_train[cfc_columns]:
+            df_train[column] = df_train[column].apply(convert_to_list_of_ints)
 
-        x_gt = np.asarray(
-            (
-                x_df_train[cfc_columns]
-                .apply(lambda row: sum(row, []), axis=1)
-                .tolist()
-            )
+        delta_z_train = tensorify(
+            np.asarray(
+                (
+                    df_train[cfc_columns[cfc_columns.index("Tx")]]
+                    .apply(lambda row: sum(row, []), axis=1)
+                    .tolist()
+                )
+            ),
+            device,
         )
-        lin_ent_dim = x_gt.shape[1]
-
-        def generate_invertible_matrix(size):
-            while True:
-                matrix = np.random.randint(1, size, (size, size))
-                if np.linalg.det(matrix) != 0:
-                    return matrix
-
-        lin_ent_tf = generate_invertible_matrix(lin_ent_dim)
-        x_ent = np.array([lin_ent_tf @ x_gt[i] for i in range(x_gt.shape[0])])
-        if args.data_type == "gt_ent":
-            x = x_ent
-            np.save(os.path.join(modeldir, "lin_ent_tf.npy"), lin_ent_tf)
-
+        delta_z_eval = tensorify(
+            np.asarray(
+                (
+                    df_eval[cfc_columns[cfc_columns.index("Tx")]]
+                    .apply(lambda row: sum(row, []), axis=1)
+                    .tolist()
+                )
+            ),
+            device,
+        )
+        sigma_c_train = tensorify(
+            np.asarray(
+                (
+                    df_train[cfc_columns[cfc_columns.index("x")]]
+                    .apply(lambda row: sum(row, []), axis=1)
+                    .tolist()
+                )
+            ),
+            device,
+        )
+        sigma_c_eval = tensorify(
+            np.asarray(
+                (
+                    df_eval[cfc_columns[cfc_columns.index("x")]]
+                    .apply(lambda row: sum(row, []), axis=1)
+                    .tolist()
+                )
+            ),
+            device,
+        )
+        delta_c_train = tensorify(
+            np.asarray(
+                (
+                    df_train[cfc_columns[cfc_columns.index("delta_C")]]
+                    .apply(lambda row: sum(row, []), axis=1)
+                    .tolist()
+                )
+            ),
+            device,
+        )
+        delta_c_eval = tensorify(
+            np.asarray(
+                (
+                    df_eval[cfc_columns[cfc_columns.index("delta_C")]]
+                    .apply(lambda row: sum(row, []), axis=1)
+                    .tolist()
+                )
+            ),
+            device,
+        )
     else:
         raise NotImplementedError
+    train_dataset = TensorDataset(
+        delta_z_train,
+        sigma_c_train,
+        delta_c_train,
+    )
+    eval_dataset = TensorDataset(
+        delta_z_eval,
+        sigma_c_eval,
+        delta_c_eval,
+    )
 
-    embedding_dim = x.shape[1]
-
-    if not isinstance(x, torch.Tensor):
-        x = torch.tensor(x, dtype=torch.float32).to(device)
-    dataset = TensorDataset(x)
-    loader = DataLoader(
-        dataset,
+    train_loader = DataLoader(
+        train_dataset,
         batch_size=int(args.batch_size),
         shuffle=True,
         num_workers=0,
     )
-    return loader, embedding_dim, modeldir
+    eval_loader = DataLoader(
+        eval_dataset,
+        batch_size=delta_z_eval.shape[0],
+        shuffle=True,
+        num_workers=0,
+    )
+    with open(config.pickle_path, "rb") as file:
+        global_C = pickle.load(file)
+    return train_loader, eval_loader, global_C, rep_dim, num_concepts
 
 
-def train(sae, dataloader, logger, num_epochs, lr, eps=6.25e-10):
-    scaler = torch.cuda.amp.GradScaler()
-    autocast_ctx_manager = torch.cuda.amp.autocast()
-
-    opt = torch.optim.Adam(sae.parameters(), lr=lr, eps=eps, fused=True)
-    optim_scheduler = LinearDecayLR(opt, args.num_epochs)
-    alpha_scheduler = AlphaScheduler(args.num_epochs, args.alpha)
-    for epoch in range(int(num_epochs)):
-        epoch_loss = 0.0
-        l0_delta_c_hat = 0.0
-        recon = 0.0
-        sparsity_penalty = 0.0
-        for delta_z_list in dataloader:
-            assert len(delta_z_list) == 1
-            delta_z = delta_z_list[0]
-            assert isinstance(delta_z, torch.Tensor)
-            with autocast_ctx_manager:
-                delta_z_hat, delta_c_hat = sae(delta_z)
-                alpha = alpha_scheduler.get_coeff(epoch)
-                loss, recon_error, l0, l1 = sae_loss(
-                    delta_z_hat, delta_z, delta_c_hat, alpha
-                )
-
-            print(epoch, loss)
-            epoch_loss += loss.item()
-            l0_delta_c_hat += l0.item()
-            recon += recon_error.item()
-            sparsity_penalty += l1.item()
-            logger.logkv("loss_scale", scaler.get_scale())
-            loss = scaler.scale(loss)
-            loss.backward()
-
-            unit_norm_decoder_(sae)
-            unit_norm_decoder_grad_adjustment_(sae)
-            scaler.unscale_(opt)
-            scaler.step(opt)
-            scaler.update()
-            optim_scheduler.step(epoch)
-        logger.logkv("total_loss", epoch_loss)
-        logger.logkv("recon_error", recon)
-        logger.logkv("l0_delta_c_hat", l0_delta_c_hat)
-        logger.logkv("sparsity_penalty", sparsity_penalty)
-        logger.dumpkvs()
-
-
-def save(sae, config_dict, modeldir):
-    sae_dir = os.path.join(modeldir, "sparse_dict_model")
-    if not os.path.exists(sae_dir):
-        os.makedirs(sae_dir)
-    config_file = os.path.join(modeldir, "models_config.yaml")
+def save(args, sae_model, config_dict, modeldir):
+    current_datetime = datetime.datetime.now()
+    timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
+    modeldir = os.path.join(
+        args.datadir,
+        str(args.indicator_threshold) + str(args.seed),
+        timestamp_str,
+    )
+    if not os.path.exists(modeldir):
+        os.makedirs(modeldir)
+    config_file = os.path.join(modeldir, "model_config.yaml")
     with open(config_file, "w") as file:
         yaml.dump(config_dict, file)
-    sae_dict_path = os.path.join(sae_dir, "sparse_dict_model.pth")
-    torch.save(sae.state_dict(), sae_dict_path)
+    sae_dict_path = os.path.join(sae_model, "sparse_dict_model.pth")
+    torch.save(sae_model.state_dict(), sae_dict_path)
+
+
+def train(
+    train_loader,
+    eval_loader,
+    global_C,
+    sae_model,
+    cmp_model,
+    coop_optimizer,
+    formulation,
+    logger,
+    num_epochs,
+    indicator_threshold,
+):
+    for epoch in range(int(num_epochs)):
+        epoch_loss = 0.0
+        sparsity_penalty_total = 0.0
+        for delta_z_list, _, _ in train_loader:
+            assert len(delta_z_list) == 1
+            delta_z = delta_z_list[0]
+            delta_z = tensorify(delta_z, device)
+
+            # this makes bn use batch statistics while training, doesn't have any
+            # effect for gn or ln
+            sae_model.train()
+            coop_optimizer.zero_grad()
+            lagrangian, state = formulation.composite_objective(
+                cmp_model.closure, delta_z
+            )
+            formulation.custom_backward(lagrangian)
+            coop_optimizer.step(cmp_model.closure, delta_z)
+
+            # Normalize the decoder columns to unit length after the parameters update
+            unit_norm_decoder_columns(cmp_model.model)
+
+            # Adjust the gradients post-optimization step to maintain unit norms
+            unit_norm_decoder_columns_grad_adjustment_(cmp_model.model)
+
+            epoch_loss += state.loss.item()
+            sparsity_penalty_total += state.ineq_defect.item()
+        logger.logkv("total_loss", epoch_loss)
+        logger.logkv("sparsity_penalty", sparsity_penalty_total)
+        if epoch % 100 == 0:
+            sae_model.eval()
+            cmp_model.eval()
+            with torch.no_grad():
+                for delta_z_list, sigma_c_list, delta_c_list in eval_loader:
+                    assert len(delta_z_list) == 1
+                    delta_z = tensorify(delta_z_list[0], device)
+                    sigma_c = tensorify(sigma_c_list[0], device)
+                    delta_c = tensorify(delta_c_list[0], device)
+                    delta_z_hat, concept_indicators = sae_model(delta_z)
+                    concept_indicator_ones_indices = (
+                        concept_indicators > indicator_threshold
+                    )
+                    concept_indicator_ones = (
+                        concept_indicators > torch.threshold
+                    ).astype(int)
+                    global_C_hat = sae_model.decoder.weight.data
+                    sigma_c_hat = global_C_hat @ concept_indicator_ones
+                    delta_c_hat = global_C_hat[
+                        :, concept_indicator_ones_indices
+                    ]
+                    max_cols = max(delta_c_hat.shape[1], delta_c.shape[1])
+
+                    def pad_matrix(matrix, target_cols):
+                        pad_cols = target_cols - matrix.shape[1]
+                        padded_matrix = np.pad(
+                            matrix,
+                            ((0, 0), (0, pad_cols)),
+                            "constant",
+                            constant_values=0,
+                        )
+                        return padded_matrix
+
+                    if delta_c_hat.shape[1] < delta_c.shape[1]:
+                        delta_c_hat = pad_matrix(delta_c_hat, max_cols)
+                    elif delta_c.shape[1] < delta_c_hat.shape[1]:
+                        delta_c = pad_matrix(delta_c, max_cols)
+
+                    # todo eval of delta_c per sample
+                    mcc_sigma_c = mean_corr_coef(sigma_c, sigma_c_hat)
+                    mcc_delta_c = mean_corr_coef(delta_c, delta_c_hat)
+                    mcc_global_C = mean_corr_coef(global_C, global_C_hat)
+                    eval_loss = cmp_model.compute_loss(delta_z, delta_z_hat)
+                    logger.logkv("mcc_sigma_c", mcc_sigma_c)
+                    logger.logkv("mcc_delta_c", mcc_delta_c)
+                    logger.logkv("mcc_global_C", mcc_global_C)
+                    logger.logkv("eval_loss", eval_loss)
+        logger.dumpkvs()
 
 
 def main(args):
     config_dict = {
         "seed": args.seed,
-        "dataset": args.embedding_dir,
-        "data_type": args.data_type,
+        "dataset": args.datadir,
         "alpha": args.alpha,
-        "k": args.k,
-        "learning_rate": args.lr,
+        "primal_lr": args.primal_lr,
+        "dual_lr": args.dual_lr,
+        "norm_type": args.norm_type,
         "batch_size": args.batch_size,
         "num_epochs": args.num_epochs,
+        "indicator_threshold": args.indicator_threshold,
     }
     set_seeds(int(args.seed))
     logger = Logger(project="psp", config=config_dict)
-    dataloader, input_dim, modeldir = load_training_data(args)
-    topk = TopK(k=args.k)
-    sae = LinearSAE(
-        input_dim=input_dim,
-        rep_dim=input_dim,
-        activation=topk,
-        normalize=True,
+    train_loader, eval_loader, global_C, rep_dim, num_concepts = (
+        load_training_data(args)
     )
-    sae.cuda()
+    # Assuming the LinearSAE model and other parameters are already defined:
+    sae_model = LinearSAE(
+        rep_dim=rep_dim, num_concepts=num_concepts, norm_type=args.norm_type
+    )
+    cmp_model = ConstrainedLinearSAE(
+        model=sae_model,
+        sparse_level=float(args.alpha),
+        batch_size=int(args.batch_size),
+        num_concepts=num_concepts,
+    )
+
+    # Define optimizers
+    primal_optimizer = cooper.optim.ExtraAdam(
+        list(sae_model.parameters()), lr=args.primal_lr
+    )
+    dual_optimizer = cooper.optim.partial_optimizer(
+        cooper.optim.ExtraAdam, lr=args.dual_lr
+    )
+
+    # Setup the constrained optimizer using Cooper's Lagrangian formulation
+    formulation = cooper.LagrangianFormulation(cmp_model)
+    coop_optimizer = cooper.ConstrainedOptimizer(
+        formulation=formulation,
+        primal_optimizer=primal_optimizer,
+        dual_optimizer=dual_optimizer,
+    )
+
     train(
-        sae=sae,
-        dataloader=dataloader,
+        train_loader=train_loader,
+        eval_loader=eval_loader,
+        global_C=global_C,
+        sae_model=sae_model,
+        cmp_model=cmp_model,
+        coop_optimizer=coop_optimizer,
+        formulation=formulation,
         logger=logger,
         num_epochs=args.num_epochs,
-        lr=args.lr,
+        indicator_threshold=args.indicator_threshold,
     )
-    save(sae, config_dict, modeldir)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("embedding_dir")
-    parser.add_argument(
-        "--data-type", default="emb", choices=["emb", "gt", "gt_ent"]
-    )
+    parser.add_argument("datadir")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-epochs", type=int, default=1100)
-    parser.add_argument("--lr", type=float, default=0.0001)
-    parser.add_argument("--alpha", type=float, default=float(0.00))
-    parser.add_argument("--k", type=int, default=60)
-    parser.add_argument(
-        "--normalize",
-        default=True,
-    )
-    parser.add_argument("--seed", default=42)
+    parser.add_argument("--primal-lr", type=float, default=0.0001)
+    parser.add_argument("--dual-lr", type=float, default=0.00005)
+    parser.add_argument("--alpha", type=float, default=float(0.0001))
+    parser.add_argument("--indicator-threshold", type=float, default=0.01)
+    parser.add_argument("--num-concepts", type=int, default=3)
+    parser.add_argument("--norm-type", str="bn", choices=["ln", "gn", "bn"])
+    parser.add_argument("--seed", default=0)
 
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     args, unknown = parser.parse_known_args()
 
     main(args)

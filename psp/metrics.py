@@ -409,7 +409,7 @@ def mean_corr_coef_pt(x, y, method="pearson"):
     return score
 
 
-def mean_corr_coef_np(x, y, method="rdc"):
+def mean_corr_coef_np(x, y, method="pearson"):
     """
     A numpy implementation of the mean correlation coefficient metric.
 
@@ -444,7 +444,7 @@ def mean_corr_coef_np(x, y, method="rdc"):
     return score
 
 
-def mean_corr_coef(x, y, method="rdc"):
+def mean_corr_coef(x, y, method="pearson"):
     if type(x) != type(y):
         raise ValueError(
             "inputs are of different types: ({}, {})".format(type(x), type(y))
