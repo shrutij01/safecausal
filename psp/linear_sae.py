@@ -348,7 +348,7 @@ def train(
             sparsity_penalty_total += cmp_model.ineq_defect.item()
         logger.logkv("total_loss", epoch_loss)
         logger.logkv("sparsity_penalty", sparsity_penalty_total)
-        logger.dumpkvs()
+        print(epoch, epoch_loss)
         if epoch % 100 == 0:
             sae_model.eval()
             with torch.no_grad():
