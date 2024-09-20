@@ -324,11 +324,7 @@ def train(
         import ipdb
 
         ipdb.set_trace()
-        for delta_z_list, _, _ in train_loader:
-            assert len(delta_z_list) == 1
-            delta_z = delta_z_list[0]
-            delta_z = tensorify(delta_z, device)
-
+        for delta_z, _, _ in train_loader:
             # this makes bn use batch statistics while training, doesn't have any
             # effect for gn or ln
             sae_model.train()
@@ -353,11 +349,7 @@ def train(
             sae_model.eval()
             cmp_model.eval()
             with torch.no_grad():
-                for delta_z_list, sigma_c_list, delta_c_list in eval_loader:
-                    assert len(delta_z_list) == 1
-                    delta_z = tensorify(delta_z_list[0], device)
-                    sigma_c = tensorify(sigma_c_list[0], device)
-                    delta_c = tensorify(delta_c_list[0], device)
+                for delta_z, sigma_c, delta_c in eval_loader:
                     delta_z_hat, concept_indicators = sae_model(delta_z)
                     concept_indicator_ones_indices = (
                         concept_indicators > indicator_threshold
