@@ -361,7 +361,7 @@ def train(
                         concept_indicators > indicator_threshold
                     ).float()
                     global_C_hat = sae_model.decoder.weight.data
-                    sigma_c_hat = global_C_hat @ concept_indicator_ones.T
+                    sigma_c_hat = concept_indicator_ones @ global_C_hat
                     # delta_c_hat = []
                     # for i in range(concept_indicator_ones_indices.shape[0]):
                     #     delta_c_hat.append(
@@ -389,9 +389,6 @@ def train(
                     #     delta_c = pad_matrix(delta_c, max_cols)
 
                     # todo eval of delta_c per sample
-                    import ipdb
-
-                    ipdb.set_trace()
                     mcc_sigma_c = mean_corr_coef(sigma_c, sigma_c_hat)
                     # mcc_delta_c = mean_corr_coef(delta_c, delta_c_hat)
                     mcc_global_C = mean_corr_coef(global_C, global_C_hat)
