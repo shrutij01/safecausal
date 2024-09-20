@@ -8,8 +8,8 @@ import yaml
 import os
 import itertools
 import numpy as np
-
-import torch
+import math
+import pickle
 
 
 def generate_invertible_matrix(size):
@@ -70,7 +70,7 @@ def generate_overlapping_block_binary_vectors(
         }
         data.append(row)
     df = pd.DataFrame(data, columns=column_names)
-    return df
+    return df, np.array(binary_vectors)
 
 
 def generate_distinct_block_binary_vectors(
@@ -78,9 +78,9 @@ def generate_distinct_block_binary_vectors(
 ):
     column_names = ["Tx", "x", "delta_C"]
     data: List[Dict] = []
+    total_length = travellers_N * travellers_K
     lin_ent_tf = generate_invertible_matrix(travellers_N * travellers_K)
     for _ in range(num_tuples):
-        total_length = travellers_N * travellers_K
         vector = np.zeros(total_length, dtype=int)
 
         # Randomly choose how many blocks to fill with ones (1 to K blocks)
@@ -99,20 +99,26 @@ def generate_distinct_block_binary_vectors(
         row = {"Tx": lin_ent_tf @ vector, "x": vector, "delta_C": vector}
         data.append(row)
     df = pd.DataFrame(data, columns=column_names)
-    return df
+    global_C = np.zeros((total_length, travellers_K))
+    for col in range(travellers_K):
+        start_index = travellers_N * col
+        end_index = travellers_N * (col + 1)
+        global_C[start_index:end_index, col] = 1
+    return df, global_C
 
 
 def generate_binary_vectors(travellers_K, num_tuples):
     column_names = ["Tx", "x", "delta_C"]
     data = []
     lin_ent_tf = generate_invertible_matrix(travellers_K)
+    print(lin_ent_tf)
 
     # Initialize an array to hold all vectors
     vectors = np.zeros((num_tuples, travellers_K), dtype=int)
 
     # Generate random number of ones for each vector
     ones_counts = np.random.randint(1, travellers_K + 1, size=num_tuples)
-
+    print(ones_counts)
     # Populate the vectors with ones
     for i in range(num_tuples):
         indices = np.random.choice(travellers_K, ones_counts[i], replace=False)
@@ -126,40 +132,31 @@ def generate_binary_vectors(travellers_K, num_tuples):
         data.append(row)
 
     df = pd.DataFrame(data, columns=column_names)
-    return df
+    global_C = np.eye(travellers_K)
+    return df, global_C
 
 
 def main(args):
     if args.dgp == 1:
-        data_df = generate_binary_vectors(args.travellers_K, args.num_tuples)
+        data_df, global_C = generate_binary_vectors(
+            args.travellers_K, args.num_tuples
+        )
+        rep_dim = args.travellers_K
+        num_concepts = args.travellers_K
     elif args.dgp == 2:
-        data_df = generate_distinct_block_binary_vectors(
+        data_df, global_C = generate_distinct_block_binary_vectors(
             args.num_tuples, args.travellers_K, args.travellers_N
         )
+        rep_dim = args.travellers_K * args.travellers_N
+        num_concepts = args.travellers_K
     elif args.dgp == 3:
-        data_df = generate_overlapping_block_binary_vectors(
+        data_df, global_C = generate_overlapping_block_binary_vectors(
             args.num_tuples, args.travellers_K, args.travellers_N
         )
+        rep_dim = args.travellers_N
+        num_concepts = math.comb(args.travellers_N, args.travellers_K)
     else:
         raise ValueError
-    current_datetime = datetime.datetime.now()
-    timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    dir_location = "/network/scratch/j/joshi.shruti/psp/travellers/"
-    directory_name = os.path.join(dir_location, timestamp_str)
-    if not os.path.exists(directory_name):
-        os.makedirs(directory_name)
-    df_location = os.path.join(
-        directory_name, "travellers" + str(args.dgp) + ".csv"
-    )
-    if os.path.exists(df_location):
-        overwrite = input(
-            "A dataset already exists at {}. Do you want to overwrite it? (yes/no): ".format(
-                df_location
-            )
-        )
-        if overwrite.lower() != "yes":
-            print("Skipping dataset creation and saving.")
-            exit()
 
     if args.dgp == 1:
         dataset_name = "synth1"
@@ -173,15 +170,35 @@ def main(args):
         "dataset_name": dataset_name,
         "size": args.num_tuples,
         "dgp": args.dgp,
+        "rep_dim": rep_dim,
+        "num_concepts": num_concepts,
         "travellers_K": args.travellers_K,
         "travellers_N": args.travellers_N,
         "cfc_column_names": ["Tx", "x", "delta_C"],
-        "split": 0.9,
+        "train_split": 0.8,
+        "eval_split": 0.9,
     }
+    current_datetime = datetime.datetime.now()
+    timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
+    dir_location = "/network/scratch/j/joshi.shruti/psp/travellers/"
+    directory_name = os.path.join(dir_location, timestamp_str)
+    if not os.path.exists(directory_name):
+        os.makedirs(directory_name)
+    df_location = os.path.join(directory_name, str(dataset_name) + ".csv")
+    if os.path.exists(df_location):
+        overwrite = input(
+            "A dataset already exists at {}. Do you want to overwrite it? (yes/no): ".format(
+                df_location
+            )
+        )
+        if overwrite.lower() != "yes":
+            print("Skipping dataset creation and saving.")
+            exit()
     config_path = os.path.join(directory_name, "data_config.yaml")
     with open(config_path, "w") as file:
         yaml.dump(config, file)
-
+    with open("global_C.pkl", "wb") as file:
+        pickle.dump(global_C, file)
     data_df.to_csv(df_location)
 
 
