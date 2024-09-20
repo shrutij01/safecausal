@@ -402,9 +402,7 @@ def train(
                     #     global_C, numpify(global_C_hat)
                     # )
                     eval_loss = cmp_model.compute_loss(delta_z, delta_z_hat)
-                    logger.logkv("mcc_sigma_c", mcc_sigma_c)
-                    # logger.logkv("mcc_delta_c", mcc_delta_c)
-                    logger.logkv("mcc_global_C", mcc_global_C)
+                    # logger.logkv("mcc_sigma_c", mcc_ssglobal_C)
                     logger.logkv("eval_loss", eval_loss)
         logger.dumpkvs()
 
