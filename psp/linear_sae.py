@@ -68,10 +68,10 @@ class LinearSAE(nn.Module):
         else:
             raise ValueError("Invalid norm type, pass ln, gn, or bn")
         self.encoder_bias = nn.Parameter(
-            torch.zeros(num_concepts), device=device
+            torch.zeros(num_concepts, device=device)
         )
         self.decoder = nn.Linear(num_concepts, rep_dim, bias=False)
-        self.decoder_bias = nn.Parameter(torch.zeros(rep_dim), device=device)
+        self.decoder_bias = nn.Parameter(torch.zeros(rep_dim, device=device))
         self.decoder.weight.data = self.encoder.weight.data.T.clone()
         unit_norm_decoder_columns(self)
 
