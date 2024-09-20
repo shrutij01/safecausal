@@ -357,6 +357,9 @@ def train(
                     concept_indicator_ones_indices = (
                         concept_indicators > indicator_threshold
                     )
+                    import ipdb
+
+                    ipdb.set_trace()
                     concept_indicator_ones = (
                         concept_indicators > indicator_threshold
                     ).astype(int)
