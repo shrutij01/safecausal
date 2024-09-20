@@ -64,9 +64,9 @@ def generate_overlapping_block_binary_vectors(
     for _ in range(num_tuples):
         result, delta_c = sample_and_sum_vectors(binary_vectors, travellers_N)
         row = {
-            "Tx": lin_ent_tf @ result,
-            "x": result,
-            "delta_C": delta_c,
+            "Tx": (lin_ent_tf @ result).tolist(),
+            "x": result.tolist(),
+            "delta_C": delta_c.tolist(),
         }
         data.append(row)
     df = pd.DataFrame(data, columns=column_names)
@@ -96,7 +96,11 @@ def generate_distinct_block_binary_vectors(
             start_idx = block_index * travellers_N
             end_idx = start_idx + travellers_N
             vector[start_idx:end_idx] = 1
-        row = {"Tx": lin_ent_tf @ vector, "x": vector, "delta_C": vector}
+        row = {
+            "Tx": (lin_ent_tf @ vector).tolist(),
+            "x": vector.tolist(),
+            "delta_C": vector.tolist(),
+        }
         data.append(row)
     df = pd.DataFrame(data, columns=column_names)
     global_C = np.zeros((total_length, travellers_K))
@@ -123,9 +127,9 @@ def generate_binary_vectors(travellers_K, num_tuples):
         vectors[i, indices] = 1
         transformed_vector = np.dot(vectors[i], lin_ent_tf.T)
         row = {
-            "Tx": transformed_vector,
-            "x": vectors[i],
-            "delta_C": vectors[i],
+            "Tx": transformed_vector.tolist(),
+            "x": vectors[i].tolist(),
+            "delta_C": vectors[i].tolist(),
         }
         data.append(row)
 
