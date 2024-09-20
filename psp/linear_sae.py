@@ -358,7 +358,7 @@ def train(
                         concept_indicators > indicator_threshold
                     )
                     concept_indicator_ones = (
-                        concept_indicators > torch.threshold
+                        concept_indicators > indicator_threshold
                     ).astype(int)
                     global_C_hat = sae_model.decoder.weight.data
                     sigma_c_hat = global_C_hat @ concept_indicator_ones
