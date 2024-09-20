@@ -261,9 +261,6 @@ def load_training_data(
             np.asarray((df_eval["x"].tolist())),
             device,
         )
-        import ipdb
-
-        ipdb.set_trace()
         delta_c_train = tensorify(
             np.asarray((df_train["delta_C"].tolist())),
             device,
