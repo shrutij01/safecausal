@@ -364,9 +364,9 @@ def train(
                     sigma_c_hat = global_C_hat @ concept_indicator_ones.T
                     delta_c_hat = []
                     for i in range(concept_indicator_ones_indices.shape[0]):
-                        delta_c_hat = global_C_hat[
-                            :, concept_indicator_ones_indices[i]
-                        ]
+                        delta_c_hat.append(
+                            global_C_hat[:, concept_indicator_ones_indices[i]]
+                        )
                     import ipdb
 
                     ipdb.set_trace()
