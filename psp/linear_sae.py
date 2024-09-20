@@ -234,9 +234,7 @@ def load_training_data(
 
         for column in df_train[cfc_columns]:
             df_train[column] = df_train[column].apply(convert_to_list_of_ints)
-        import ipdb
 
-        ipdb.set_trace()
         delta_z_train = tensorify(
             np.asarray((df_train["Tx"].tolist())),
             device,
@@ -323,6 +321,9 @@ def train(
     for epoch in range(int(num_epochs)):
         epoch_loss = 0.0
         sparsity_penalty_total = 0.0
+        import ipdb
+
+        ipdb.set_trace()
         for delta_z_list, _, _ in train_loader:
             assert len(delta_z_list) == 1
             delta_z = delta_z_list[0]
