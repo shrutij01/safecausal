@@ -82,7 +82,3 @@ for path in "${paths[@]}"; do
         done
     done
 done
-
-
-
-python check_wd.py /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/2024-08-22_23-37-25/13522024-08-29_13-44-02 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/13512024-08-29_13-44-02 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/2024-08-22_23-37-25/13502024-08-29_13-44-02 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/2024-08-22_23-37-25/000113502024-08-28_23-58-56 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/2024-08-22_23-37-25/000113512024-08-28_23-58-55 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/000113522024-08-29_00-14-39 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/30022024-08-29_13-44-02 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/30012024-08-29_13-44-11 /network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25/30002024-08-29_13-44-09
