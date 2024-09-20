@@ -437,9 +437,9 @@ def mean_corr_coef_np(x, y, method="pearson"):
     else:
         raise ValueError("not a valid method: {}".format(method))
     cc = np.abs(cc)
-    import ipdb
+    # import ipdb
 
-    ipdb.set_trace()
+    # ipdb.set_trace()
     score = cc[linear_sum_assignment(-1 * cc)].mean()
     return score
 
