@@ -64,9 +64,9 @@ def generate_overlapping_block_binary_vectors(
     for _ in range(num_tuples):
         result, delta_c = sample_and_sum_vectors(binary_vectors, travellers_N)
         row = {
-            "Tx": (lin_ent_tf @ result).tolist(),
-            "x": result.tolist(),
-            "delta_C": delta_c.tolist(),
+            "Tx": (lin_ent_tf @ np.array(result)).tolist(),
+            "x": result,
+            "delta_C": delta_c,
         }
         data.append(row)
     df = pd.DataFrame(data, columns=column_names)
