@@ -362,15 +362,15 @@ def train(
                     ).float()
                     global_C_hat = sae_model.decoder.weight.data
                     sigma_c_hat = global_C_hat @ concept_indicator_ones.T
+                    delta_c_hat = []
+                    for i in range(concept_indicator_ones_indices.shape[0]):
+                        delta_c_hat = global_C_hat[
+                            :, concept_indicator_ones_indices[i]
+                        ]
                     import ipdb
 
                     ipdb.set_trace()
-                    global_C_hat_batched = global_C_hat.repeat(
-                        concept_indicator_ones_indices.shape[0], 1
-                    )
-                    delta_c_hat = global_C_hat_batched[
-                        :, concept_indicator_ones_indices
-                    ]
+                    delta_c_hat = tensorify(np.array(delta_c_hat), device)
                     max_cols = max(delta_c_hat.shape[1], delta_c.shape[1])
 
                     def pad_matrix(matrix, target_cols):
