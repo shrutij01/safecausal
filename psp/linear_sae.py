@@ -394,13 +394,13 @@ def train(
                     #     delta_c = pad_matrix(delta_c, max_cols)
 
                     # todo eval of delta_c per sample
-                    mcc_sigma_c = mean_corr_coef(
-                        numpify(sigma_c), numpify(sigma_c_hat)
-                    )
-                    # mcc_delta_c = mean_corr_coef(delta_c, delta_c_hat)
-                    mcc_global_C = mean_corr_coef(
-                        global_C, numpify(global_C_hat)
-                    )
+                    # mcc_sigma_c = mean_corr_coef(
+                    #     numpify(sigma_c), numpify(sigma_c_hat)
+                    # )
+                    # # mcc_delta_c = mean_corr_coef(delta_c, delta_c_hat)
+                    # mcc_global_C = mean_corr_coef(
+                    #     global_C, numpify(global_C_hat)
+                    # )
                     eval_loss = cmp_model.compute_loss(delta_z, delta_z_hat)
                     logger.logkv("mcc_sigma_c", mcc_sigma_c)
                     # logger.logkv("mcc_delta_c", mcc_delta_c)
