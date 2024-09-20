@@ -1,7 +1,6 @@
 import torch
 
 from datasets import load_dataset as hf_load_dataset
-from psp.linear_sae import layer_normalise
 
 from data import ana
 
