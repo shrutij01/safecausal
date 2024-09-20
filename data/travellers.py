@@ -158,7 +158,9 @@ def main(args):
             args.num_tuples, args.travellers_K, args.travellers_N
         )
         rep_dim = args.travellers_N
-        num_concepts = math.comb(args.travellers_N, args.travellers_K)
+        # num_concepts = math.comb(args.travellers_N, args.travellers_K)
+        # below to keep it analogous to lang model expts
+        num_concepts = args.travellers_K
     else:
         raise ValueError
 
