@@ -362,7 +362,7 @@ def train(
                     ipdb.set_trace()
                     concept_indicator_ones = (
                         concept_indicators > indicator_threshold
-                    ).astype(int)
+                    ).int()
                     global_C_hat = sae_model.decoder.weight.data
                     sigma_c_hat = global_C_hat @ concept_indicator_ones
                     delta_c_hat = global_C_hat[
