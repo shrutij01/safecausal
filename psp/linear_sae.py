@@ -321,9 +321,6 @@ def train(
     for epoch in range(int(num_epochs)):
         epoch_loss = 0.0
         sparsity_penalty_total = 0.0
-        import ipdb
-
-        ipdb.set_trace()
         for delta_z, _, _ in train_loader:
             # this makes bn use batch statistics while training, doesn't have any
             # effect for gn or ln
