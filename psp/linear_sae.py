@@ -234,65 +234,31 @@ def load_training_data(
 
         for column in df_train[cfc_columns]:
             df_train[column] = df_train[column].apply(convert_to_list_of_ints)
+        import ipdb
 
+        ipdb.set_trace()
         delta_z_train = tensorify(
-            np.asarray(
-                (
-                    df_train[cfc_columns[cfc_columns.index("Tx")]]
-                    .apply(lambda row: sum(row, []), axis=1)
-                    .tolist()
-                )
-            ),
+            np.asarray((df_train["Tx"].tolist())),
             device,
         )
         delta_z_eval = tensorify(
-            np.asarray(
-                (
-                    df_eval[cfc_columns[cfc_columns.index("Tx")]]
-                    .apply(lambda row: sum(row, []), axis=1)
-                    .tolist()
-                )
-            ),
+            np.asarray((df_eval["Tx"].tolist())),
             device,
         )
         sigma_c_train = tensorify(
-            np.asarray(
-                (
-                    df_train[cfc_columns[cfc_columns.index("x")]]
-                    .apply(lambda row: sum(row, []), axis=1)
-                    .tolist()
-                )
-            ),
+            np.asarray((df_train["x"].tolist())),
             device,
         )
         sigma_c_eval = tensorify(
-            np.asarray(
-                (
-                    df_eval[cfc_columns[cfc_columns.index("x")]]
-                    .apply(lambda row: sum(row, []), axis=1)
-                    .tolist()
-                )
-            ),
+            np.asarray((df_eval["x"].tolist())),
             device,
         )
         delta_c_train = tensorify(
-            np.asarray(
-                (
-                    df_train[cfc_columns[cfc_columns.index("delta_C")]]
-                    .apply(lambda row: sum(row, []), axis=1)
-                    .tolist()
-                )
-            ),
+            np.asarray((df_train["delta_C"].tolist())),
             device,
         )
         delta_c_eval = tensorify(
-            np.asarray(
-                (
-                    df_eval[cfc_columns[cfc_columns.index("delta_C")]]
-                    .apply(lambda row: sum(row, []), axis=1)
-                    .tolist()
-                )
-            ),
+            np.asarray((df_eval["delta_C"].tolist())),
             device,
         )
     else:
