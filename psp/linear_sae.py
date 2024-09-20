@@ -463,7 +463,7 @@ if __name__ == "__main__":
     parser.add_argument("--primal-lr", type=float, default=0.0001)
     parser.add_argument("--dual-lr", type=float, default=0.00005)
     parser.add_argument("--alpha", type=float, default=float(0.0001))
-    parser.add_argument("--indicator-threshold", type=float, default=0.01)
+    parser.add_argument("--indicator-threshold", type=float, default=0.75)
     parser.add_argument("--num-concepts", type=int, default=3)
     parser.add_argument(
         "--norm-type", default="bn", choices=["ln", "gn", "bn"]
