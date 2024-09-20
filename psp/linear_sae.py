@@ -235,7 +235,12 @@ def load_training_data(
         def convert_to_list_of_ints(value):
             if isinstance(value, str):
                 value = ast.literal_eval(value)
-            return [int(x) for x in value]
+            if isinstance(value, list):
+                # If the sublist is also a list, convert each element in the sublist
+                return [convert_to_list_of_ints(subitem) for subitem in value]
+            else:
+                # If the item is not a list (i.e., it's a single element), convert it to int
+                return int(value)
 
         for column in df_train[cfc_columns]:
             df_train[column] = df_train[column].apply(convert_to_list_of_ints)
