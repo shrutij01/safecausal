@@ -76,8 +76,6 @@ class LinearSAE(nn.Module):
     def preprocess(
         self, delta_z: torch.Tensor
     ) -> tuple[torch.Tensor, dict[str, Any]]:
-        if not self.normalize:
-            return delta_z, dict()
         delta_z, mu, std = layer_normalise(delta_z)
         return delta_z, dict(mu=mu, std=std)
 
