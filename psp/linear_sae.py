@@ -362,6 +362,9 @@ def train(
                     ).float()
                     global_C_hat = sae_model.decoder.weight.data
                     sigma_c_hat = global_C_hat @ concept_indicator_ones.T
+                    import ipdb
+
+                    ipdb.set_trace()
                     delta_c_hat = global_C_hat[
                         :, concept_indicator_ones_indices
                     ]
