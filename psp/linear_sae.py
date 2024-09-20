@@ -389,7 +389,9 @@ def train(
                     #     delta_c = pad_matrix(delta_c, max_cols)
 
                     # todo eval of delta_c per sample
-                    mcc_sigma_c = mean_corr_coef(sigma_c, sigma_c_hat)
+                    mcc_sigma_c = mean_corr_coef(
+                        numpify(sigma_c), numpify(sigma_c_hat)
+                    )
                     # mcc_delta_c = mean_corr_coef(delta_c, delta_c_hat)
                     mcc_global_C = mean_corr_coef(
                         global_C, numpify(global_C_hat)
@@ -464,7 +466,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("datadir")
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--num-epochs", type=int, default=1100)
+    parser.add_argument("--num-epochs", type=int, default=700)
     parser.add_argument("--primal-lr", type=float, default=0.0001)
     parser.add_argument("--dual-lr", type=float, default=0.00005)
     parser.add_argument("--alpha", type=float, default=float(0.0001))
