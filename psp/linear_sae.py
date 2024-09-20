@@ -415,7 +415,7 @@ def main(args):
         "dataset": args.datadir,
         "alpha": args.alpha,
         "primal_lr": args.primal_lr,
-        "dual_lr": args.dual_lr,
+        "dual_lr": args.primal_lr / 2,
         "norm_type": args.norm_type,
         "batch_size": args.batch_size,
         "num_epochs": args.num_epochs,
@@ -441,8 +441,9 @@ def main(args):
     primal_optimizer = cooper.optim.ExtraAdam(
         list(sae_model.parameters()), lr=args.primal_lr
     )
+    dual_lr = args.primal_lr / 2
     dual_optimizer = cooper.optim.partial_optimizer(
-        cooper.optim.ExtraAdam, lr=args.dual_lr
+        cooper.optim.ExtraAdam, lr=dual_lr
     )
 
     # Setup the constrained optimizer using Cooper's Lagrangian formulation
@@ -474,6 +475,8 @@ if __name__ == "__main__":
     parser.add_argument("--num-epochs", type=int, default=700)
     parser.add_argument("--primal-lr", type=float, default=0.0001)
     parser.add_argument("--dual-lr", type=float, default=0.00005)
+    # leaving this here for now but changing it to primal_lr/2 in th code
+    # following the partial observability paper and repo
     parser.add_argument("--alpha", type=float, default=float(0.0001))
     parser.add_argument("--indicator-threshold", type=float, default=0.1)
     # indicator threshold needs to be decently low so that the concept_indicators
