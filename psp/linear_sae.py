@@ -199,22 +199,19 @@ class Logger:
 def load_training_data(
     args,
 ) -> tuple[DataLoader, DataLoader, np.ndarray, int, int]:
-    config_file = os.path.join(args.datadir, "data_config.yaml")
-    with open(config_file, "r") as file:
+    with open(args.data_config_file, "r") as file:
         config = Box(yaml.safe_load(file))
     delta_z_train = None
     delta_z_eval = None
     rep_dim = config.rep_dim
     num_concepts = config.num_concepts
-    if config.dataset_name == "lang":
-        embeddings_file = os.path.join(args.datadir, "embeddings.h5")
-        with h5py.File(embeddings_file, "r") as f:
-            cfc1_train = np.array(f["cfc1_train"]).squeeze()
-            cfc2_train = np.array(f["cfc2_train"]).squeeze()
-            cfc1_eval = np.array(f["cfc1_eval"]).squeeze()
-            cfc2_eval = np.array(f["cfc2_eval"]).squeeze()
+    if config.dataset_name == "binary_1":
+        with h5py.File(args.embeddings_file, "r") as f:
+            cfc_train = np.array(f["cfc_train"]).squeeze()
+        import ipdb
 
-        delta_z_train = tensorify(cfc2_train - cfc1_train, device)
+        ipdb.set_trace()
+        delta_z_train = tensorify(cfc_train[:] - cfc1_train, device)
         delta_z_eval = tensorify(cfc2_eval - cfc1_eval, device)
 
     elif config.dataset_name in ["synth1", "synth2", "synth3"]:
@@ -468,7 +465,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("datadir")
+    parser.add_argument("--embeddings_file")
+    parser.add_argument("--data_config_file")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-epochs", type=int, default=700)
     parser.add_argument("--primal-lr", type=float, default=0.0001)
