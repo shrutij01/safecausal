@@ -21,8 +21,8 @@ def get_last_token_embedding(tokens, model, layer):
     with torch.no_grad():
         last_hidden_states = model(**tokens, output_hidden_states=True)[
             "hidden_states"
-        ][layer][-1]
-    return last_hidden_states.cpu().squeeze()
+        ][layer].squeeze()[-1]
+    return last_hidden_states.cpu()
 
 
 def extract_embeddings(
