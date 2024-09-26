@@ -407,7 +407,7 @@ def train(
 def main(args):
     config_dict = {
         "seed": args.seed,
-        "dataset": args.datadir,
+        "embeddings_file": args.embeddings_file,
         "alpha": args.alpha,
         "primal_lr": args.primal_lr,
         "dual_lr": args.primal_lr / 2,
