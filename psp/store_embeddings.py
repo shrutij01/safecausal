@@ -14,17 +14,12 @@ ACCESS_TOKEN = "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"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def get_weighted_mean_embedding(tokens, model):
+def get_last_token_embedding(tokens, model, layer):
     with torch.no_grad():
         last_hidden_states = model(**tokens, output_hidden_states=True)[
             "hidden_states"
-        ][-1]
-    sequence_length = last_hidden_states.shape[1]
-    weights = torch.linspace(1, sequence_length, steps=sequence_length)
-    weights = weights / weights.sum()
-    weights = weights.view(1, -1, 1)
-    weighted_mean = (last_hidden_states.cpu() * weights).sum(dim=1)
-    return weighted_mean
+        ][layer][-1]
+    return last_hidden_states.cpu()
 
 
 def extract_embeddings(
@@ -37,7 +32,7 @@ def extract_embeddings(
         tokens = tokenizer(context, return_tensors="pt").to(device)
         with torch.no_grad():
             embeddings.append(
-                get_weighted_mean_embedding(tokens, model).cpu().squeeze()
+                get_last_token_embedding(tokens, model).cpu().squeeze()
             )
         del tokens
     return embeddings
@@ -52,18 +47,15 @@ def store_embeddings(filename, cfc1_train, cfc2_train, cfc1_test, cfc2_test):
 
 
 def main(args):
-    cfc1_tuples, cfc2_tuples, instruction = utils.load_dataset(
+    cfc_tuples, instruction = utils.load_dataset(
         dataset_name=args.dataset_name,
-        task_type=args.task_type,
-        d_type="str",
-        n=args.dataset_length,
-        string_length=args.string_length,
-        cycle_distance=args.cycle_distance,
         file_path=args.gradeschooler_file_path,
     )
-    split = int(0.9 * len(cfc1_tuples))
-    cfc1_train, cfc1_test = cfc1_tuples[0:split], cfc1_tuples[split:]
-    cfc2_train, cfc2_test = cfc2_tuples[0:split], cfc2_tuples[split:]
+    split = int(0.9 * len(cfc_tuples))
+    cfc_train, cfc_test = cfc_tuples[0:split], cfc_tuples[split:]
+    import ipdb
+
+    ipdb.set_trace()
     if args.append_instruction:
         cfc1_train = utils.append_instruction(cfc1_train, instruction)
         cfc1_test = utils.append_instruction(cfc1_test, instruction)
@@ -162,19 +154,16 @@ def store_eval_embeddings(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--gradeschooler-file-path",
+        "--text-file-path",
     )
     parser.add_argument("--eval", default=False)
     parser.add_argument(
         "--dataset_name",
-        choices=["ana", "gradeschooler", "truthful_qa"],
-        default="gradeschooler",
+        choices=["binary_1", "truthful_qa"],
+        default="binary_1",
     )
     parser.add_argument(
         "--model_id", default="meta-llama/Meta-Llama-3.1-8B-Instruct"
-    )
-    parser.add_argument(
-        "--task-type", default="swap", choices=["swap", "cycle"]
     )
     parser.add_argument(
         "--dataset-length",
@@ -184,8 +173,6 @@ if __name__ == "__main__":
         "--embedding_dir",
         default="/network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25",
     )
-    parser.add_argument("--string-length", default=3)
-    parser.add_argument("--cycle-distance", default=1)
     parser.add_argument("--append-instruction", default=False)
 
     args = parser.parse_args()
