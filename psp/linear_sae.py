@@ -241,8 +241,6 @@ def save(args, sae_model, config_dict, modeldir):
 
 def train(
     train_loader,
-    eval_loader,
-    global_C,
     sae_model,
     cmp_model,
     coop_optimizer,
@@ -277,56 +275,56 @@ def train(
         logger.logkv("total_loss", epoch_loss)
         logger.logkv("sparsity_penalty", sparsity_penalty_total)
         print(epoch, epoch_loss)
-        if epoch % 2 == 0:
-            sae_model.eval()
-            with torch.no_grad():
-                for delta_z, sigma_c, delta_c in eval_loader:
-                    delta_z_hat, concept_indicators = sae_model(delta_z)
-                    concept_indicator_ones_indices = (
-                        concept_indicators > indicator_threshold
-                    )
-                    concept_indicator_ones = (
-                        concept_indicators > indicator_threshold
-                    ).float()
-                    global_C_hat = sae_model.decoder.weight.data
-                    sigma_c_hat = concept_indicator_ones @ global_C_hat.T
-                    # delta_c_hat = []
-                    # for i in range(concept_indicator_ones_indices.shape[0]):
-                    #     delta_c_hat.append(
-                    #         global_C_hat[:, concept_indicator_ones_indices[i]]
-                    #     )
-                    # import ipdb
+        # if epoch % 2 == 0:
+        #     sae_model.eval()
+        #     with torch.no_grad():
+        #         for delta_z, sigma_c, delta_c in eval_loader:
+        #             delta_z_hat, concept_indicators = sae_model(delta_z)
+        #             concept_indicator_ones_indices = (
+        #                 concept_indicators > indicator_threshold
+        #             )
+        #             concept_indicator_ones = (
+        #                 concept_indicators > indicator_threshold
+        #             ).float()
+        #             global_C_hat = sae_model.decoder.weight.data
+        #             sigma_c_hat = concept_indicator_ones @ global_C_hat.T
+        #             # delta_c_hat = []
+        #             # for i in range(concept_indicator_ones_indices.shape[0]):
+        #             #     delta_c_hat.append(
+        #             #         global_C_hat[:, concept_indicator_ones_indices[i]]
+        #             #     )
+        #             # import ipdb
 
-                    # ipdb.set_trace()
-                    # delta_c_hat = torch.stack(delta_c_hat, dim=0)
-                    # max_cols = max(delta_c_hat.shape[1], delta_c.shape[1])
+        #             # ipdb.set_trace()
+        #             # delta_c_hat = torch.stack(delta_c_hat, dim=0)
+        #             # max_cols = max(delta_c_hat.shape[1], delta_c.shape[1])
 
-                    # def pad_matrix(matrix, target_cols):
-                    #     pad_cols = target_cols - matrix.shape[1]
-                    #     padded_matrix = np.pad(
-                    #         matrix,
-                    #         ((0, 0), (0, pad_cols)),
-                    #         "constant",
-                    #         constant_values=0,
-                    #     )
-                    #     return padded_matrix
+        #             # def pad_matrix(matrix, target_cols):
+        #             #     pad_cols = target_cols - matrix.shape[1]
+        #             #     padded_matrix = np.pad(
+        #             #         matrix,
+        #             #         ((0, 0), (0, pad_cols)),
+        #             #         "constant",
+        #             #         constant_values=0,
+        #             #     )
+        #             #     return padded_matrix
 
-                    # if delta_c_hat.shape[1] < delta_c.shape[1]:
-                    #     delta_c_hat = pad_matrix(delta_c_hat, max_cols)
-                    # elif delta_c.shape[1] < delta_c_hat.shape[1]:
-                    #     delta_c = pad_matrix(delta_c, max_cols)
+        #             # if delta_c_hat.shape[1] < delta_c.shape[1]:
+        #             #     delta_c_hat = pad_matrix(delta_c_hat, max_cols)
+        #             # elif delta_c.shape[1] < delta_c_hat.shape[1]:
+        #             #     delta_c = pad_matrix(delta_c, max_cols)
 
-                    # todo eval of delta_c per sample
-                    # mcc_sigma_c = mean_corr_coef(
-                    #     numpify(sigma_c), numpify(sigma_c_hat)
-                    # )
-                    # # mcc_delta_c = mean_corr_coef(delta_c, delta_c_hat)
-                    # mcc_global_C = mean_corr_coef(
-                    #     global_C, numpify(global_C_hat)
-                    # )
-                    eval_loss = cmp_model.compute_loss(delta_z, delta_z_hat)
-                    # logger.logkv("mcc_sigma_c", mcc_ssglobal_C)
-                    logger.logkv("eval_loss", eval_loss)
+        #             # todo eval of delta_c per sample
+        #             # mcc_sigma_c = mean_corr_coef(
+        #             #     numpify(sigma_c), numpify(sigma_c_hat)
+        #             # )
+        #             # # mcc_delta_c = mean_corr_coef(delta_c, delta_c_hat)
+        #             # mcc_global_C = mean_corr_coef(
+        #             #     global_C, numpify(global_C_hat)
+        #             # )
+        #             eval_loss = cmp_model.compute_loss(delta_z, delta_z_hat)
+        #             # logger.logkv("mcc_sigma_c", mcc_ssglobal_C)
+        #             logger.logkv("eval_loss", eval_loss)
         logger.dumpkvs()
 
 
@@ -375,8 +373,6 @@ def main(args):
 
     train(
         train_loader=train_loader,
-        eval_loader=eval_loader,
-        global_C=global_C,
         sae_model=sae_model,
         cmp_model=cmp_model,
         coop_optimizer=coop_optimizer,
