@@ -49,7 +49,6 @@ def store_embeddings(filename, cfc1_train, cfc2_train, cfc1_test, cfc2_test):
 def main(args):
     cfc_tuples, instruction = utils.load_dataset(
         dataset_name=args.dataset_name,
-        file_path=args.gradeschooler_file_path,
     )
     split = int(0.9 * len(cfc_tuples))
     cfc_train, cfc_test = cfc_tuples[0:split], cfc_tuples[split:]
@@ -155,7 +154,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--eval", default=False)
     parser.add_argument(
-        "--dataset_name",
+        "--dataset-name",
         choices=["binary_1", "truthful_qa"],
         default="binary_1",
     )
@@ -164,7 +163,7 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--dataset-length",
-        default=10000,
+        default=100000,
     )
     parser.add_argument(
         "--embedding_dir",
