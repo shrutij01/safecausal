@@ -119,7 +119,7 @@ def main(args):
     }
     config_path = os.path.join(
         directory_name,
-        str(args.dataset_name) + str(args.llm_layer) + "_config.yaml",
+        str(args.dataset_name) + "_" + str(args.llm_layer) + "_config.yaml",
     )
     with open(config_path, "w") as file:
         yaml.dump(config, file)
