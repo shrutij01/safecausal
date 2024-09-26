@@ -205,7 +205,7 @@ def load_training_data(
     delta_z_eval = None
     rep_dim = config.rep_dim
     num_concepts = config.num_concepts
-    if config.dataset_name == "binary_1":
+    if config.dataset == "binary_1":
         with h5py.File(args.embeddings_file, "r") as f:
             cfc_train = np.array(f["cfc_train"]).squeeze()
         import ipdb
