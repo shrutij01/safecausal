@@ -252,6 +252,9 @@ def train(
         epoch_loss = 0.0
         sparsity_penalty_total = 0.0
         for delta_z in train_loader:
+            import ipdb
+
+            ipdb.set_trace()
             # this makes bn use batch statistics while training, doesn't have any
             # effect for gn or ln
             sae_model.train()
