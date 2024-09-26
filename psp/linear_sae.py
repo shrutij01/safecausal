@@ -251,7 +251,8 @@ def train(
     for epoch in range(int(num_epochs)):
         epoch_loss = 0.0
         sparsity_penalty_total = 0.0
-        for delta_z in train_loader:
+        for delta_z_list in train_loader:
+            delta_z = delta_z_list[0]
             import ipdb
 
             ipdb.set_trace()
