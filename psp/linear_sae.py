@@ -211,8 +211,7 @@ def load_training_data(
         import ipdb
 
         ipdb.set_trace()
-        delta_z_train = tensorify(cfc_train[:] - cfc1_train, device)
-        delta_z_eval = tensorify(cfc2_eval - cfc1_eval, device)
+        delta_z_train = tensorify(cfc_train[i][1] - cfc_train[i][0], device)
 
     elif config.dataset_name in ["synth1", "synth2", "synth3"]:
         df_file = os.path.join(
@@ -465,8 +464,8 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--embeddings_file")
-    parser.add_argument("--data_config_file")
+    parser.add_argument("--embeddings-file")
+    parser.add_argument("--data-config-file")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-epochs", type=int, default=700)
     parser.add_argument("--primal-lr", type=float, default=0.0001)
