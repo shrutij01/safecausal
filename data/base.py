@@ -101,8 +101,6 @@ eng_french_common_objects = [
     ("Fan", "Ventilateur"),
 ]
 
-french_eng_common_objects = 
-
 CATEGORICALCODEBOOK = {
     "object": [
         "Sofa",
