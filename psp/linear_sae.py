@@ -378,7 +378,6 @@ def main(args):
         formulation=formulation,
         logger=logger,
         num_epochs=args.num_epochs,
-        indicator_threshold=args.indicator_threshold,
     )
 
 
