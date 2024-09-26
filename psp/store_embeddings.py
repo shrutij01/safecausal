@@ -22,7 +22,7 @@ def get_last_token_embedding(tokens, model, layer):
         last_hidden_states = model(**tokens, output_hidden_states=True)[
             "hidden_states"
         ][layer][-1]
-    return last_hidden_states.cpu()
+    return last_hidden_states.cpu().squeeze()
 
 
 def extract_embeddings(
@@ -36,14 +36,13 @@ def extract_embeddings(
         tokens_x = tokenizer(context[0], return_tensors="pt").to(device)
         tokens_tilde_x = tokenizer(context[0], return_tensors="pt").to(device)
         with torch.no_grad():
+            import ipdb
+
+            ipdb.set_trace()
             embeddings.append(
                 [
-                    get_last_token_embedding(tokens_x, model, layer)
-                    .cpu()
-                    .squeeze(),
-                    get_last_token_embedding(tokens_tilde_x, model, layer)
-                    .cpu()
-                    .squeeze(),
+                    get_last_token_embedding(tokens_x, model, layer),
+                    get_last_token_embedding(tokens_tilde_x, model, layer),
                 ]
             )
         del tokens_x
@@ -78,9 +77,6 @@ def main(args):
         # attn_implementation="flash_attention_2",
         # torch_dtype=torch.bfloat16,  # check compatibility
     )
-    import ipdb
-
-    ipdb.set_trace()
     cfc_train_embeddings = extract_embeddings(
         cfc_train,
         model,
