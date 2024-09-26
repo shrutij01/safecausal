@@ -42,9 +42,6 @@ def extract_embeddings(
                     get_last_token_embedding(tokens_tilde_x, model, layer),
                 ]
             )
-            import ipdb
-
-            ipdb.set_trace()
         del tokens_x
         del tokens_tilde_x
     return embeddings
@@ -83,15 +80,15 @@ def main(args):
         tokenizer,
         args.llm_layer,
     )
-    import ipdb
-
-    ipdb.set_trace()
     cfc_test_embeddings = extract_embeddings(
         cfc_test,
         model,
         tokenizer,
         args.llm_layer,
     )
+    import ipdb
+
+    ipdb.set_trace()
     directory_location = "/network/scratch/j/joshi.shruti/psp/"
     directory_name = os.path.join(
         directory_location, str(args.dataset_name), str(args.llm_layer)
