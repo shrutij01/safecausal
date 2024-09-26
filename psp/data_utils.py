@@ -23,27 +23,27 @@ def numpify(tensor):
 
 
 def load_dataset(dataset_name, **kwargs):
-    if dataset_name == "ana":
-        data = ana.generate_data(**kwargs)
-        instruction = "Swap the letters in this string."
-        cfc_tuples = data
-    elif dataset_name == "gradeschooler":
-        cfc_tuples = []
-        file_path = kwargs.get("file_path")
-        if file_path is None:
-            raise ValueError(
-                "file_path must be provided as a keyword argument"
-            )
-        with open(file_path, "r") as f:
-            context_pairs = [
-                line.strip().split("\t") for line in f if line.strip()
-            ]
-        for cp in context_pairs:
-            cfc_tuples.append(
-                (cp[0].split(",")[0], cp[0].split(",")[1].lstrip())
-            )
-        instruction = "Change any one, or two, or all three of the entities in the string, and mention how many and which you changed."
-    elif dataset_name == "truthful_qa":
+    # if dataset_name == "ana":
+    #     data = ana.generate_data(**kwargs)
+    #     instruction = "Swap the letters in this string."
+    #     cfc_tuples = data
+    # elif dataset_name == "gradeschooler":
+    #     cfc_tuples = []
+    #     file_path = kwargs.get("file_path")
+    #     if file_path is None:
+    #         raise ValueError(
+    #             "file_path must be provided as a keyword argument"
+    #         )
+    #     with open(file_path, "r") as f:
+    #         context_pairs = [
+    #             line.strip().split("\t") for line in f if line.strip()
+    #         ]
+    #     for cp in context_pairs:
+    #         cfc_tuples.append(
+    #             (cp[0].split(",")[0], cp[0].split(",")[1].lstrip())
+    #         )
+    #     instruction = "Change any one, or two, or all three of the entities in the string, and mention how many and which you changed."
+    if dataset_name == "truthful_qa":
         import ipdb
 
         ipdb.set_trace()
