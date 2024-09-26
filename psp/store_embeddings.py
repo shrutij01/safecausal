@@ -90,9 +90,7 @@ def main(args):
 
     ipdb.set_trace()
     directory_location = "/network/scratch/j/joshi.shruti/psp/"
-    directory_name = os.path.join(
-        directory_location, str(args.dataset_name), str(args.llm_layer)
-    )
+    directory_name = os.path.join(directory_location, str(args.dataset_name))
     if not os.path.exists(directory_name):
         os.makedirs(directory_name)
     embeddings_path = os.path.join(
@@ -116,7 +114,10 @@ def main(args):
         "llm_layer": args.llm_layer,
         "split": 0.9,
     }
-    config_path = os.path.join(directory_name, "config.yaml")
+    config_path = os.path.join(
+        directory_name,
+        str(args.dataset_name) + str(args.llm_layer) + "_config.yaml",
+    )
     with open(config_path, "w") as file:
         yaml.dump(config, file)
 
