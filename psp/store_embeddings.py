@@ -36,15 +36,15 @@ def extract_embeddings(
         tokens_x = tokenizer(context[0], return_tensors="pt").to(device)
         tokens_tilde_x = tokenizer(context[0], return_tensors="pt").to(device)
         with torch.no_grad():
-            import ipdb
-
-            ipdb.set_trace()
             embeddings.append(
                 [
                     get_last_token_embedding(tokens_x, model, layer),
                     get_last_token_embedding(tokens_tilde_x, model, layer),
                 ]
             )
+            import ipdb
+
+            ipdb.set_trace()
         del tokens_x
         del tokens_tilde_x
     return embeddings
