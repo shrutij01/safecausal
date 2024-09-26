@@ -253,9 +253,6 @@ def train(
         sparsity_penalty_total = 0.0
         for delta_z_list in train_loader:
             delta_z = delta_z_list[0]
-            import ipdb
-
-            ipdb.set_trace()
             # this makes bn use batch statistics while training, doesn't have any
             # effect for gn or ln
             sae_model.train()
@@ -344,7 +341,7 @@ def main(args):
         "indicator_threshold": args.indicator_threshold,
     }
     set_seeds(int(args.seed))
-    logger = Logger(project="psp", config=config_dict)
+    logger = Logger(project="iclrpsp", config=config_dict)
     train_loader, rep_dim, num_concepts = load_training_data(args)
     # Assuming the LinearSAE model and other parameters are already defined:
     sae_model = LinearSAE(
