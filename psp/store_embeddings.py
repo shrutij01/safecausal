@@ -35,7 +35,7 @@ def extract_embeddings(
     embeddings = []
     for context in tqdm(contexts):
         tokens_x = tokenizer(context[0], return_tensors="pt").to(device)
-        tokens_tilde_x = tokenizer(context[0], return_tensors="pt").to(device)
+        tokens_tilde_x = tokenizer(context[1], return_tensors="pt").to(device)
         with torch.no_grad():
             embeddings.append(
                 [
