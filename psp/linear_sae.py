@@ -247,12 +247,11 @@ def train(
     formulation,
     logger,
     num_epochs,
-    indicator_threshold,
 ):
     for epoch in range(int(num_epochs)):
         epoch_loss = 0.0
         sparsity_penalty_total = 0.0
-        for delta_z, _, _ in train_loader:
+        for delta_z in train_loader:
             # this makes bn use batch statistics while training, doesn't have any
             # effect for gn or ln
             sae_model.train()
