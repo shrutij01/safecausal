@@ -198,101 +198,28 @@ class Logger:
 
 def load_training_data(
     args,
-) -> tuple[DataLoader, DataLoader, np.ndarray, int, int]:
+) -> tuple[DataLoader, int, int]:
     with open(args.data_config_file, "r") as file:
         config = Box(yaml.safe_load(file))
     delta_z_train = None
-    delta_z_eval = None
     rep_dim = config.rep_dim
     num_concepts = config.num_concepts
     if config.dataset == "binary_1":
         with h5py.File(args.embeddings_file, "r") as f:
             cfc_train = np.array(f["cfc_train"]).squeeze()
-        import ipdb
-
-        ipdb.set_trace()
-        delta_z_train = tensorify(cfc_train[i][1] - cfc_train[i][0], device)
-
-    elif config.dataset_name in ["synth1", "synth2", "synth3"]:
-        df_file = os.path.join(
-            args.datadir,
-            str(config.dataset_name) + ".csv",
-        )
-        cfc_columns = config.cfc_column_names
-        converters = {col: ast.literal_eval for col in cfc_columns}
-        df = pd.read_csv(df_file, converters=converters)
-        df_train = df.iloc[0 : int(config.train_split * config.size)]
-        df_eval = df.iloc[
-            int(config.train_split * config.size) : int(
-                config.eval_split * config.size
-            )
-        ]
-
-        def convert_to_list_of_ints(value):
-            if isinstance(value, str):
-                value = ast.literal_eval(value)
-            if isinstance(value, list):
-                # If the sublist is also a list, convert each element in the sublist
-                return [convert_to_list_of_ints(subitem) for subitem in value]
-            else:
-                # If the item is not a list (i.e., it's a single element), convert it to int
-                return int(value)
-
-        for column in df_train[cfc_columns]:
-            df_train[column] = df_train[column].apply(convert_to_list_of_ints)
-
-        delta_z_train = tensorify(
-            np.asarray((df_train["Tx"].tolist())),
-            device,
-        )
-        delta_z_eval = tensorify(
-            np.asarray((df_eval["Tx"].tolist())),
-            device,
-        )
-        sigma_c_train = tensorify(
-            np.asarray((df_train["x"].tolist())),
-            device,
-        )
-        sigma_c_eval = tensorify(
-            np.asarray((df_eval["x"].tolist())),
-            device,
-        )
-        delta_c_train = tensorify(
-            np.asarray((df_train["delta_C"].tolist())),
-            device,
-        )
-        delta_c_eval = tensorify(
-            np.asarray((df_eval["delta_C"].tolist())),
-            device,
-        )
+        delta_z_train = tensorify(cfc_train[:, 1] - cfc_train[:, 0], device)
     else:
         raise NotImplementedError
     train_dataset = TensorDataset(
         delta_z_train,
-        sigma_c_train,
-        delta_c_train,
     )
-    eval_dataset = TensorDataset(
-        delta_z_eval,
-        sigma_c_eval,
-        delta_c_eval,
-    )
-
     train_loader = DataLoader(
         train_dataset,
         batch_size=int(args.batch_size),
         shuffle=True,
         num_workers=0,
     )
-    eval_loader = DataLoader(
-        eval_dataset,
-        batch_size=delta_z_eval.shape[0],
-        shuffle=True,
-        num_workers=0,
-    )
-    with open(config.pickle_path, "rb") as file:
-        global_C = pickle.load(file)
-    return train_loader, eval_loader, global_C, rep_dim, num_concepts
+    return train_loader, rep_dim, num_concepts
 
 
 def save(args, sae_model, config_dict, modeldir):
@@ -417,9 +344,7 @@ def main(args):
     }
     set_seeds(int(args.seed))
     logger = Logger(project="psp", config=config_dict)
-    train_loader, eval_loader, global_C, rep_dim, num_concepts = (
-        load_training_data(args)
-    )
+    train_loader, rep_dim, num_concepts = load_training_data(args)
     # Assuming the LinearSAE model and other parameters are already defined:
     sae_model = LinearSAE(
         rep_dim=rep_dim, num_concepts=num_concepts, norm_type=args.norm_type
