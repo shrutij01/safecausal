@@ -1,3 +1,4 @@
+from h5py._hl import dataset
 import torch
 import transformers
 
@@ -86,9 +87,6 @@ def main(args):
         tokenizer,
         args.llm_layer,
     )
-    import ipdb
-
-    ipdb.set_trace()
     directory_location = "/network/scratch/j/joshi.shruti/psp/"
     directory_name = os.path.join(directory_location, str(args.dataset_name))
     if not os.path.exists(directory_name):
@@ -105,11 +103,16 @@ def main(args):
         cfc_train_embeddings,
         cfc_test_embeddings,
     )
+    if args.dataset_name == "binary_1":
+        num_concepts = 1
+    else:
+        raise NotImplementedError
     config = {
         "dataset": args.dataset_name,
         "training_dataset_length": len(cfc_train_embeddings),
         "test_dataset_length": len(cfc_test_embeddings),
-        "embedding_size": cfc_train_embeddings[0][0].shape[0],
+        "rep_dim": cfc_train_embeddings[0][0].shape[0],
+        "num_concepts": num_concepts,
         "model": args.model_id,
         "llm_layer": args.llm_layer,
         "split": 0.9,
