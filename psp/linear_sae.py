@@ -226,14 +226,11 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
 def save(args, sae_model, config_dict):
     current_datetime = datetime.datetime.now()
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    import ipdb
-
-    ipdb.set_trace()
     modeldir = os.path.join(
         os.path.dirname(args.embeddings_file),
         str(args.alpha)
         + "_"
-        + str(config_dict.llm_layer)
+        + str(config_dict["llm_layer"])
         + "_"
         + str(args.seed),
     )
