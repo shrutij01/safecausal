@@ -89,8 +89,16 @@ def main(args):
             # cosines_neta.append(
             #     1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
             # )
-            cosines_md.append(cosine_similarity(tilde_z[i], z_md[i]))
-            cosines_neta.append(cosine_similarity(tilde_z[i], z_neta[i]))
+            cosines_md.append(
+                cosine_similarity(
+                    tilde_z[i].reshape(-1, 1), z_md[i].reshape(-1, 1)
+                )
+            )
+            cosines_neta.append(
+                cosine_similarity(
+                    tilde_z[i].reshape(-1, 1), z_neta[i].reshape(-1, 1)
+                )
+            )
         plt.figure(figsize=(10, 6))
 
         sns.kdeplot(
@@ -146,7 +154,11 @@ def main(args):
             # cosines_neta.append(
             #     1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
             # )
-            cosines_neta.append(cosine_similarity(tilde_z[i], z_neta[i]))
+            cosines_neta.append(
+                cosine_similarity(
+                    tilde_z[i].reshape(-1, 1), z_neta[i].reshape(-1, 1)
+                )
+            )
         plt.figure(figsize=(10, 6))
         sns.kdeplot(
             cosines_neta,
