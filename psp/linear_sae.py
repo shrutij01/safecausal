@@ -158,7 +158,11 @@ class ConstrainedLinearSAE(cooper.ConstrainedMinimizationProblem):
         self.num_concepts = num_concepts
 
     def compute_loss(self, delta_z, delt_z_hat):
-        return self.criterion(delta_z, delt_z_hat)
+        return (
+            ((delt_z_hat - delta_z) ** 2).mean(dim=1)
+            / (delta_z**2).mean(dim=1)
+        ).mean()
+        # return self.criterion(delta_z, delt_z_hat)
 
     def closure(self, delta_z):
         """
@@ -170,9 +174,6 @@ class ConstrainedLinearSAE(cooper.ConstrainedMinimizationProblem):
 
         self.loss = self.compute_loss(delta_z, delta_z_hat)
         # Compute the sparsity constraint as an inequality defect
-        import ipdb
-
-        ipdb.set_trace()
         self.ineq_defect = (
             torch.sum(torch.abs(concept_indicators))
             / self.batch_size
