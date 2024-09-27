@@ -30,6 +30,7 @@ def load_model(modeldir, dataconfig):
     model.load_state_dict(
         torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
     )
+    model.eval()
     return model, utils.numpify(model.decoder.weight.data), modelconfig.seed
 
 
@@ -66,6 +67,10 @@ def main(args):
                 ),
             )
         print("mccs: ", mccs)
+        concept_projections = models[0](tilde_z - z)
+        import ipdb
+
+        ipdb.set_trace()
         z_md = z + md
         z_neta = z + wds[0].squeeze()
         cosines_md, cosines_neta = [], []
