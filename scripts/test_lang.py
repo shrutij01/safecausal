@@ -73,18 +73,22 @@ def main(args):
         ipdb.set_trace()
         z_md = z + md
         z_neta = z + wds[0].squeeze()
-        cosine_md = 1 - spatial.distance.cosine(tilde_z, z_md)
-        cosine_neta = 1 - spatial.distance.cosine(tilde_z, z_neta)
+        cosines_md, cosines_neta = [], []
+        for i in range(tilde_z.shape[0]):
+            cosines_md.append(1 - spatial.distance.cosine(tilde_z[i], z_md))
+            cosines_neta.append(
+                1 - spatial.distance.cosine(tilde_z[i], z_neta)
+            )
         ipdb.set_trace()
         plt.figure(figsize=(10, 6))
 
         sns.kdeplot(
-            cosine_md,
+            cosines_md,
             label="Cosine Similarity with MD",
             shade=True,
         )
         sns.kdeplot(
-            cosine_neta,
+            cosines_neta,
             label="Cosine Similarity with neta",
             shade=True,
         )
