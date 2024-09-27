@@ -103,7 +103,7 @@ def main(args):
         cfc_train_embeddings,
         cfc_test_embeddings,
     )
-    if args.dataset_name == "binary_1":
+    if args.dataset_name == "binary_1" or args.dataset_name == "binary_1_2":
         num_concepts = 1
     elif args.dataset_name == "binary_2":
         num_concepts = 2
