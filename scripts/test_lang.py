@@ -73,6 +73,8 @@ def main(args):
             cosines_neta.append(
                 1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
             )
+        import ipdb
+
         ipdb.set_trace()
         plt.figure(figsize=(10, 6))
 
