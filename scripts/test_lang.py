@@ -59,10 +59,6 @@ def main(args):
 
         pairs = list(itertools.combinations(seeds, 2))
         mccs = []
-        import ipdb
-
-        ipdb.set_trace()
-
         for pair in pairs:
             mccs.append(
                 metrics.mean_corr_coef(
