@@ -23,7 +23,7 @@ norm_types=(
     "--norm_type bn" #"--norm_type ln"
 )
 dual_lrs=(
-    "--dual-lr 0.0005"
+    "--dual-lr 0.005"
 )
 seeds=(
     "--seed 0" # "--seed 1" "--seed 2"

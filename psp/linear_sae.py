@@ -228,17 +228,20 @@ def load_training_data(
     return train_loader, rep_dim, num_concepts
 
 
-def save(args, sae_model, config_dict, modeldir):
+def save(args, sae_model, config_dict):
     current_datetime = datetime.datetime.now()
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
     modeldir = os.path.join(
-        args.datadir,
-        str(args.indicator_threshold) + str(args.seed),
+        os.path.dirname(args.embeddings_file),
+        str(args.alpha) + "_" + str(args.seed),
         timestamp_str,
     )
     if not os.path.exists(modeldir):
         os.makedirs(modeldir)
-    config_file = os.path.join(modeldir, "model_config.yaml")
+    config_file = os.path.join(
+        modeldir,
+        str(args.alpha) + "_" + str(args.seed) + "_" + "model_config.yaml",
+    )
     with open(config_file, "w") as file:
         yaml.dump(config_dict, file)
     sae_dict_path = os.path.join(sae_model, "sparse_dict_model.pth")
@@ -386,6 +389,7 @@ def main(args):
         logger=logger,
         num_epochs=args.num_epochs,
     )
+    save(sae_model=sae_model, args=args, config_dict=config_dict)
 
 
 if __name__ == "__main__":
@@ -393,9 +397,9 @@ if __name__ == "__main__":
     parser.add_argument("--embeddings-file")
     parser.add_argument("--data-config-file")
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--num-epochs", type=int, default=10000)
-    parser.add_argument("--primal-lr", type=float, default=0.0001)
-    parser.add_argument("--dual-lr", type=float, default=0.00005)
+    parser.add_argument("--num-epochs", type=int, default=20000)
+    parser.add_argument("--primal-lr", type=float, default=0.01)
+    parser.add_argument("--dual-lr", type=float, default=0.005)
     # leaving this here for now but changing it to primal_lr/2 in th code
     # following the partial observability paper and repo
     parser.add_argument("--alpha", type=float, default=float(0.0001))
