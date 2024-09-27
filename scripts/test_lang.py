@@ -91,9 +91,7 @@ def main(args):
         plt.ylabel("Density")
         plt.legend()
         plt.savefig("kde_binary_1.png")
-        import ipdb
 
-        ipdb.set_trace()
         data = np.vstack([tilde_z, z_md, z_neta])
 
         # Create labels for each set
