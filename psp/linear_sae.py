@@ -75,6 +75,7 @@ class LinearSAE(nn.Module):
         self.decoder = nn.Linear(
             num_concepts, rep_dim, bias=False, device=device
         )
+        self.act = nn.LeakyReLU(0.1)
         self.decoder_bias = nn.Parameter(torch.zeros(rep_dim, device=device))
         self.decoder.weight.data = self.encoder.weight.data.T.clone()
         unit_norm_decoder_columns(self)
@@ -98,7 +99,7 @@ class LinearSAE(nn.Module):
         delta_z, info = self.preprocess(delta_z)
 
         concept_indicators = (
-            self.encoder_ln(nn.LeakyReLU(self.encoder(delta_z)))
+            self.encoder_ln(self.act(self.encoder(delta_z)))
             + self.encoder_bias
         )
         delta_z_hat = self.decoder(concept_indicators) + self.decoder_bias
