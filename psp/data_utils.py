@@ -11,6 +11,7 @@ import re
 import pandas as pd
 import h5py
 
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
@@ -75,7 +76,7 @@ def load_dataset(dataset_name, **kwargs):
             ],
         )
     elif dataset_name == "binary_1":
-        cfc_tuples = base.eng_french_common_objects
+        cfc_tuples = base.binary_1
         instruction = None
     else:
         raise NotImplementedError
@@ -89,6 +90,23 @@ def append_instruction(contexts, instruction):
             [str(instruction) + " " + str(context)]
         )
     return instruction_plus_contexts
+
+
+def load_test_data(data_file):
+    with h5py.File(data_file, "r") as f:
+        cfc_embeddings_test = np.array(f["cfc_test"])
+        tilde_z = cfc_embeddings_test[:, 1]
+        z = cfc_embeddings_test[:, 0]
+    return tilde_z, z
+
+
+def get_md_steering_vector(data_file):
+    with h5py.File(data_file, "r") as f:
+        cfc_embeddings_train = np.array(f["cfc_train"])
+        import ipdb
+
+        ipdb.set_trace()
+        return (cfc_embeddings_train[:, 1] - cfc_embeddings_train[:, 0]).mean()
 
 
 def get_rep_pairs(num_pairs, data1, data2):
@@ -105,7 +123,7 @@ def get_rep_pairs(num_pairs, data1, data2):
     return reps1, reps2
 
 
-def load_test_data(args, data_config):
+def archived_load_test_data(args, data_config):
     # todo: after test dict features
     delta_z = None
     tf_ids = []
