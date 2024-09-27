@@ -161,7 +161,7 @@ if __name__ == "__main__":
     parser.add_argument("--eval", default=False)
     parser.add_argument(
         "--dataset-name",
-        choices=["binary_1", "truthful_qa"],
+        choices=["binary_1", "binary_2", "truthful_qa"],
         default="binary_1",
     )
     parser.add_argument(

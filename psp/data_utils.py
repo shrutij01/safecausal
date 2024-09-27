@@ -78,6 +78,8 @@ def load_dataset(dataset_name, **kwargs):
     elif dataset_name == "binary_1":
         cfc_tuples = base.binary_1
         instruction = None
+    elif dataset_name == "binary_2":
+        cfc_tuples = base.binary_2
     else:
         raise NotImplementedError
     return cfc_tuples, instruction
