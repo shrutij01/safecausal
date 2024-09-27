@@ -233,7 +233,6 @@ def save(args, sae_model, config_dict):
     modeldir = os.path.join(
         os.path.dirname(args.embeddings_file),
         str(args.alpha) + "_" + str(args.seed),
-        timestamp_str,
     )
     if not os.path.exists(modeldir):
         os.makedirs(modeldir)
