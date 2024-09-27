@@ -387,7 +387,7 @@ if __name__ == "__main__":
     parser.add_argument("--embeddings-file")
     parser.add_argument("--data-config-file")
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--num-epochs", type=int, default=700)
+    parser.add_argument("--num-epochs", type=int, default=10000)
     parser.add_argument("--primal-lr", type=float, default=0.0001)
     parser.add_argument("--dual-lr", type=float, default=0.00005)
     # leaving this here for now but changing it to primal_lr/2 in th code
