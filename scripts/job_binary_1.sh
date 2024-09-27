@@ -8,22 +8,22 @@ data_configs=(
     "/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_32_config.yaml"
 )
 alphas=(
-    "--alpha 1" "--alpha 3" "--alpha 5" "--alpha 7" "--alpha 11" "--alpha 0.75" "--alpha 0.5"
+    "--alpha 5" "--alpha 7" "--alpha 11"
 )
 epochs=(
     "--num-epochs 20000"
 )
 primal_lrs=(
-    "--primal-lr 0.005" "--primal-lr 0.001" "--primal-lr 0.01"
+    "--primal-lr 0.01"
 )
 indicator_thresholds=(
     "--indicator-threshold 0.1"
 )
 norm_types=(
-    "--norm_type bn" # "--norm_type ln"
+    "--norm_type bn" #"--norm_type ln"
 )
 dual_lrs=(
-    "--dual-lr 0.00005"
+    "--dual-lr 0.0005"
 )
 seeds=(
     "--seed 0" # "--seed 1" "--seed 2"
