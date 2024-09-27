@@ -103,6 +103,8 @@ def main(args):
         import ipdb
 
         ipdb.set_trace()
+        cosines_md = [float(arr[0][0]) for arr in cosines_md]
+        cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
         sns.kdeplot(
             cosines_md,
             label="Cosine Similarity with MD",
@@ -161,6 +163,7 @@ def main(args):
                     tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
                 )
             )
+        cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
         plt.figure(figsize=(10, 6))
         sns.kdeplot(
             cosines_neta,
