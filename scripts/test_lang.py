@@ -61,6 +61,8 @@ def main(args):
         models.append(model)
         wds.append(wd)
         seeds.append(seed)
+    _, concept_projections = models[0](utils.tensorify((tilde_z - z), device))
+    neta = concept_projections.detach().cpu().numpy() @ wds[0].T
     if (
         data_config.dataset == "binary_1"
         or data_config.dataset == "binary_1_2"
@@ -81,6 +83,9 @@ def main(args):
         neta = concept_projections.detach().cpu().numpy() @ wds[0].T
         neta = neta / np.linalg.norm(neta)
         z_neta = z + neta
+        z_neta = z_neta / np.linalg.norm(z_neta)
+        z_md = z_md / np.linalg.norm(z_md)
+        tilde_z = tilde_z / np.linalg.norm(tilde_z)
         cosines_md, cosines_neta = [], []
         for i in range(tilde_z.shape[0]):
             cosines_md.append(1 - spatial.distance.cosine(tilde_z[i], z_md[i]))
@@ -132,12 +137,10 @@ def main(args):
         plt.savefig("tsne_binary_1_2.png")
     elif data_config.dataset == "binary_2":
         compute_mccs(seeds, wds)
-        _, concept_projections = models[0](
-            utils.tensorify((tilde_z - z), device)
-        )
-        neta = concept_projections.detach().cpu().numpy() @ wds[0].T
         neta = neta / np.linalg.norm(neta)
         z_neta = z + neta
+        z_neta = z_neta / np.linalg.norm(z_neta)
+        tilde_z = tilde_z / np.linalg.norm(tilde_z)
         cosines_neta = []
         for i in range(tilde_z.shape[0]):
             cosines_neta.append(
