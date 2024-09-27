@@ -11,6 +11,8 @@ import numpy as np
 import itertools
 
 from scipy import spatial
+from sklearn.metrics.pairwise import cosine_similarity
+
 import torch
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -68,12 +70,6 @@ def main(args):
         or data_config.dataset == "binary_1_2"
     ):
         md = utils.get_md_steering_vector(args.data_file)
-        cosine_similarities = []
-        for i in range(3):
-            cosine_similarities.append(
-                1 - spatial.distance.cosine(wds[i].squeeze(), md)
-            )
-        print("cosine_similarities with md: ", cosine_similarities)
         compute_mccs(seeds, wds)
         _, concept_projections = models[0](
             utils.tensorify((tilde_z - z), device)
@@ -89,10 +85,12 @@ def main(args):
         tilde_z = tilde_z / np.linalg.norm(tilde_z)
         cosines_md, cosines_neta = [], []
         for i in range(tilde_z.shape[0]):
-            cosines_md.append(1 - spatial.distance.cosine(tilde_z[i], z_md[i]))
-            cosines_neta.append(
-                1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
-            )
+            # cosines_md.append(1 - spatial.distance.cosine(tilde_z[i], z_md[i]))
+            # cosines_neta.append(
+            #     1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
+            # )
+            cosines_md.append(cosine_similarity(tilde_z[i], z_md[i]))
+            cosines_neta.append(cosine_similarity(tilde_z[i], z_neta[i]))
         plt.figure(figsize=(10, 6))
 
         sns.kdeplot(
@@ -145,9 +143,10 @@ def main(args):
         tilde_z = tilde_z / np.linalg.norm(tilde_z)
         cosines_neta = []
         for i in range(tilde_z.shape[0]):
-            cosines_neta.append(
-                1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
-            )
+            # cosines_neta.append(
+            #     1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
+            # )
+            cosines_neta.append(cosine_similarity(tilde_z[i], z_neta[i]))
         plt.figure(figsize=(10, 6))
         sns.kdeplot(
             cosines_neta,
