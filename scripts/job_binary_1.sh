@@ -2,13 +2,13 @@
 
 # Define hyperparameters
 embedding_files=(
-    "/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_embeddings_layer_13.h5"
+    "/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_embeddings_layer_32.h5"
 )
 data_configs=(
-    "/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_13_config.yaml"
+    "/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_32_config.yaml"
 )
 alphas=(
-    "--alpha 11" "--alpha 15" "--alpha 21"
+    "--alpha 15" "--alpha 21"
 )
 epochs=(
     "--num-epochs 20000"
