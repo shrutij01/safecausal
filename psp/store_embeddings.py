@@ -168,7 +168,7 @@ if __name__ == "__main__":
         "--model_id", default="meta-llama/Meta-Llama-3.1-8B-Instruct"
     )
     parser.add_argument(
-        "--llm-layer", type=int, default=32, choices=range(0, 31)
+        "--llm-layer", type=int, default=32, choices=range(0, 33)
     )
     # Llama-3 has 32 layers, CAA paper showed most effective steering around the
     # 13th layer for Llama-2 with 33 layers
