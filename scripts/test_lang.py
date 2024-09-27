@@ -119,7 +119,7 @@ def main(args):
         plt.xlabel("Cosine Similarity")
         plt.ylabel("Density")
         plt.legend()
-        plt.savefig("kde_binary_1_2.png")
+        plt.savefig("kde_binary_1.png")
 
         data = np.vstack([tilde_z, z_md, z_neta])
 
@@ -145,7 +145,7 @@ def main(args):
         plt.ylabel("t-SNE 2")
         plt.legend(title="Steering")
         plt.grid(True)
-        plt.savefig("tsne_binary_1_2.png")
+        plt.savefig("tsne_binary_1.png")
     elif data_config.dataset == "binary_2":
         compute_mccs(seeds, wds)
         neta = neta / np.linalg.norm(neta)
