@@ -100,7 +100,7 @@ def main(args):
         labels = np.array(["tilde_z"] * 10 + ["z_md"] * 10 + ["z_neta"] * 10)
 
         # Step 2: Apply t-SNE
-        tsne = TSNE(n_components=2, random_state=42)
+        tsne = TSNE(n_components=2, perplexity=10, random_state=42)
         transformed_data = tsne.fit_transform(data)
 
         # Step 3: Plot the results
