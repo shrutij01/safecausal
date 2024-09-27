@@ -103,10 +103,9 @@ def load_test_data(data_file):
 def get_md_steering_vector(data_file):
     with h5py.File(data_file, "r") as f:
         cfc_embeddings_train = np.array(f["cfc_train"])
-        import ipdb
-
-        ipdb.set_trace()
-        return (cfc_embeddings_train[:, 1] - cfc_embeddings_train[:, 0]).mean()
+        return np.mean(
+            cfc_embeddings_train[:, 1] - cfc_embeddings_train[:, 0], axis=0
+        )
 
 
 def get_rep_pairs(num_pairs, data1, data2):
