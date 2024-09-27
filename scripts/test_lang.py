@@ -67,7 +67,9 @@ def main(args):
                 ),
             )
         print("mccs: ", mccs)
-        concept_projections = models[0](utils.tensorify((tilde_z - z), device))
+        _, concept_projections = models[0](
+            utils.tensorify((tilde_z - z), device)
+        )
         import ipdb
 
         ipdb.set_trace()
