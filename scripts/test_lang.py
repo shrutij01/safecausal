@@ -88,7 +88,7 @@ def main(args):
         plt.xlabel("Cosine Similarity")
         plt.ylabel("Density")
         plt.legend()
-        plt.show()
+        plt.savefig("kde_binary_1.png")
 
 
 if __name__ == "__main__":
