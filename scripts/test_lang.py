@@ -78,6 +78,7 @@ def main(args):
         _, concept_projections = models[0](
             utils.tensorify((tilde_z - z), device)
         )
+        z = z / np.linalg.norm(z)
         z_md = z + md
         # z_neta = z + wds[0].squeeze()
         neta = concept_projections.detach().cpu().numpy() @ wds[0].T
@@ -138,6 +139,7 @@ def main(args):
     elif data_config.dataset == "binary_2":
         compute_mccs(seeds, wds)
         neta = neta / np.linalg.norm(neta)
+        z = z / np.linalg.norm(z)
         z_neta = z + neta
         z_neta = z_neta / np.linalg.norm(z_neta)
         tilde_z = tilde_z / np.linalg.norm(tilde_z)
