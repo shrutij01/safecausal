@@ -48,6 +48,9 @@ def main(args):
     if data_config.dataset == "binary_1":
         md = utils.get_md_steering_vector(args.data_file)
         cosine_similarities = []
+        import ipdb
+
+        ipdb.set_trace()
         for i in range(3):
             cosine_similarities.append(1 - spatial.distance.cosine(wds[i], md))
         print("cosine_similarities with md: ", cosine_similarities)
