@@ -26,7 +26,7 @@ dual_lrs=(
     "--dual-lr 0.005"
 )
 seeds=(
-    "--seed 0" # "--seed 1" "--seed 2"
+    "--seed 0" "--seed 1" "--seed 2"
 )
 
 # Job settings
