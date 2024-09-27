@@ -170,6 +170,9 @@ class ConstrainedLinearSAE(cooper.ConstrainedMinimizationProblem):
 
         self.loss = self.compute_loss(delta_z, delta_z_hat)
         # Compute the sparsity constraint as an inequality defect
+        import ipdb
+
+        ipdb.set_trace()
         self.ineq_defect = (
             torch.sum(torch.abs(concept_indicators))
             / self.batch_size
