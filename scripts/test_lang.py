@@ -130,6 +130,30 @@ def main(args):
         plt.legend(title="Steering")
         plt.grid(True)
         plt.savefig("tsne_binary_1_2.png")
+    elif data_config.dataset == "binary_2":
+        compute_mccs(seeds, wds)
+        _, concept_projections = models[0](
+            utils.tensorify((tilde_z - z), device)
+        )
+        neta = concept_projections.detach().cpu().numpy() @ wds[0].T
+        neta = neta / np.linalg.norm(neta)
+        z_neta = z + neta
+        cosines_neta = []
+        for i in range(tilde_z.shape[0]):
+            cosines_neta.append(
+                1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
+            )
+        plt.figure(figsize=(10, 6))
+        sns.kdeplot(
+            cosines_neta,
+            label="Cosine Similarity with neta",
+            shade=True,
+        )
+        plt.title("KDE of Cosine Similarities")
+        plt.xlabel("Cosine Similarity")
+        plt.ylabel("Density")
+        plt.legend()
+        plt.savefig("kde_binary_2.png")
 
 
 if __name__ == "__main__":
