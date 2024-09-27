@@ -89,6 +89,9 @@ def main(args):
             # cosines_neta.append(
             #     1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
             # )
+            import ipdb
+
+            ipdb.set_trace()
             cosines_md.append(
                 cosine_similarity(
                     tilde_z[i].reshape(-1, 1), z_md[i].reshape(-1, 1)
@@ -100,7 +103,9 @@ def main(args):
                 )
             )
         plt.figure(figsize=(10, 6))
+        import ipdb
 
+        ipdb.set_trace()
         sns.kdeplot(
             cosines_md,
             label="Cosine Similarity with MD",
