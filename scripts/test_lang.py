@@ -67,8 +67,8 @@ def main(args):
                 ),
             )
         print("mccs: ", mccs)
-        _, concept_projections = (
-            models[0](utils.tensorify((tilde_z - z), device)).detach().cpu()
+        _, concept_projections = models[0](
+            utils.tensorify((tilde_z - z), device)
         )
         z_md = z + md
         # z_neta = z + wds[0].squeeze()
