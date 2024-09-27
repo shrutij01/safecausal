@@ -206,7 +206,11 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
     delta_z_train = None
     rep_dim = config.rep_dim
     num_concepts = config.num_concepts
-    if config.dataset == "binary_1" or config.dataset == "binary_2":
+    if (
+        config.dataset == "binary_1"
+        or config.dataset == "binary_1_2"
+        or config.dataset == "binary_2"
+    ):
         with h5py.File(args.embeddings_file, "r") as f:
             cfc_train = np.array(f["cfc_train"]).squeeze()
         delta_z_train = tensorify(cfc_train[:, 1] - cfc_train[:, 0], device)
