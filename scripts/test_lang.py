@@ -100,9 +100,6 @@ def main(args):
                 )
             )
         plt.figure(figsize=(10, 6))
-        import ipdb
-
-        ipdb.set_trace()
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
         sns.kdeplot(
@@ -164,6 +161,9 @@ def main(args):
                 )
             )
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
+        import ipdb
+
+        ipdb.set_trace()
         plt.figure(figsize=(10, 6))
         sns.kdeplot(
             cosines_neta,
@@ -175,6 +175,31 @@ def main(args):
         plt.ylabel("Density")
         plt.legend()
         plt.savefig("kde_binary_2.png")
+        data = np.vstack([tilde_z, z_neta])
+
+        # Create labels for each set
+        labels = np.array(["tilde_z"] * 10 + ["z_neta"] * 10)
+
+        # Step 2: Apply t-SNE
+        tsne = TSNE(n_components=2, perplexity=2, random_state=42)
+        transformed_data = tsne.fit_transform(data)
+
+        # Step 3: Plot the results
+        plt.figure(figsize=(10, 8))
+        sns.scatterplot(
+            x=transformed_data[:, 0],
+            y=transformed_data[:, 1],
+            hue=labels,
+            style=labels,
+            palette="viridis",
+            s=100,
+        )
+        plt.title("t-SNE visualization of tilde_z, z_neta")
+        plt.xlabel("t-SNE 1")
+        plt.ylabel("t-SNE 2")
+        plt.legend(title="Steering")
+        plt.grid(True)
+        plt.savefig("tsne_binary_2.png")
 
 
 if __name__ == "__main__":
