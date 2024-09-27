@@ -14,7 +14,7 @@ epochs=(
     "--num-epochs 10000"
 )
 primal_lrs=(
-    "--primal-lr 0.0001"
+    "--primal-lr 0.0001" "--primal-lr 0.001" "--primal-lr 0.0005"
 )
 indicator_thresholds=(
     "--indicator-threshold 0.1"
