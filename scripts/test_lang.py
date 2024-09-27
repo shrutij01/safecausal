@@ -67,14 +67,12 @@ def main(args):
                 ),
             )
         print("mccs: ", mccs)
-        _, concept_projections = models[0](
-            utils.tensorify((tilde_z - z), device)
+        _, concept_projections = (
+            models[0](utils.tensorify((tilde_z - z), device)).detach().cpu()
         )
-        import ipdb
-
-        ipdb.set_trace()
         z_md = z + md
-        z_neta = z + wds[0].squeeze()
+        # z_neta = z + wds[0].squeeze()
+        z_neta = z + concept_projections.detach().cpu().numpy() @ wds[0].T
         cosines_md, cosines_neta = [], []
         for i in range(tilde_z.shape[0]):
             cosines_md.append(1 - spatial.distance.cosine(tilde_z[i], z_md[i]))
