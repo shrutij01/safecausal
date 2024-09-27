@@ -34,6 +34,20 @@ def load_model(modeldir, dataconfig):
     return model, utils.numpify(model.decoder.weight.data), modelconfig.seed
 
 
+def compute_mccs(seeds, wds):
+    pairs = list(itertools.combinations(seeds, 2))
+    mccs = []
+    for pair in pairs:
+        mccs.append(
+            metrics.mean_corr_coef(
+                wds[int(pair[0])],
+                wds[int(pair[1])],
+                method="pearson",
+            ),
+        )
+    print("mccs: ", mccs)
+
+
 def main(args):
     tilde_z, z = utils.load_test_data(
         data_file=args.data_file,
@@ -47,7 +61,10 @@ def main(args):
         models.append(model)
         wds.append(wd)
         seeds.append(seed)
-    if data_config.dataset == "binary_1":
+    if (
+        data_config.dataset == "binary_1"
+        or data_config.dataset == "binary_1_2"
+    ):
         md = utils.get_md_steering_vector(args.data_file)
         cosine_similarities = []
         for i in range(3):
@@ -55,18 +72,7 @@ def main(args):
                 1 - spatial.distance.cosine(wds[i].squeeze(), md)
             )
         print("cosine_similarities with md: ", cosine_similarities)
-
-        pairs = list(itertools.combinations(seeds, 2))
-        mccs = []
-        for pair in pairs:
-            mccs.append(
-                metrics.mean_corr_coef(
-                    wds[int(pair[0])],
-                    wds[int(pair[1])],
-                    method="pearson",
-                ),
-            )
-        print("mccs: ", mccs)
+        compute_mccs(seeds, wds)
         _, concept_projections = models[0](
             utils.tensorify((tilde_z - z), device)
         )
@@ -97,7 +103,7 @@ def main(args):
         plt.xlabel("Cosine Similarity")
         plt.ylabel("Density")
         plt.legend()
-        plt.savefig("kde_binary_1.png")
+        plt.savefig("kde_binary_1_2.png")
 
         data = np.vstack([tilde_z, z_md, z_neta])
 
@@ -123,7 +129,7 @@ def main(args):
         plt.ylabel("t-SNE 2")
         plt.legend(title="Steering")
         plt.grid(True)
-        plt.savefig("tsne_binary_1.png")
+        plt.savefig("tsne_binary_1_2.png")
 
 
 if __name__ == "__main__":
