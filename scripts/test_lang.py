@@ -52,7 +52,9 @@ def main(args):
 
         ipdb.set_trace()
         for i in range(3):
-            cosine_similarities.append(1 - spatial.distance.cosine(wds[i], md))
+            cosine_similarities.append(
+                1 - spatial.distance.cosine(wds[i].squeeze(), md)
+            )
         print("cosine_similarities with md: ", cosine_similarities)
 
         pairs = list(itertools.combinations(seeds, 2))
@@ -70,6 +72,9 @@ def main(args):
                 ),
             )
         print("mccs: ", mccs)
+        import ipdb
+
+        ipdb.set_trace()
         z_md = z + md
         z_neta = z + wds[0]
         cosine_md = 1 - spatial.distance.cosine(tilde_z, z_md)
