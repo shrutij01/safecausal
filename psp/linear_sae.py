@@ -99,8 +99,7 @@ class LinearSAE(nn.Module):
         delta_z, info = self.preprocess(delta_z)
 
         concept_indicators = (
-            self.encoder_ln(self.act(self.encoder(delta_z)))
-            + self.encoder_bias
+            self.encoder_ln((self.encoder(delta_z))) + self.encoder_bias
         )
         delta_z_hat = self.decoder(concept_indicators) + self.decoder_bias
         delta_z_hat = delta_z_hat * info["std"] + info["mu"]
