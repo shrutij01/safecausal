@@ -240,11 +240,11 @@ def save(args, sae_model, config_dict):
         os.makedirs(modeldir)
     config_file = os.path.join(
         modeldir,
-        str(args.alpha) + "_" + str(args.seed) + "_" + "model_config.yaml",
+        "model_config.yaml",
     )
     with open(config_file, "w") as file:
         yaml.dump(config_dict, file)
-    sae_dict_path = os.path.join(sae_model, "sparse_dict_model.pth")
+    sae_dict_path = os.path.join(modeldir, "sparse_dict_model.pth")
     torch.save(sae_model.state_dict(), sae_dict_path)
 
 
