@@ -201,11 +201,7 @@ class Logger:
         self.vals = {}
 
 
-def load_training_data(
-    args,
-) -> tuple[DataLoader, int, int]:
-    with open(args.data_config_file, "r") as file:
-        config = Box(yaml.safe_load(file))
+def load_training_data(args, config) -> tuple[DataLoader, int, int]:
     delta_z_train = None
     rep_dim = config.rep_dim
     num_concepts = config.num_concepts
@@ -232,7 +228,11 @@ def save(args, sae_model, config_dict):
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
     modeldir = os.path.join(
         os.path.dirname(args.embeddings_file),
-        str(args.alpha) + "_" + str(args.seed),
+        str(args.alpha)
+        + "_"
+        + str(config_dict.llm_layer)
+        + "_"
+        + str(args.seed),
     )
     if not os.path.exists(modeldir):
         os.makedirs(modeldir)
@@ -336,6 +336,8 @@ def train(
 
 
 def main(args):
+    with open(args.data_config_file, "r") as file:
+        data_config = Box(yaml.safe_load(file))
     config_dict = {
         "seed": args.seed,
         "embeddings_file": args.embeddings_file,
@@ -346,10 +348,11 @@ def main(args):
         "batch_size": args.batch_size,
         "num_epochs": args.num_epochs,
         "indicator_threshold": args.indicator_threshold,
+        "llm_layer": data_config.llm_layer,
     }
     set_seeds(int(args.seed))
     logger = Logger(project="iclrpsp", config=config_dict)
-    train_loader, rep_dim, num_concepts = load_training_data(args)
+    train_loader, rep_dim, num_concepts = load_training_data(args, data_config)
     # Assuming the LinearSAE model and other parameters are already defined:
     sae_model = LinearSAE(
         rep_dim=rep_dim, num_concepts=num_concepts, norm_type=args.norm_type
