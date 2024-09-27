@@ -72,7 +72,7 @@ def main(args):
 
         ipdb.set_trace()
         z_md = z + md
-        z_neta = z + wds[0]
+        z_neta = z + wds[0].squeeze()
         cosine_md = 1 - spatial.distance.cosine(tilde_z, z_md)
         cosine_neta = 1 - spatial.distance.cosine(tilde_z, z_neta)
         ipdb.set_trace()
