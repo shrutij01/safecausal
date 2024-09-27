@@ -100,7 +100,9 @@ def main(args):
                 )
             )
         plt.figure(figsize=(10, 6))
+        import ipdb
 
+        ipdb.set_trace()
         sns.kdeplot(
             cosines_md,
             label="Cosine Similarity with MD",
