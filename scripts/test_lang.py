@@ -45,7 +45,7 @@ def main(args):
         models.append(model)
         wds.append(wd)
         seeds.append(seed)
-    if data_config.dataset == "binary":
+    if data_config.dataset == "binary_1":
         md = utils.get_md_steering_vector(args.data_file)
         cosine_similarities = []
         for i in range(3):
