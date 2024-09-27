@@ -65,16 +65,13 @@ def main(args):
                 ),
             )
         print("mccs: ", mccs)
-        import ipdb
-
-        ipdb.set_trace()
         z_md = z + md
         z_neta = z + wds[0].squeeze()
         cosines_md, cosines_neta = [], []
         for i in range(tilde_z.shape[0]):
-            cosines_md.append(1 - spatial.distance.cosine(tilde_z[i], z_md))
+            cosines_md.append(1 - spatial.distance.cosine(tilde_z[i], z_md[i]))
             cosines_neta.append(
-                1 - spatial.distance.cosine(tilde_z[i], z_neta)
+                1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
             )
         ipdb.set_trace()
         plt.figure(figsize=(10, 6))
