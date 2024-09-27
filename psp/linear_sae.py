@@ -99,7 +99,8 @@ class LinearSAE(nn.Module):
         delta_z, info = self.preprocess(delta_z)
 
         concept_indicators = (
-            self.encoder_ln((self.encoder(delta_z))) + self.encoder_bias
+            self.encoder_ln((self.encoder(delta_z - self.decoder_bias)))
+            + self.encoder_bias
         )
         delta_z_hat = self.decoder(concept_indicators) + self.decoder_bias
         delta_z_hat = delta_z_hat * info["std"] + info["mu"]
@@ -233,6 +234,7 @@ def save(args, sae_model, config_dict):
         + str(config_dict["llm_layer"])
         + "_"
         + str(args.seed),
+        "prebias",
     )
     if not os.path.exists(modeldir):
         os.makedirs(modeldir)
