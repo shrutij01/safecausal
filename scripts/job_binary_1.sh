@@ -80,6 +80,7 @@ for embedding_file in "${embedding_files[@]}"; do
 
                                     # Increment counter
                                     ((counter++))
+                                done
                             done
                         done
                     done
