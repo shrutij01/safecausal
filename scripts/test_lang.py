@@ -102,17 +102,29 @@ def main(args):
         plt.figure(figsize=(10, 6))
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
-        sns.kdeplot(
+        # sns.kdeplot(
+        #     cosines_md,
+        #     clip=(0, 1),
+        #     label="Cosine Similarity with MD",
+        #     shade=True,
+        # )
+        sns.displot(
             cosines_md,
-            clip=(0, 1),
             label="Cosine Similarity with MD",
             shade=True,
+            kde=True,
         )
-        sns.kdeplot(
+        # sns.kdeplot(
+        #     cosines_neta,
+        #     bw_adjust=0.5,
+        #     label="Cosine Similarity with neta",
+        #     shade=True,
+        # )
+        sns.displot(
             cosines_neta,
-            bw_adjust=0.5,
             label="Cosine Similarity with neta",
             shade=True,
+            kde=True,
         )
         plt.title("KDE of Cosine Similarities")
         plt.xlabel("Cosine Similarity")
@@ -168,11 +180,17 @@ def main(args):
             )
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
         plt.figure(figsize=(10, 6))
-        sns.kdeplot(
+        # sns.kdeplot(
+        #     cosines_neta,
+        #     bw_adjust=0.5,
+        #     label="Cosine Similarity with neta",
+        #     shade=True,
+        # )
+        sns.displot(
             cosines_neta,
-            bw_adjust=0.5,
             label="Cosine Similarity with neta",
             shade=True,
+            kde=True,
         )
         plt.title("KDE of Cosine Similarities")
         plt.xlabel("Cosine Similarity")
