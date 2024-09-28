@@ -110,7 +110,7 @@ def main(args):
         )
         sns.kdeplot(
             cosines_neta,
-            clip=(0, 1),
+            bw_adjust=0.5,
             label="Cosine Similarity with neta",
             shade=True,
         )
@@ -118,7 +118,7 @@ def main(args):
         plt.xlabel("Cosine Similarity")
         plt.ylabel("Density")
         plt.legend()
-        plt.savefig("kde_binary_1.png")
+        plt.savefig("kde_" + str(data_config.dataset) + "_" + ".png")
 
         data = np.vstack([tilde_z, z_md, z_neta])
 
@@ -148,7 +148,7 @@ def main(args):
         plt.ylabel("t-SNE 2")
         plt.legend(title="Steering")
         plt.grid(True)
-        plt.savefig("tsne_binary_1.png")
+        plt.savefig("tsne_" + str(data_config.dataset) + "_" + ".png")
     elif data_config.dataset == "binary_2":
         compute_mccs(seeds, wds)
         neta = neta / np.linalg.norm(neta)
@@ -170,7 +170,7 @@ def main(args):
         plt.figure(figsize=(10, 6))
         sns.kdeplot(
             cosines_neta,
-            clip=(0, 1),
+            bw_adjust=0.5,
             label="Cosine Similarity with neta",
             shade=True,
         )
@@ -178,7 +178,7 @@ def main(args):
         plt.xlabel("Cosine Similarity")
         plt.ylabel("Density")
         plt.legend()
-        plt.savefig("kde_binary_2.png")
+        plt.savefig("kde_" + str(data_config.dataset) + "_" + ".png")
         data = np.vstack([tilde_z, z_neta])
 
         # Create labels for each set
@@ -205,7 +205,7 @@ def main(args):
         plt.ylabel("t-SNE 2")
         plt.legend(title="Steering")
         plt.grid(True)
-        plt.savefig("tsne_binary_2.png")
+        plt.savefig("tsne_" + str(data_config.dataset) + "_" + ".png")
 
 
 if __name__ == "__main__":
