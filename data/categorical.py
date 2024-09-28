@@ -60,7 +60,7 @@ def generate_data(size):
 
 
 def write_to_python_file(filename, list_of_lists):
-    with open(filename, "w") as file:
+    with open(filename, "w", buffering=2048) as file:
         file.write("data = [\n")
         for single_list in list_of_lists:
             tuple_str = (
