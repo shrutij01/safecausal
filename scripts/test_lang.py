@@ -102,27 +102,17 @@ def main(args):
         plt.figure(figsize=(10, 6))
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
-        # sns.kdeplot(
-        #     cosines_md,
-        #     clip=(0, 1),
-        #     label="Cosine Similarity with MD",
-        #     shade=True,
-        # )
-        sns.displot(
+        sns.kdeplot(
             cosines_md,
+            bw_adjust=0.75,
             label="Cosine Similarity with MD",
-            kde=True,
+            shade=True,
         )
-        # sns.kdeplot(
-        #     cosines_neta,
-        #     bw_adjust=0.5,
-        #     label="Cosine Similarity with neta",
-        #     shade=True,
-        # )
-        sns.displot(
+        sns.kdeplot(
             cosines_neta,
+            bw_adjust=0.75,
             label="Cosine Similarity with neta",
-            kde=True,
+            shade=True,
         )
         plt.title("KDE of Cosine Similarities")
         plt.xlabel("Cosine Similarity")
@@ -178,16 +168,11 @@ def main(args):
             )
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
         plt.figure(figsize=(10, 6))
-        # sns.kdeplot(
-        #     cosines_neta,
-        #     bw_adjust=0.5,
-        #     label="Cosine Similarity with neta",
-        #     shade=True,
-        # )
-        sns.displot(
+        sns.kdeplot(
             cosines_neta,
+            bw_adjust=0.75,
             label="Cosine Similarity with neta",
-            kde=True,
+            shade=True,
         )
         plt.title("KDE of Cosine Similarities")
         plt.xlabel("Cosine Similarity")
@@ -202,7 +187,7 @@ def main(args):
         )
 
         # Step 2: Apply t-SNE
-        tsne = TSNE(n_components=2, perplexity=2, random_state=42)
+        tsne = TSNE(n_components=2, perplexity=5, random_state=42)
         transformed_data = tsne.fit_transform(data)
 
         # Step 3: Plot the results
