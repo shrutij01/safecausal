@@ -66,7 +66,7 @@ for embedding_file in "${embedding_files[@]}"; do
                                 echo "conda activate pytorch" >> "${script_name}"
                                 echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:\$PYTHONPATH\"" >> "${script_name}"
                                 echo "cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp" >> "${script_name}"
-                                echo "python linear_sae.py --embeddings-file ${embedding_file} --data-config-file ${data_config} ${primal_lr} ${dual_lr} ${norm_type} ${indicator_threshold} ${epoch} ${seed}" >> "${script_name}"
+                                echo "python lin_baseline.py --embeddings-file ${embedding_file} --data-config-file ${data_config} ${primal_lr} ${dual_lr} ${norm_type} ${indicator_threshold} ${epoch} ${seed}" >> "${script_name}"
 
                                 # Make the script executable
                                 chmod +x "${script_name}"
