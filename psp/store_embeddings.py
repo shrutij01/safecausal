@@ -61,7 +61,7 @@ def main(args):
     split = int(0.9 * len(cfc_tuples))
     cfc_train, cfc_test = cfc_tuples[0:split], cfc_tuples[split:]
 
-    tokenizer = transformers.LlamaTokenizerFast.from_pretrained(
+    tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
         args.model_id, token=ACCESS_TOKEN
     )
     model = transformers.LlamaForCausalLM.from_pretrained(
