@@ -213,12 +213,38 @@ def main(args):
         _, concept_projections_2_to1 = models[0](
             utils.tensorify((onesp_tilde_z - onesp_z), device)
         )
-        concept_projections_2_to1 = (
-            concept_projections_2_to1.detach().cpu().numpy()
+        neta_2_to1 = (concept_projections_2_to1.detach().cpu().numpy()) @ wds[
+            0
+        ].T
+        neta_2_to1 = neta_2_to1 / np.linalg.norm(neta_2_to1)
+        onesp_z = onesp_z / np.linalg.norm(onesp_z)
+        z_neta_2_to_1 = onesp_z + neta_2_to1
+        z_neta_2_to_1 = z_neta_2_to_1 / np.linalg.norm(z_neta_2_to_1)
+        onesp_tilde_z = onesp_tilde_z / np.linalg.norm(onesp_tilde_z)
+        cosines_neta_2_to1 = []
+        for i in range(onesp_tilde_z.shape[0]):
+            # cosines_neta.append(
+            #     1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
+            # )
+            cosines_neta_2_to1.append(
+                cosine_similarity(
+                    onesp_tilde_z[i].reshape(1, -1),
+                    z_neta_2_to_1[i].reshape(1, -1),
+                )
+            )
+        cosines_neta_2_to1 = [float(arr[0][0]) for arr in cosines_neta_2_to1]
+        plt.figure(figsize=(10, 6))
+        sns.kdeplot(
+            cosines_neta_2_to1,
+            bw_adjust=0.75,
+            label="Cosine Similarity with neta_2_to_1",
+            shade=True,
         )
-        import ipdb
-
-        ipdb.set_trace()
+        plt.title("KDE of Cosine Similarities")
+        plt.xlabel("Cosine Similarity")
+        plt.ylabel("Density")
+        plt.legend()
+        plt.savefig("kde_" + str(data_config.dataset) + "_2_to_1_" + ".png")
 
 
 if __name__ == "__main__":
