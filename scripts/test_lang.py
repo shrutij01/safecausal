@@ -210,6 +210,12 @@ def main(args):
         onesp_tilde_z, onesp_z = utils.load_test_data(
             data_file=args.data_file2,
         )
+        _, concept_projections_2_to1 = models[0](
+            utils.tensorify((onesp_tilde_z - onesp_z), device)
+        )
+        concept_projections_2_to1 = (
+            concept_projections_2_to1.detach().cpu().numpy()
+        )
         import ipdb
 
         ipdb.set_trace()
@@ -224,7 +230,7 @@ if __name__ == "__main__":
     parser.add_argument("modeldir_2")
     parser.add_argument("modeldir_3")
     parser.add_argument(
-        "--data_file2",
+        "--data-file2",
         default="/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_32_config.yaml",
     )
     args = parser.parse_args()
