@@ -111,7 +111,6 @@ def main(args):
         sns.displot(
             cosines_md,
             label="Cosine Similarity with MD",
-            shade=True,
             kde=True,
         )
         # sns.kdeplot(
@@ -123,7 +122,6 @@ def main(args):
         sns.displot(
             cosines_neta,
             label="Cosine Similarity with neta",
-            shade=True,
             kde=True,
         )
         plt.title("KDE of Cosine Similarities")
@@ -189,7 +187,6 @@ def main(args):
         sns.displot(
             cosines_neta,
             label="Cosine Similarity with neta",
-            shade=True,
             kde=True,
         )
         plt.title("KDE of Cosine Similarities")
