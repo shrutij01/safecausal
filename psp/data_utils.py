@@ -57,48 +57,37 @@ def load_dataset(dataset_name, **kwargs):
         # mc1_targets have a single correct choice and mc2_targets have
         # multiple choices that can be correct
         instruction = "Label as 0 for False and 1 for True."
+        cfc_tuples = []
         for item in data:
             import ipdb
 
             ipdb.set_trace()
-            # Extract relevant fields
             question = item["question"]
-            # instruction = item["instruction"]
-            answers = item["mc1_targets"]
-            correct_answer_index = item["mc1_target_idx"]
-
-            # Get correct and wrong answers
-            correct_answer = answers[correct_answer_index]
-            wrong_answers = (
-                answers[:correct_answer_index]
-                + answers[correct_answer_index + 1 :]
-            )
+            correct_answer_index = item[item["mc1_targets"]["labels"].index(1)]
+            correct_answer_choice = item["mc1_targets"]["choices"][
+                correct_answer_index
+            ]
+            wrong_answers_indices = [
+                index
+                for index, value in enumerate(item["mc1_targets"]["labels"])
+                if value == 0
+            ]
+            wrong_answer_index = np.random.choice(wrong_answers_indices)
 
             # Randomly select a wrong answer
-            wrong_answer = np.random.choice(wrong_answers)
+            wrong_answer_choice = item["mc1_targets"]["choices"][
+                wrong_answer_index
+            ]
 
             # Create the tuple
-            correct_pair = question + " " + instruction + " " + correct_answer
-            wrong_pair = question + " " + instruction + " " + wrong_answer
+            correct_pair = (
+                question + " " + instruction + " " + correct_answer_choice
+            )
+            wrong_pair = (
+                question + " " + instruction + " " + wrong_answer_choice
+            )
+            cfc_tuples.append([correct_pair, wrong_pair])
 
-        # cfc_tuples = (
-        #     [
-        #         value
-        #         for is_true, value in zip(
-        #             [d == 1 for d in data[0]["mc1_targets"]["labels"]],
-        #             data[0]["mc1_targets"]["choices"],
-        #         )
-        #         if is_true
-        #     ],
-        #     [
-        #         value
-        #         for is_true, value in zip(
-        #             [d == 0 for d in data[0]["mc1_targets"]["labels"]],
-        #             data[0]["mc1_targets"]["choices"],
-        #         )
-        #         if is_true
-        #     ],
-        # )
     elif dataset_name == "binary_1":
         cfc_tuples = base.binary_1
         instruction = None
