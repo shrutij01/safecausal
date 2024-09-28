@@ -201,12 +201,12 @@ def save(args, sae_model, config_dict):
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
     modeldir = os.path.join(
         os.path.dirname(args.embeddings_file),
-        str(args.primal_lr)
+        "lin_baseline_"
+        + str(args.primal_lr)
         + "_"
         + str(config_dict["llm_layer"])
         + "_"
         + str(args.seed),
-        "lin_baseline",
     )
     if not os.path.exists(modeldir):
         os.makedirs(modeldir)
@@ -273,9 +273,6 @@ def main(args):
     logger = Logger(project="iclrpsp", config=config_dict)
     train_loader, rep_dim, num_concepts = load_training_data(args, data_config)
     # Assuming the LinearSAE model and other parameters are already defined:
-    import ipdb
-
-    ipdb.set_trace()
     sae_model = LinearSAE(
         rep_dim=rep_dim, num_concepts=num_concepts, norm_type=args.norm_type
     )
