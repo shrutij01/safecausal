@@ -39,7 +39,7 @@ def load_model(modeldir, dataconfig):
     return (
         model,
         utils.numpify(model.decoder.weight.data),
-        modelconfig.seed,
+        int(modelconfig.seed),
         model_string,
     )
 
