@@ -236,6 +236,10 @@ def save(args, sae_model, config_dict):
         os.path.dirname(args.embeddings_file),
         str(args.alpha)
         + "_"
+        + str(args.primal_lr)
+        + "_"
+        + str(args.norm_type)
+        + "_"
         + str(config_dict["llm_layer"])
         + "_"
         + str(args.seed),
