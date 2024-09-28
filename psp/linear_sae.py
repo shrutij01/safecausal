@@ -210,6 +210,7 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
         config.dataset == "binary_1"
         or config.dataset == "binary_1_2"
         or config.dataset == "binary_2"
+        or config.dataset == "truthful_qa"
     ):
         with h5py.File(args.embeddings_file, "r") as f:
             cfc_train = np.array(f["cfc_train"]).squeeze()
@@ -412,7 +413,7 @@ if __name__ == "__main__":
     parser.add_argument("--dual-lr", type=float, default=0.005)
     # leaving this here for now but changing it to primal_lr/2 in th code
     # following the partial observability paper and repo
-    parser.add_argument("--alpha", type=float, default=float(0.0001))
+    parser.add_argument("--alpha", type=float, default=float(11))
     parser.add_argument("--indicator-threshold", type=float, default=0.1)
     # indicator threshold needs to be decently low so that the concept_indicators
     # don't turn out to be all zeros
