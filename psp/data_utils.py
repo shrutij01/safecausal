@@ -60,7 +60,7 @@ def load_dataset(dataset_name, **kwargs):
             wrong_pair = (
                 question + " " + instruction + " " + wrong_answer_choice
             )
-            cfc_tuples.append([correct_pair, wrong_pair])
+            cfc_tuples.append([wrong_pair, correct_pair])
 
     elif dataset_name == "binary_1":
         cfc_tuples = base.binary_1
