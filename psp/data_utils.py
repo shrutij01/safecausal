@@ -45,9 +45,6 @@ def load_dataset(dataset_name, **kwargs):
     #         )
     #     instruction = "Change any one, or two, or all three of the entities in the string, and mention how many and which you changed."
     if dataset_name == "truthful_qa":
-        import ipdb
-
-        ipdb.set_trace()
         hf_dataset_name = "truthfulqa/truthful_qa"
         dataset_params = {
             "split": "validation",
@@ -59,14 +56,14 @@ def load_dataset(dataset_name, **kwargs):
         instruction = "Label as 0 for False and 1 for True."
         cfc_tuples = []
         for item in data:
-            import ipdb
-
-            ipdb.set_trace()
             question = item["question"]
-            correct_answer_index = item[item["mc1_targets"]["labels"].index(1)]
+            correct_answer_index = item["mc1_targets"]["labels"].index(1)
             correct_answer_choice = item["mc1_targets"]["choices"][
                 correct_answer_index
             ]
+            import ipdb
+
+            ipdb.set_trace()
             wrong_answers_indices = [
                 index
                 for index, value in enumerate(item["mc1_targets"]["labels"])
