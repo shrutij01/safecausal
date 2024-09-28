@@ -33,7 +33,13 @@ def load_model(modeldir, dataconfig):
         torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
     )
     model.eval()
-    return model, utils.numpify(model.decoder.weight.data), modelconfig.seed
+    model_string = str(modelconfig.alpha) + "_" + str(modelconfig.primal_lr)
+    return (
+        model,
+        utils.numpify(model.decoder.weight.data),
+        modelconfig.seed,
+        model_string,
+    )
 
 
 def compute_mccs(seeds, wds):
@@ -47,7 +53,7 @@ def compute_mccs(seeds, wds):
                 method="pearson",
             ),
         )
-    print("mccs: ", mccs)
+    return mccs
 
 
 def main(args):
@@ -59,7 +65,7 @@ def main(args):
     modeldirs = [args.modeldir_1, args.modeldir_2, args.modeldir_3]
     models, wds, seeds = [], [], []
     for modeldir in modeldirs:
-        model, wd, seed = load_model(modeldir, data_config)
+        model, wd, seed, model_string = load_model(modeldir, data_config)
         models.append(model)
         wds.append(wd)
         seeds.append(seed)
@@ -70,35 +76,73 @@ def main(args):
         or data_config.dataset == "binary_1_2"
     ):
         md = utils.get_md_steering_vector(args.data_file)
-        compute_mccs(seeds, wds)
-        _, concept_projections = models[0](
-            utils.tensorify((tilde_z - z), device)
+        mccs = compute_mccs(seeds, wds)
+        mean_mcc = np.mean(mccs, axis=1)
+        std_mcc = np.std(mccs, axis=1)
+        mcc_string = "mccs_" + str(model_string)
+        mean_mcc_string = "mean_mcc_" + str(model_string)
+        std_mcc_string = "std_mcc_" + str(model_string)
+        config_dict = {
+            mcc_string: mccs,
+            mean_mcc_string: mean_mcc,
+            std_mcc_string: std_mcc,
+        }
+        config_file = os.path.join(
+            "/home/mila/j/joshi.shruti/causalrepl_space/psp/scripts/disentanglement_evals",
+            "disentanglement_scores_binary_1.yaml",  # FLAG
         )
+        import ipdb
+
+        ipdb.set_trace()
+        with open(config_file, "w") as file:
+            yaml.dump(config_dict, file)
+
+        concept_projections_for_all_seeds = []
+        for model in models:
+            _, concept_projections = model(
+                utils.tensorify((tilde_z - z), device)
+            )
+            concept_projections = concept_projections.detach().cpu().numpy()
+            concept_projections_for_all_seeds.append(concept_projections)
+
         z = z / np.linalg.norm(z)
         z_md = z + md
-        # z_neta = z + wds[0].squeeze()
-        neta = concept_projections.detach().cpu().numpy() @ wds[0].T
-        neta = neta / np.linalg.norm(neta)
-        z_neta = z + neta
-        z_neta = z_neta / np.linalg.norm(z_neta)
         z_md = z_md / np.linalg.norm(z_md)
+
+        netas_for_all_seeds = []
+        for concept_projections in concept_projections_for_all_seeds:
+            neta = concept_projections @ wds[0].T
+            neta = neta / np.linalg.norm(neta)
+            netas_for_all_seeds.append(neta)
+        z_netas_for_all_seeds = []
+        for neta in netas_for_all_seeds:
+            z_neta = z + neta
+            z_neta = z_neta / np.linalg.norm(z_neta)
+            z_netas_for_all_seeds.append(z_neta)
+
         tilde_z = tilde_z / np.linalg.norm(tilde_z)
-        cosines_md, cosines_neta = [], []
+        cosines_md = []
         for i in range(tilde_z.shape[0]):
-            # cosines_md.append(1 - spatial.distance.cosine(tilde_z[i], z_md[i]))
-            # cosines_neta.append(
-            #     1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
-            # )
             cosines_md.append(
                 cosine_similarity(
                     tilde_z[i].reshape(1, -1), z_md[i].reshape(1, -1)
                 )
             )
-            cosines_neta.append(
-                cosine_similarity(
-                    tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
+        cosines_neta = []
+        cosines_neta_for_all_seeds = []
+        for z_neta in z_netas_for_all_seeds:
+            for i in range(tilde_z.shape[0]):
+                cosines_neta.append(
+                    cosine_similarity(
+                        tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
+                    )
                 )
-            )
+            cosines_neta_for_all_seeds.append(cosines_neta)
+        means_ac = np.mean(cosines_neta_for_all_seeds, axis=1)
+        std_ac = np.std(cosines_neta_for_all_seeds, axis=1)
+        import ipdb
+
+        ipdb.set_trace()
         plt.figure(figsize=(10, 6))
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
@@ -158,9 +202,6 @@ def main(args):
         tilde_z = tilde_z / np.linalg.norm(tilde_z)
         cosines_neta = []
         for i in range(tilde_z.shape[0]):
-            # cosines_neta.append(
-            #     1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
-            # )
             cosines_neta.append(
                 cosine_similarity(
                     tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
@@ -223,9 +264,6 @@ def main(args):
         onesp_tilde_z = onesp_tilde_z / np.linalg.norm(onesp_tilde_z)
         cosines_neta_2_to1 = []
         for i in range(onesp_tilde_z.shape[0]):
-            # cosines_neta.append(
-            #     1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
-            # )
             cosines_neta_2_to1.append(
                 cosine_similarity(
                     onesp_tilde_z[i].reshape(1, -1),
@@ -237,9 +275,6 @@ def main(args):
         z_md_2_to_1 = onesp_z + md_2_to_1
         cosines_md_2_to_1 = []
         for i in range(onesp_tilde_z.shape[0]):
-            # cosines_neta.append(
-            #     1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
-            # )
             cosines_md_2_to_1.append(
                 cosine_similarity(
                     onesp_tilde_z[i].reshape(1, -1),
@@ -275,6 +310,8 @@ if __name__ == "__main__":
     parser.add_argument("modeldir_1")
     parser.add_argument("modeldir_2")
     parser.add_argument("modeldir_3")
+    parser.add_argument("modeldir_4")
+    parser.add_argument("modeldir_5")
     parser.add_argument(
         "--data-file2",
         default="/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_32_config.yaml",
