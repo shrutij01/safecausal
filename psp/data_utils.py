@@ -53,7 +53,7 @@ def load_dataset(dataset_name, **kwargs):
         data = hf_load_dataset(hf_dataset_name, **dataset_params)
         # mc1_targets have a single correct choice and mc2_targets have
         # multiple choices that can be correct
-        instruction = "Label as 0 for False and 1 for True."
+        instruction = "The answer is..."
         cfc_tuples = []
         for item in data:
             question = item["question"]
@@ -61,9 +61,6 @@ def load_dataset(dataset_name, **kwargs):
             correct_answer_choice = item["mc1_targets"]["choices"][
                 correct_answer_index
             ]
-            import ipdb
-
-            ipdb.set_trace()
             wrong_answers_indices = [
                 index
                 for index, value in enumerate(item["mc1_targets"]["labels"])
@@ -83,6 +80,9 @@ def load_dataset(dataset_name, **kwargs):
             wrong_pair = (
                 question + " " + instruction + " " + wrong_answer_choice
             )
+            import ipdb
+
+            ipdb.set_trace()
             cfc_tuples.append([correct_pair, wrong_pair])
 
     elif dataset_name == "binary_1":
