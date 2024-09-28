@@ -186,6 +186,9 @@ def main(args):
 
         # Step 3: Plot the results
         plt.figure(figsize=(10, 8))
+        import ipdb
+
+        ipdb.set_trace()
         sns.scatterplot(
             x=transformed_data[:, 0],
             y=transformed_data[:, 1],
