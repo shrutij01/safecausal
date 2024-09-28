@@ -69,7 +69,7 @@ def load_dataset(dataset_name, **kwargs):
     elif dataset_name == "binary_2":
         cfc_tuples = base.binary_2
     elif dataset_name == "categorical":
-        cfc_tuples = categorical_base.categorical
+        cfc_tuples = categorical_base.data
     else:
         raise NotImplementedError
     return cfc_tuples
