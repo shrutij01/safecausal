@@ -5,7 +5,6 @@ import transformers
 import argparse
 from tqdm import tqdm
 import h5py
-import datetime
 import os
 import yaml
 
@@ -106,6 +105,8 @@ def main(args):
         num_concepts = 2
     elif args.dataset_name == "truthful_qa":
         num_concepts = 1
+    elif args.dataset_name == "categorical":
+        num_concepts = 3
     else:
         raise NotImplementedError
     config = {
@@ -126,41 +127,17 @@ def main(args):
         yaml.dump(config, file)
 
 
-def store_eval_embeddings(args):
-    embeddings_path = os.path.join(args.embedding_dir, "eval_embeddings_1.h5")
-    tokenizer = transformers.LlamaTokenizerFast.from_pretrained(
-        args.model_id, token=ACCESS_TOKEN
-    )
-    model = transformers.LlamaForCausalLM.from_pretrained(
-        args.model_id,
-        token=ACCESS_TOKEN,
-        low_cpu_mem_usage=True,
-        device_map="auto",
-        # attn_implementation="flash_attention_2",
-        # torch_dtype=torch.bfloat16,  # check compatibility
-    )
-    cfc1_tuples, cfc2_tuples, _ = utils.load_dataset(
-        dataset_name=args.dataset_name,
-        task_type=args.task_type,
-        d_type="str",
-        n=args.dataset_length,
-        string_length=args.string_length,
-        cycle_distance=args.cycle_distance,
-        file_path=args.gradeschooler_file_path,
-    )
-    cfc1_eval = extract_embeddings(cfc1_tuples, model, tokenizer)
-    cfc2_eval = extract_embeddings(cfc2_tuples, model, tokenizer)
-    with h5py.File(embeddings_path, "w") as hdf_file:
-        hdf_file.create_dataset("cfc1_eval", data=cfc1_eval)
-        hdf_file.create_dataset("cfc2_eval", data=cfc2_eval)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--eval", default=False)
     parser.add_argument(
         "--dataset-name",
-        choices=["binary_1", "binary_1_2", "binary_2", "truthful_qa"],
+        choices=[
+            "binary_1",
+            "binary_1_2",
+            "binary_2",
+            "truthful_qa",
+            "categorical",
+        ],
         default="binary_1",
     )
     parser.add_argument(
@@ -171,22 +148,6 @@ if __name__ == "__main__":
     )
     # Llama-3 has 32 layers, CAA paper showed most effective steering around the
     # 13th layer for Llama-2 with 33 layers
-    parser.add_argument(
-        "--dataset-length",
-        default=100000,
-    )
-    parser.add_argument(
-        "--embedding_dir",
-        default="/network/scratch/j/joshi.shruti/psp/gradeschooler/2024-08-22_23-37-25",
-    )
-    parser.add_argument("--append-instruction", default=False)
 
     args = parser.parse_args()
-    print(args.eval)
-    if args.eval:
-        import ipdb
-
-        ipdb.set_trace()
-        store_eval_embeddings(args)
-    else:
-        main(args)
+    main(args)
