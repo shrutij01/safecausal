@@ -361,9 +361,6 @@ def main(args):
     logger = Logger(project="iclrpsp", config=config_dict)
     train_loader, rep_dim, num_concepts = load_training_data(args, data_config)
     # Assuming the LinearSAE model and other parameters are already defined:
-    import ipdb
-
-    ipdb.set_trace()
     sae_model = LinearSAE(
         rep_dim=rep_dim, num_concepts=num_concepts, norm_type=args.norm_type
     )
@@ -405,7 +402,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--embeddings-file")
+    parser.add_argument("--embeddings-file--embeddings-file")
     parser.add_argument("--data-config-file")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-epochs", type=int, default=20000)
