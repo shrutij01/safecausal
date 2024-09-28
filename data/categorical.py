@@ -63,20 +63,13 @@ def write_to_python_file(filename, list_of_lists):
     with open(filename, "w", buffering=2048) as file:
         file.write("data = [\n")
         for single_list in list_of_lists:
-            tuple_str = (
-                f"    ({repr(single_list[0])}, {repr(single_list[1])}),\n"
-            )
+            tuple_str = f"({repr(single_list[0])}, {repr(single_list[1])}),\n"
             file.write(tuple_str)
         file.write("]\n")
 
 
 if __name__ == "__main__":
-    dir = "/home/mila/j/joshi.shruti/causalrepl_space/psp/data/"
-    current_datetime = datetime.datetime.now()
-    timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    datadir = os.path.join(dir, timestamp_str)
-    if not os.path.exists(datadir):
-        os.makedirs(datadir)
+    datadir = "/home/mila/j/joshi.shruti/causalrepl_space/psp/data/"
     filename = os.path.join(datadir, "categorical_base.py")
     size = 100000
     dataset = generate_data(size)
