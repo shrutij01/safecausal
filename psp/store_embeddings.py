@@ -107,6 +107,8 @@ def main(args):
         num_concepts = 1
     elif args.dataset_name == "binary_2":
         num_concepts = 2
+    elif args.dataset_name == "truthful_qa":
+        num_concepts = 1
     else:
         raise NotImplementedError
     config = {

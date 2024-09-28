@@ -57,6 +57,9 @@ def load_dataset(dataset_name, **kwargs):
         # mc1_targets have a single correct choice and mc2_targets have
         # multiple choices that can be correct
         instruction = "Label as 0 for False and 1 for True."
+        import ipdb
+
+        ipdb.set_trace()
         cfc_tuples = (
             [
                 value
