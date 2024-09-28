@@ -62,7 +62,20 @@ def main(args):
     )
     with open(args.dataconfig_file, "r") as file:
         data_config = Box(yaml.safe_load(file))
-    modeldirs = [args.modeldir_1, args.modeldir_2, args.modeldir_3]
+    modelrootdir = "/network/scratch/j/joshi.shruti/psp/binary_1/"
+    modeldirnames = [
+        args.modeldir_1,
+        args.modeldir_2,
+        args.modeldir_3,
+        args.modeldir_4,
+        args.modeldir_5,
+    ]
+    import ipdb
+
+    ipdb.set_trace()
+    modeldirs = [
+        modelrootdir + str(modeldirname) for modeldirname in modeldirnames
+    ]
     models, wds, seeds = [], [], []
     for modeldir in modeldirs:
         model, wd, seed, model_string = load_model(modeldir, data_config)
