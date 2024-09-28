@@ -2,7 +2,7 @@ import torch
 
 from datasets import load_dataset as hf_load_dataset
 
-from data import base, ana
+from data import base, categorical_base
 
 import numpy as np
 import os
@@ -69,7 +69,7 @@ def load_dataset(dataset_name, **kwargs):
     elif dataset_name == "binary_2":
         cfc_tuples = base.binary_2
     elif dataset_name == "categorical":
-        cfc_tuples = base.categorical
+        cfc_tuples = categorical_base.categorical
     else:
         raise NotImplementedError
     return cfc_tuples
