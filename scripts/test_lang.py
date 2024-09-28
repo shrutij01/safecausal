@@ -264,7 +264,7 @@ def main(args):
         plt.xlabel("Cosine Similarity")
         plt.ylabel("Density")
         plt.legend()
-        plt.savefig("kde_" + str(data_config.dataset) + "_2_to_1_" + ".png")
+        plt.savefig("kde_" + str(data_config.dataset) + "_2_to_1_2_" + ".png")
 
 
 if __name__ == "__main__":
