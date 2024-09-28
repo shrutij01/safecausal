@@ -8,7 +8,7 @@ data_configs=(
     "/network/scratch/j/joshi.shruti/psp/binary_2/binary_2_32_config.yaml"
 )
 alphas=(
-    "--alpha 11" "--alpha 25"
+    "--alpha 11" "--alpha 13" "--alpha 15"
 )
 epochs=(
     "--num-epochs 20000"
