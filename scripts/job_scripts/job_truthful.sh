@@ -8,13 +8,13 @@ data_configs=(
     "/network/scratch/j/joshi.shruti/psp/truthful_qa/truthful_qa_32_config.yaml"
 )
 alphas=(
-    "--alpha 11" "--alpha 15" "--alpha 5"
+    "--alpha 9" "--alpha 11" "--alpha 13"
 )
 epochs=(
     "--num-epochs 20000"
 )
 primal_lrs=(
-    "--primal-lr 0.01" "--primal-lr 0.05" "--primal-lr 0.005"
+    "--primal-lr 0.01" "--primal-lr 0.005" "--primal-lr 0.007"
 )
 indicator_thresholds=(
     "--indicator-threshold 0.1"
@@ -26,14 +26,14 @@ dual_lrs=(
     "--dual-lr 0.005"
 )
 seeds=(
-    "--seed 0" "--seed 1" "--seed 2"
+    "--seed 0" "--seed 1" "--seed 2" "--seed 5" "--seed 7"
 )
 
 # Job settings
 job_name="test"
 output="job_output_%j.txt"  # %j will be replaced by the job ID
 error="job_error_%j.txt"
-time_limit="0:30:00"
+time_limit="1:00:00"
 memory="100Gb"
 gpu_req="gpu:a100:1"
 # Directory to store generated job scripts
