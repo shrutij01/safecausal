@@ -24,26 +24,6 @@ def numpify(tensor):
 
 
 def load_dataset(dataset_name, **kwargs):
-    # if dataset_name == "ana":
-    #     data = ana.generate_data(**kwargs)
-    #     instruction = "Swap the letters in this string."
-    #     cfc_tuples = data
-    # elif dataset_name == "gradeschooler":
-    #     cfc_tuples = []
-    #     file_path = kwargs.get("file_path")
-    #     if file_path is None:
-    #         raise ValueError(
-    #             "file_path must be provided as a keyword argument"
-    #         )
-    #     with open(file_path, "r") as f:
-    #         context_pairs = [
-    #             line.strip().split("\t") for line in f if line.strip()
-    #         ]
-    #     for cp in context_pairs:
-    #         cfc_tuples.append(
-    #             (cp[0].split(",")[0], cp[0].split(",")[1].lstrip())
-    #         )
-    #     instruction = "Change any one, or two, or all three of the entities in the string, and mention how many and which you changed."
     if dataset_name == "truthful_qa":
         hf_dataset_name = "truthfulqa/truthful_qa"
         dataset_params = {
@@ -80,23 +60,17 @@ def load_dataset(dataset_name, **kwargs):
             wrong_pair = (
                 question + " " + instruction + " " + wrong_answer_choice
             )
-            import ipdb
-
-            ipdb.set_trace()
             cfc_tuples.append([correct_pair, wrong_pair])
 
     elif dataset_name == "binary_1":
         cfc_tuples = base.binary_1
-        instruction = None
     elif dataset_name == "binary_1_2":
         cfc_tuples = base.binary_1_2
-        instruction = None
     elif dataset_name == "binary_2":
         cfc_tuples = base.binary_2
-        instruction = None
     else:
         raise NotImplementedError
-    return cfc_tuples, instruction
+    return cfc_tuples
 
 
 def append_instruction(contexts, instruction):

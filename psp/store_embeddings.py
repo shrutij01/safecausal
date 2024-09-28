@@ -55,14 +55,11 @@ def store_embeddings(filename, cfc_train, cfc_test):
 
 
 def main(args):
-    cfc_tuples, instruction = utils.load_dataset(
+    cfc_tuples = utils.load_dataset(
         dataset_name=args.dataset_name,
     )
     split = int(0.9 * len(cfc_tuples))
     cfc_train, cfc_test = cfc_tuples[0:split], cfc_tuples[split:]
-    if args.append_instruction:
-        cfc_train = utils.append_instruction(cfc_train, instruction)
-        cfc_test = utils.append_instruction(cfc_test, instruction)
 
     tokenizer = transformers.LlamaTokenizerFast.from_pretrained(
         args.model_id, token=ACCESS_TOKEN
