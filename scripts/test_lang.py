@@ -233,11 +233,31 @@ def main(args):
                 )
             )
         cosines_neta_2_to1 = [float(arr[0][0]) for arr in cosines_neta_2_to1]
+        md_2_to_1 = utils.get_md_steering_vector(args.data_file2)
+        z_md_2_to_1 = onesp_z + md_2_to_1
+        cosines_md_2_to_1 = []
+        for i in range(onesp_tilde_z.shape[0]):
+            # cosines_neta.append(
+            #     1 - spatial.distance.cosine(tilde_z[i], z_neta[i])
+            # )
+            cosines_md_2_to_1.append(
+                cosine_similarity(
+                    onesp_tilde_z[i].reshape(1, -1),
+                    z_md_2_to_1[i].reshape(1, -1),
+                )
+            )
+        cosines_md_2_to_1 = [float(arr[0][0]) for arr in cosines_md_2_to_1]
         plt.figure(figsize=(10, 6))
         sns.kdeplot(
             cosines_neta_2_to1,
             bw_adjust=0.75,
             label="Cosine Similarity with neta_2_to_1",
+            shade=True,
+        )
+        sns.kdeplot(
+            cosines_md_2_to_1,
+            bw_adjust=0.75,
+            label="Cosine Similarity with md_2_to_1",
             shade=True,
         )
         plt.title("KDE of Cosine Similarities")
