@@ -104,11 +104,13 @@ def main(args):
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
         sns.kdeplot(
             cosines_md,
+            clip=(0, 1),
             label="Cosine Similarity with MD",
             shade=True,
         )
         sns.kdeplot(
             cosines_neta,
+            clip=(0, 1),
             label="Cosine Similarity with neta",
             shade=True,
         )
@@ -121,7 +123,11 @@ def main(args):
         data = np.vstack([tilde_z, z_md, z_neta])
 
         # Create labels for each set
-        labels = np.array(["tilde_z"] * 10 + ["z_md"] * 10 + ["z_neta"] * 10)
+        labels = np.array(
+            ["tilde_z"] * tilde_z.shape[0]
+            + ["z_md"] * z_md.shape[0]
+            + ["z_neta"] * z_neta.shape[0]
+        )
 
         # Step 2: Apply t-SNE
         tsne = TSNE(n_components=2, perplexity=2, random_state=42)
@@ -161,12 +167,10 @@ def main(args):
                 )
             )
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
-        import ipdb
-
-        ipdb.set_trace()
         plt.figure(figsize=(10, 6))
         sns.kdeplot(
             cosines_neta,
+            clip=(0, 1),
             label="Cosine Similarity with neta",
             shade=True,
         )
@@ -178,7 +182,9 @@ def main(args):
         data = np.vstack([tilde_z, z_neta])
 
         # Create labels for each set
-        labels = np.array(["tilde_z"] * 10 + ["z_neta"] * 10)
+        labels = np.array(
+            ["tilde_z"] * tilde_z.shape[0] + ["z_neta"] * z_neta.shape[0]
+        )
 
         # Step 2: Apply t-SNE
         tsne = TSNE(n_components=2, perplexity=2, random_state=42)
@@ -186,9 +192,6 @@ def main(args):
 
         # Step 3: Plot the results
         plt.figure(figsize=(10, 8))
-        import ipdb
-
-        ipdb.set_trace()
         sns.scatterplot(
             x=transformed_data[:, 0],
             y=transformed_data[:, 1],
