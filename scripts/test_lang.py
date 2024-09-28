@@ -22,7 +22,9 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def load_model(modeldir, dataconfig):
-    with open(os.path.join(modeldir, "model_config.yaml"), "r") as file:
+    with open(
+        os.path.join(modeldir, "prebias" "model_config.yaml"), "r"
+    ) as file:
         modelconfig = Box(yaml.safe_load(file))
     model = LinearSAE(
         rep_dim=dataconfig.rep_dim,
@@ -30,7 +32,7 @@ def load_model(modeldir, dataconfig):
         norm_type=modelconfig.norm_type,
     ).to(device)
     model.load_state_dict(
-        torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
+        torch.load(os.path.join(modeldir, "prebias", "sparse_dict_model.pth"))
     )
     model.eval()
     model_string = str(modelconfig.alpha) + "_" + str(modelconfig.primal_lr)
@@ -70,9 +72,7 @@ def main(args):
         args.modeldir_4,
         args.modeldir_5,
     ]
-    import ipdb
 
-    ipdb.set_trace()
     modeldirs = [
         modelrootdir + str(modeldirname) for modeldirname in modeldirnames
     ]
