@@ -162,15 +162,29 @@ def main(args):
         sns.kdeplot(
             cosines_md,
             bw_adjust=0.75,
-            label="Cosine Similarity with MD",
+            label="$\theta$($ \tilde z $, $\tilde z_{\text{MD}}$)",
             shade=True,
         )
+        for i, cs in enumerate(cosines_neta_for_all_seeds):
+            sns.kdeplot(
+                cs,
+                label=f"Variation {i+1} (a, c)",
+                linestyle="--",
+                alpha=0.5,
+                color="grey",
+            )
         sns.kdeplot(
-            cosines_neta,
-            bw_adjust=0.75,
-            label="Cosine Similarity with neta",
-            shade=True,
+            means_ac,
+            label="$\theta$($ \tilde z $, $\tilde z_{\neta}$)",
+            color="red",
         )
+        plt.fill_between(
+            np.linspace(0, 1, 100),
+            means_ac - std_ac,
+            means_ac + std_ac,
+            color="red",
+            alpha=0.3,
+        )  # Assuming a range for visualization
         plt.title("KDE of Cosine Similarities")
         plt.xlabel("Cosine Similarity")
         plt.ylabel("Density")
