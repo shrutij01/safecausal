@@ -117,6 +117,7 @@ def main(args):
         mccs = compute_mccs(seeds, wds)
         mean_mcc = np.mean(mccs, axis=0)
         std_mcc = np.std(mccs, axis=0)
+        model_string = "ok"
         mcc_string = "mccs_" + str(model_string)
         mean_mcc_string = "mean_mcc_" + str(model_string)
         std_mcc_string = "std_mcc_" + str(model_string)
