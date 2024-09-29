@@ -15,35 +15,15 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 import torch
 import matplotlib.pyplot as plt
-
-plt.style.use("tableau-colorblind10")
-
 import seaborn as sns
 from sklearn.manifold import TSNE
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def load_baseline(modeldir, dataconfig):
-    model = LinearSAE(
-        rep_dim=dataconfig.rep_dim,
-        num_concepts=dataconfig.num_concepts,
-        norm_type="bn",
-    ).to(device)
-    model.load_state_dict(
-        torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
-    )
-    model.eval()
-    return (
-        model,
-        utils.numpify(model.decoder.weight.data),
-    )
-
-
 def load_model(modeldir, dataconfig):
     with open(
-        os.path.join(modeldir, "prebias/", "model_config.yaml"),
-        "r",
+        os.path.join(modeldir, "prebias/" "model_config.yaml"), "r"
     ) as file:
         modelconfig = Box(yaml.safe_load(file))
     model = LinearSAE(
@@ -102,12 +82,13 @@ def main(args):
         models.append(model)
         wds.append(wd)
         seeds.append(seed)
-    # _, concept_projections = models[0](utils.tensorify((tilde_z - z), device))
-    # neta = concept_projections.detach().cpu().numpy() @ wds[0].T
+    _, concept_projections = models[0](utils.tensorify((tilde_z - z), device))
+    neta = concept_projections.detach().cpu().numpy() @ wds[0].T
     if (
         data_config.dataset == "binary_1"
         or data_config.dataset == "binary_1_2"
     ):
+        md = utils.get_md_steering_vector(args.data_file)
         mccs = compute_mccs(seeds, wds)
         mean_mcc = np.mean(mccs, axis=0)
         std_mcc = np.std(mccs, axis=0)
@@ -119,37 +100,26 @@ def main(args):
             mean_mcc_string: mean_mcc,
             std_mcc_string: std_mcc,
         }
-        print(config_dict)
-        import ipdb
-
-        ipdb.set_trace()
-        z = z / np.linalg.norm(z)
-        md = utils.get_md_steering_vector(args.data_file)
-        z_md = z + md
-        z_md = z_md / np.linalg.norm(z_md)
-
-        baseline, baseline_wd = load_baseline(args.baseline, data_config)
-        _, baseline_concept_projections = baseline(
-            utils.tensorify((tilde_z - z), device)
+        config_file = os.path.join(
+            "/home/mila/j/joshi.shruti/causalrepl_space/psp/scripts/disentanglement_evals",
+            "disentanglement_scores_binary_1.yaml",  # FLAG
         )
-        baseline_neta = (
-            baseline_concept_projections.detach().cpu().numpy() @ baseline_wd.T
-        )
-        baseline_neta = baseline_neta / np.linalg.norm(baseline_neta)
-        z_aff = z + baseline_neta
-        z_aff = z_aff / np.linalg.norm(z_aff)
+        with open(config_file, "w") as file:
+            yaml.dump(config_dict, file)
 
         _, concept_projections = models[0](
             utils.tensorify((tilde_z - z), device)
         )
+        z = z / np.linalg.norm(z)
+        z_md = z + md
+
         neta = concept_projections.detach().cpu().numpy() @ wds[0].T
         neta = neta / np.linalg.norm(neta)
         z_neta = z + neta
         z_neta = z_neta / np.linalg.norm(z_neta)
-
+        z_md = z_md / np.linalg.norm(z_md)
         tilde_z = tilde_z / np.linalg.norm(tilde_z)
-
-        cosines_md, cosines_neta, cosines_aff = [], [], []
+        cosines_md, cosines_neta = [], []
         for i in range(tilde_z.shape[0]):
             cosines_md.append(
                 cosine_similarity(
@@ -161,81 +131,57 @@ def main(args):
                     tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
                 )
             )
-            cosines_aff.append(
-                cosine_similarity(
-                    tilde_z[i].reshape(1, -1), z_aff[i].reshape(1, -1)
-                )
-            )
         plt.figure(figsize=(10, 6))
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
-        cosines_aff = [float(arr[0][0]) for arr in cosines_aff]
         sns.kdeplot(
             cosines_md,
             bw_adjust=0.75,
-            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{MD}})$",
+            label="$\theta$($ \tilde z $, $\tilde z_{\text{MD}}$",
             shade=True,
-            linewidths=1.5,
         )
         sns.kdeplot(
             cosines_neta,
             bw_adjust=0.75,
-            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{neta}})$",
+            label="$\theta$($ \tilde z $, $\tilde z_{\neta}$)",
             shade=True,
-            linewidths=1.5,
         )
-        sns.kdeplot(
-            cosines_aff,
-            bw_adjust=0.75,
-            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{aff}})$",
-            shade=True,
-            linewidths=1.5,
-        )
-        ax = plt.gca()  # Get current axis
-        ax.spines["top"].set_linewidth(1.5)
-        ax.spines["right"].set_linewidth(1.5)
-        ax.spines["left"].set_linewidth(1.5)
-        ax.spines["bottom"].set_linewidth(1.5)
-        for spine in ax.spines.values():
-            spine.set_linewidth(1.5)
 
-        # Setting font sizes for the plot elements
-        ax.tick_params(axis="both", which="major", labelsize=13)  # Ticks
-        plt.xlabel("Cosine Similarity", fontsize=15)  # X-axis label
-        plt.ylabel("Density", fontsize=15)  # Y-axis label
         # plt.title("Cosine Similarities")
-        plt.legend(loc=2, prop={"size": 15})
+        plt.xlabel("Cosine Similarity")
+        plt.ylabel("Density")
+        plt.legend()
         plt.savefig("kde____" + str(data_config.dataset) + "_" + ".png")
 
-        # data = np.vstack([tilde_z, z_md, z_neta])
+        data = np.vstack([tilde_z, z_md, z_neta])
 
-        # # Create labels for each set
-        # labels = np.array(
-        #     ["tilde_z"] * tilde_z.shape[0]
-        #     + ["z_md"] * z_md.shape[0]
-        #     + ["z_neta"] * z_neta.shape[0]
-        # )
+        # Create labels for each set
+        labels = np.array(
+            ["tilde_z"] * tilde_z.shape[0]
+            + ["z_md"] * z_md.shape[0]
+            + ["z_neta"] * z_neta.shape[0]
+        )
 
-        # # Step 2: Apply t-SNE
-        # tsne = TSNE(n_components=2, perplexity=2, random_state=42)
-        # transformed_data = tsne.fit_transform(data)
+        # Step 2: Apply t-SNE
+        tsne = TSNE(n_components=2, perplexity=2, random_state=42)
+        transformed_data = tsne.fit_transform(data)
 
-        # # Step 3: Plot the results
-        # plt.figure(figsize=(10, 8))
-        # sns.scatterplot(
-        #     x=transformed_data[:, 0],
-        #     y=transformed_data[:, 1],
-        #     hue=labels,
-        #     style=labels,
-        #     palette="viridis",
-        #     s=100,
-        # )
-        # plt.title("t-SNE visualization of tilde_z, z_md, z_neta")
-        # plt.xlabel("t-SNE 1")
-        # plt.ylabel("t-SNE 2")
-        # plt.legend(title="Steering")
-        # plt.grid(True)
-        # plt.savefig("tsne_" + str(data_config.dataset) + "_" + ".png")
+        # Step 3: Plot the results
+        plt.figure(figsize=(10, 8))
+        sns.scatterplot(
+            x=transformed_data[:, 0],
+            y=transformed_data[:, 1],
+            hue=labels,
+            style=labels,
+            palette="viridis",
+            s=100,
+        )
+        plt.title("t-SNE visualization of tilde_z, z_md, z_neta")
+        plt.xlabel("t-SNE 1")
+        plt.ylabel("t-SNE 2")
+        plt.legend(title="Steering")
+        plt.grid(True)
+        plt.savefig("tsne_" + str(data_config.dataset) + "_" + ".png")
     elif data_config.dataset == "binary_2":
         compute_mccs(seeds, wds)
         neta = neta / np.linalg.norm(neta)
@@ -355,7 +301,6 @@ if __name__ == "__main__":
     parser.add_argument("modeldir_3")
     parser.add_argument("modeldir_4")
     parser.add_argument("modeldir_5")
-    parser.add_argument("baseline")
     parser.add_argument(
         "--data-file2",
         default="/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_32_config.yaml",
