@@ -104,15 +104,6 @@ def main(args):
         import ipdb
 
         ipdb.set_trace()
-        config_file = os.path.join(
-            "/home/mila/j/joshi.shruti/causalrepl_space/psp/scripts/disentanglement_evals",
-            "disentanglement_scores_binary_1.yaml",  # FLAG
-        )
-        with open(config_file, "w") as file:
-            yaml.dump(config_dict, file)
-        import ipdb
-
-        ipdb.set_trace()
         _, concept_projections = models[0](
             utils.tensorify((tilde_z - z), device)
         )
@@ -137,7 +128,7 @@ def main(args):
                     tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
                 )
             )
-        plt.figure(figsize=(10, 6))
+        fig, ax = plt.plot(figsize=(10, 6))
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
         sns.kdeplot(
@@ -145,13 +136,20 @@ def main(args):
             bw_adjust=0.75,
             label=r"$\theta(\tilde{z}, \tilde{z}_{\text{MD}})$",
             shade=True,
+            linewidths=1.5,
         )
         sns.kdeplot(
             cosines_neta,
             bw_adjust=0.75,
             label=r"$\theta(\tilde{z}, \tilde{z}_{\text{neta}})$",
             shade=True,
+            linewidths=1.5,
         )
+        for axis in ["top", "bottom", "left", "right"]:
+            ax.spines[axis].set_linewidth(1.5)
+
+            # increase tick width
+            ax.tick_params(width=1.5)
 
         # plt.title("Cosine Similarities")
         plt.xlabel("Cosine Similarity")
