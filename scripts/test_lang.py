@@ -138,16 +138,16 @@ def main(args):
                     tilde_z[i].reshape(1, -1), z_md[i].reshape(1, -1)
                 )
             )
-        cosines_neta = []
         cosines_neta_for_all_seeds = []
         for z_neta in z_netas_for_all_seeds:
+            cosines_neta = []
             for i in range(tilde_z.shape[0]):
                 cosines_neta.append(
                     cosine_similarity(
                         tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
                     )
                 )
-            cosines_neta = [arr for arr in cosines_neta]
+            cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
             cosines_neta_for_all_seeds.append(cosines_neta)
         import ipdb
 
