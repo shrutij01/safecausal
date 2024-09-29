@@ -25,15 +25,10 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
 def load_baseline(modeldir, dataconfig):
-    with open(
-        os.path.join(modeldir, "model_config.yaml"),
-        "r",
-    ) as file:
-        modelconfig = Box(yaml.safe_load(file))
     model = LinearSAE(
         rep_dim=dataconfig.rep_dim,
         num_concepts=dataconfig.num_concepts,
-        norm_type=modelconfig.norm_type,
+        norm_type="bn",
     ).to(device)
     model.load_state_dict(
         torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
