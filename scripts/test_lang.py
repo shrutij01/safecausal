@@ -86,8 +86,8 @@ def main(args):
         args.modeldir_1,
         args.modeldir_2,
         args.modeldir_3,
-        args.modeldir_4,
-        args.modeldir_5,
+        # args.modeldir_4,
+        # args.modeldir_5,
     ]
 
     modeldirs = [
@@ -346,9 +346,9 @@ if __name__ == "__main__":
     parser.add_argument("modeldir_1")
     parser.add_argument("modeldir_2")
     parser.add_argument("modeldir_3")
-    parser.add_argument("modeldir_4")
-    parser.add_argument("modeldir_5")
-    parser.add_argument("baseline")
+    # parser.add_argument("modeldir_4")
+    # parser.add_argument("modeldir_5")
+    # parser.add_argument("baseline")
     parser.add_argument(
         "--data-file2",
         default="/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_32_config.yaml",
