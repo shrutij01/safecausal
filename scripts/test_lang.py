@@ -105,6 +105,7 @@ def main(args):
         data_config.dataset == "binary_1"
         or data_config.dataset == "binary_1_2"
         or data_config.dataset == "binary_2"
+        or data_config.dataset == "truthful_qa"
     ):
         mccs = compute_mccs(seeds, wds)
         mean_mcc = np.mean(mccs, axis=0)
@@ -160,7 +161,7 @@ def main(args):
         plt.figure(figsize=(10, 6))
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
-        cosines_aff = [float(arr[0][0]) - 0.21 for arr in cosines_aff]
+        cosines_aff = [float(arr[0][0]) for arr in cosines_aff]
         sns.kdeplot(
             cosines_md,
             bw_adjust=0.75,
@@ -201,35 +202,6 @@ def main(args):
         import ipdb
 
         ipdb.set_trace()
-        # data = np.vstack([tilde_z, z_md, z_neta])
-
-        # # Create labels for each set
-        # labels = np.array(
-        #     ["tilde_z"] * tilde_z.shape[0]
-        #     + ["z_md"] * z_md.shape[0]
-        #     + ["z_neta"] * z_neta.shape[0]
-        # )
-
-        # # Step 2: Apply t-SNE
-        # tsne = TSNE(n_components=2, perplexity=2, random_state=42)
-        # transformed_data = tsne.fit_transform(data)
-
-        # # Step 3: Plot the results
-        # plt.figure(figsize=(10, 8))
-        # sns.scatterplot(
-        #     x=transformed_data[:, 0],
-        #     y=transformed_data[:, 1],
-        #     hue=labels,
-        #     style=labels,
-        #     palette="viridis",
-        #     s=100,
-        # )
-        # plt.title("t-SNE visualization of tilde_z, z_md, z_neta")
-        # plt.xlabel("t-SNE 1")
-        # plt.ylabel("t-SNE 2")
-        # plt.legend(title="Steering")
-        # plt.grid(True)
-        # plt.savefig("tsne_" + str(data_config.dataset) + "_" + ".png")
     if data_config.dataset == "binary_2":
         onesp_tilde_z, onesp_z = utils.load_test_data(
             data_file=args.data_file2,
