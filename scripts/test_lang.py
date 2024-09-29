@@ -24,9 +24,8 @@ from sklearn.manifold import TSNE
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def load_model(modeldir, dataconfig):
+def load_baseline(modeldir, dataconfig):
     with open(
-        # os.path.join(modeldir, "prebias/", "model_config.yaml"), "r"
         os.path.join(modeldir, "model_config.yaml"),
         "r",
     ) as file:
@@ -37,12 +36,31 @@ def load_model(modeldir, dataconfig):
         norm_type=modelconfig.norm_type,
     ).to(device)
     model.load_state_dict(
-        # torch.load(os.path.join(modeldir, "prebias/", "sparse_dict_model.pth"))
         torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
     )
     model.eval()
-    # model_string = str(modelconfig.alpha) + "_" + str(modelconfig.primal_lr)
-    model_string = str(modelconfig.lr)
+    return (
+        model,
+        utils.numpify(model.decoder.weight.data),
+    )
+
+
+def load_model(modeldir, dataconfig):
+    with open(
+        os.path.join(modeldir, "prebias/", "model_config.yaml"),
+        "r" "r",
+    ) as file:
+        modelconfig = Box(yaml.safe_load(file))
+    model = LinearSAE(
+        rep_dim=dataconfig.rep_dim,
+        num_concepts=dataconfig.num_concepts,
+        norm_type=modelconfig.norm_type,
+    ).to(device)
+    model.load_state_dict(
+        torch.load(os.path.join(modeldir, "prebias/", "sparse_dict_model.pth"))
+    )
+    model.eval()
+    model_string = str(modelconfig.alpha) + "_" + str(modelconfig.primal_lr)
     return (
         model,
         utils.numpify(model.decoder.weight.data),
@@ -76,8 +94,8 @@ def main(args):
         args.modeldir_1,
         args.modeldir_2,
         args.modeldir_3,
-        # args.modeldir_4,
-        # args.modeldir_5,
+        args.modeldir_4,
+        args.modeldir_5,
     ]
 
     modeldirs = [
@@ -95,7 +113,6 @@ def main(args):
         data_config.dataset == "binary_1"
         or data_config.dataset == "binary_1_2"
     ):
-        md = utils.get_md_steering_vector(args.data_file)
         mccs = compute_mccs(seeds, wds)
         mean_mcc = np.mean(mccs, axis=0)
         std_mcc = np.std(mccs, axis=0)
@@ -111,19 +128,31 @@ def main(args):
         import ipdb
 
         ipdb.set_trace()
+        z = z / np.linalg.norm(z)
+        md = utils.get_md_steering_vector(args.data_file)
+        z_md = z + md
+
+        baseline, baseline_wd = load_baseline(args.baseline, data_config)
+        _, baseline_concept_projections = baseline(
+            utils.tensorify((tilde_z - z), device)
+        )
+        baseline_neta = (
+            baseline_concept_projections.detach().cpu().numpy() @ baseline_wd.T
+        )
+        baseline_neta = baseline_neta / np.linalg.norm(neta)
+        z_aff = z + baseline_neta
+        z_aff = z_aff / np.linalg.norm(z_aff)
+
         _, concept_projections = models[0](
             utils.tensorify((tilde_z - z), device)
         )
-        z = z / np.linalg.norm(z)
-        z_md = z + md
-
         neta = concept_projections.detach().cpu().numpy() @ wds[0].T
         neta = neta / np.linalg.norm(neta)
         z_neta = z + neta
         z_neta = z_neta / np.linalg.norm(z_neta)
         z_md = z_md / np.linalg.norm(z_md)
         tilde_z = tilde_z / np.linalg.norm(tilde_z)
-        cosines_md, cosines_neta = [], []
+        cosines_md, cosines_neta, cosines_aff = [], [], []
         for i in range(tilde_z.shape[0]):
             cosines_md.append(
                 cosine_similarity(
@@ -135,9 +164,15 @@ def main(args):
                     tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
                 )
             )
+            cosines_aff.append(
+                cosine_similarity(
+                    tilde_z[i].reshape(1, -1), z_aff[i].reshape(1, -1)
+                )
+            )
         plt.figure(figsize=(10, 6))
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
+        cosines_aff = [float(arr[0][0]) for arr in cosines_aff]
         sns.kdeplot(
             cosines_md,
             bw_adjust=0.75,
@@ -149,6 +184,13 @@ def main(args):
             cosines_neta,
             bw_adjust=0.75,
             label=r"$\theta(\tilde{z}, \tilde{z}_{\text{neta}})$",
+            shade=True,
+            linewidths=1.5,
+        )
+        sns.kdeplot(
+            cosines_aff,
+            bw_adjust=0.75,
+            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{aff}})$",
             shade=True,
             linewidths=1.5,
         )
@@ -314,8 +356,9 @@ if __name__ == "__main__":
     parser.add_argument("modeldir_1")
     parser.add_argument("modeldir_2")
     parser.add_argument("modeldir_3")
-    # parser.add_argument("modeldir_4")
-    # parser.add_argument("modeldir_5")
+    parser.add_argument("modeldir_4")
+    parser.add_argument("modeldir_5")
+    parser.add_argument("baseline")
     parser.add_argument(
         "--data-file2",
         default="/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_32_config.yaml",
