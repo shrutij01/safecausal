@@ -178,6 +178,7 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
         config.dataset == "binary_1"
         or config.dataset == "binary_1_2"
         or config.dataset == "binary_2"
+        or config.dataset == "truthful_qa"
     ):
         with h5py.File(args.embeddings_file, "r") as f:
             cfc_train = np.array(f["cfc_train"]).squeeze()
