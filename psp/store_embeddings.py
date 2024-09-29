@@ -57,6 +57,7 @@ def main(args):
     cfc_tuples = utils.load_dataset(
         dataset_name=args.dataset_name,
     )
+    cfc_tuples = cfc_tuples[: int(0.3 * len(cfc_tuples))]
     split = int(0.9 * len(cfc_tuples))
     cfc_train, cfc_test = cfc_tuples[0:split], cfc_tuples[split:]
 
