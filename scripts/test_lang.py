@@ -147,11 +147,11 @@ def main(args):
                         tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
                     )
                 )
-                cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
-            cosines_neta_for_all_seeds.append(cosines_neta)
-        import ipdb
+            import ipdb
 
-        ipdb.set_trace()
+            ipdb.set_trace()
+            cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
+            cosines_neta_for_all_seeds.append(cosines_neta)
         means_ac = np.mean(cosines_neta_for_all_seeds, axis=1)
         std_ac = np.std(cosines_neta_for_all_seeds, axis=1)
         import ipdb
