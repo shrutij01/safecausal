@@ -102,8 +102,8 @@ def main(args):
         models.append(model)
         wds.append(wd)
         seeds.append(seed)
-    _, concept_projections = models[0](utils.tensorify((tilde_z - z), device))
-    neta = concept_projections.detach().cpu().numpy() @ wds[0].T
+    # _, concept_projections = models[0](utils.tensorify((tilde_z - z), device))
+    # neta = concept_projections.detach().cpu().numpy() @ wds[0].T
     if (
         data_config.dataset == "binary_1"
         or data_config.dataset == "binary_1_2"
@@ -126,6 +126,7 @@ def main(args):
         z = z / np.linalg.norm(z)
         md = utils.get_md_steering_vector(args.data_file)
         z_md = z + md
+        z_md = z_md / np.linalg.norm(z_md)
 
         baseline, baseline_wd = load_baseline(args.baseline, data_config)
         _, baseline_concept_projections = baseline(
@@ -145,8 +146,9 @@ def main(args):
         neta = neta / np.linalg.norm(neta)
         z_neta = z + neta
         z_neta = z_neta / np.linalg.norm(z_neta)
-        z_md = z_md / np.linalg.norm(z_md)
+
         tilde_z = tilde_z / np.linalg.norm(tilde_z)
+
         cosines_md, cosines_neta, cosines_aff = [], [], []
         for i in range(tilde_z.shape[0]):
             cosines_md.append(
