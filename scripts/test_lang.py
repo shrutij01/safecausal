@@ -135,7 +135,7 @@ def main(args):
         baseline_neta = (
             baseline_concept_projections.detach().cpu().numpy() @ baseline_wd.T
         )
-        baseline_neta = baseline_neta / np.linalg.norm(neta)
+        baseline_neta = baseline_neta / np.linalg.norm(baseline_neta)
         z_aff = z + baseline_neta
         z_aff = z_aff / np.linalg.norm(z_aff)
 
