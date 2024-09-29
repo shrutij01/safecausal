@@ -113,6 +113,7 @@ def main(args):
     if (
         data_config.dataset == "binary_1"
         or data_config.dataset == "binary_1_2"
+        or data_config.dataset == "binary_2"
     ):
         mccs = compute_mccs(seeds, wds)
         mean_mcc = np.mean(mccs, axis=0)
