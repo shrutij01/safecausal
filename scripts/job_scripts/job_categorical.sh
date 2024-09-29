@@ -20,7 +20,7 @@ indicator_thresholds=(
     "--indicator-threshold 0.1"
 )
 norm_types=(
-    "--norm-type bn" "--norm-type ln"
+    "--norm-type bn"
 )
 dual_lrs=(
     "--dual-lr 0.005"
@@ -34,8 +34,8 @@ job_name="test"
 output="job_output_%j.txt"  # %j will be replaced by the job ID
 error="job_error_%j.txt"
 time_limit="1:00:00"
-memory="32Gb"
-gpu_req="gpu:1"
+memory="100Gb"
+gpu_req="gpu:a100:1"
 
 # Directory to store generated job scripts
 mkdir -p generated_jobs
