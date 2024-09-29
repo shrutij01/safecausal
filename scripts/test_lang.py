@@ -161,7 +161,6 @@ def main(args):
         plt.ylabel("Density", fontsize=15)  # Y-axis label
         # plt.title("Cosine Similarities")
         plt.legend(loc=2, prop={"size": 15})
-        plt.legend()
         plt.savefig("kde____" + str(data_config.dataset) + "_" + ".png")
 
         # data = np.vstack([tilde_z, z_md, z_neta])
