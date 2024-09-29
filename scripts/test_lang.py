@@ -184,13 +184,13 @@ def main(args):
             shade=True,
             linewidths=1.5,
         )
-        # sns.kdeplot(
-        #     cosines_aff,
-        #     bw_adjust=0.75,
-        #     label=r"$\theta(\tilde{z}, \tilde{z}_{\text{aff}})$",
-        #     shade=True,
-        #     linewidths=1.5,
-        # )
+        sns.kdeplot(
+            cosines_aff,
+            bw_adjust=0.75,
+            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{aff}})$",
+            shade=True,
+            linewidths=1.5,
+        )
         ax = plt.gca()  # Get current axis
         ax.spines["top"].set_linewidth(1.5)
         ax.spines["right"].set_linewidth(1.5)
