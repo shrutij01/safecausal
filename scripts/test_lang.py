@@ -169,14 +169,14 @@ def main(args):
         sns.kdeplot(
             cosines_md,
             bw_adjust=0.75,
-            label="$\theta$($ \tilde z $, $\tilde z_{\text{MD}}$",
+            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{MD}})$",
             shade=True,
             linewidths=1.5,
         )
         sns.kdeplot(
             cosines_neta,
             bw_adjust=0.75,
-            label="$\theta$($ \tilde z $, $\tilde z_{\neta}$)",
+            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{neta}})$",
             shade=True,
             linewidths=1.5,
         )
