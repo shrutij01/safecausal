@@ -48,7 +48,7 @@ def compute_mccs(seeds, wds):
     import ipdb
 
     ipdb.set_trace()
-    pairs = list(itertools.combinations(seeds, 2))
+    pairs = list(itertools.combinations(range(len(seeds)), 2))
     mccs = []
     for pair in pairs:
         mccs.append(
