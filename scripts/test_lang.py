@@ -90,11 +90,8 @@ def main(args):
     ):
         md = utils.get_md_steering_vector(args.data_file)
         mccs = compute_mccs(seeds, wds)
-        import ipdb
-
-        ipdb.set_trace()
-        mean_mcc = np.mean(mccs, axis=1)
-        std_mcc = np.std(mccs, axis=1)
+        mean_mcc = np.mean(mccs, axis=0)
+        std_mcc = np.std(mccs, axis=0)
         mcc_string = "mccs_" + str(model_string)
         mean_mcc_string = "mean_mcc_" + str(model_string)
         std_mcc_string = "std_mcc_" + str(model_string)
