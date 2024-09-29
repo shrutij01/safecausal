@@ -20,7 +20,7 @@ norm_types=(
     "--norm-type bn"
 )
 batch_sizes=(
-    "--batch-size 16" "--batch-size 21"
+    "--batch-size 8" "--batch-size 16"
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2"
