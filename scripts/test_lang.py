@@ -16,8 +16,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 import torch
 import matplotlib.pyplot as plt
 
-plt.rcParams["text.usetex"] = True
-
 import seaborn as sns
 from sklearn.manifold import TSNE
 
@@ -146,7 +144,7 @@ def main(args):
         sns.kdeplot(
             cosines_neta,
             bw_adjust=0.75,
-            label=r"$\theta(\tilde{z}, \tilde{z}_{neta})$",
+            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{neta}})$",
             shade=True,
         )
 
@@ -156,35 +154,35 @@ def main(args):
         plt.legend()
         plt.savefig("kde____" + str(data_config.dataset) + "_" + ".png")
 
-        data = np.vstack([tilde_z, z_md, z_neta])
+        # data = np.vstack([tilde_z, z_md, z_neta])
 
-        # Create labels for each set
-        labels = np.array(
-            ["tilde_z"] * tilde_z.shape[0]
-            + ["z_md"] * z_md.shape[0]
-            + ["z_neta"] * z_neta.shape[0]
-        )
+        # # Create labels for each set
+        # labels = np.array(
+        #     ["tilde_z"] * tilde_z.shape[0]
+        #     + ["z_md"] * z_md.shape[0]
+        #     + ["z_neta"] * z_neta.shape[0]
+        # )
 
-        # Step 2: Apply t-SNE
-        tsne = TSNE(n_components=2, perplexity=2, random_state=42)
-        transformed_data = tsne.fit_transform(data)
+        # # Step 2: Apply t-SNE
+        # tsne = TSNE(n_components=2, perplexity=2, random_state=42)
+        # transformed_data = tsne.fit_transform(data)
 
-        # Step 3: Plot the results
-        plt.figure(figsize=(10, 8))
-        sns.scatterplot(
-            x=transformed_data[:, 0],
-            y=transformed_data[:, 1],
-            hue=labels,
-            style=labels,
-            palette="viridis",
-            s=100,
-        )
-        plt.title("t-SNE visualization of tilde_z, z_md, z_neta")
-        plt.xlabel("t-SNE 1")
-        plt.ylabel("t-SNE 2")
-        plt.legend(title="Steering")
-        plt.grid(True)
-        plt.savefig("tsne_" + str(data_config.dataset) + "_" + ".png")
+        # # Step 3: Plot the results
+        # plt.figure(figsize=(10, 8))
+        # sns.scatterplot(
+        #     x=transformed_data[:, 0],
+        #     y=transformed_data[:, 1],
+        #     hue=labels,
+        #     style=labels,
+        #     palette="viridis",
+        #     s=100,
+        # )
+        # plt.title("t-SNE visualization of tilde_z, z_md, z_neta")
+        # plt.xlabel("t-SNE 1")
+        # plt.ylabel("t-SNE 2")
+        # plt.legend(title="Steering")
+        # plt.grid(True)
+        # plt.savefig("tsne_" + str(data_config.dataset) + "_" + ".png")
     elif data_config.dataset == "binary_2":
         compute_mccs(seeds, wds)
         neta = neta / np.linalg.norm(neta)
