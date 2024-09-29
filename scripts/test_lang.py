@@ -104,9 +104,6 @@ def main(args):
             "/home/mila/j/joshi.shruti/causalrepl_space/psp/scripts/disentanglement_evals",
             "disentanglement_scores_binary_1.yaml",  # FLAG
         )
-        import ipdb
-
-        ipdb.set_trace()
         with open(config_file, "w") as file:
             yaml.dump(config_dict, file)
 
@@ -150,7 +147,11 @@ def main(args):
                         tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
                     )
                 )
+                cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
             cosines_neta_for_all_seeds.append(cosines_neta)
+        import ipdb
+
+        ipdb.set_trace()
         means_ac = np.mean(cosines_neta_for_all_seeds, axis=1)
         std_ac = np.std(cosines_neta_for_all_seeds, axis=1)
         import ipdb
@@ -158,7 +159,6 @@ def main(args):
         ipdb.set_trace()
         plt.figure(figsize=(10, 6))
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
-        cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
         sns.kdeplot(
             cosines_md,
             bw_adjust=0.75,
