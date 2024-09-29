@@ -21,9 +21,26 @@ from sklearn.manifold import TSNE
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
+def load_baseline(modeldir, dataconfig):
+    model = LinearSAE(
+        rep_dim=dataconfig.rep_dim,
+        num_concepts=dataconfig.num_concepts,
+        norm_type="bn",
+    ).to(device)
+    model.load_state_dict(
+        torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
+    )
+    model.eval()
+    return (
+        model,
+        utils.numpify(model.decoder.weight.data),
+    )
+
+
 def load_model(modeldir, dataconfig):
     with open(
-        os.path.join(modeldir, "prebias/" "model_config.yaml"), "r"
+        os.path.join(modeldir, "prebias/", "model_config.yaml"),
+        "r",
     ) as file:
         modelconfig = Box(yaml.safe_load(file))
     model = LinearSAE(
@@ -88,7 +105,6 @@ def main(args):
         data_config.dataset == "binary_1"
         or data_config.dataset == "binary_1_2"
     ):
-        md = utils.get_md_steering_vector(args.data_file)
         mccs = compute_mccs(seeds, wds)
         mean_mcc = np.mean(mccs, axis=0)
         std_mcc = np.std(mccs, axis=0)
@@ -107,19 +123,29 @@ def main(args):
         with open(config_file, "w") as file:
             yaml.dump(config_dict, file)
 
-        _, concept_projections = models[0](
+        import ipdb
+
+        ipdb.set_trace()
+        md = utils.get_md_steering_vector(args.data_file)
+        baseline, baseline_wd = load_baseline(args.baseline, data_config)
+        _, baseline_concept_projections = baseline(
             utils.tensorify((tilde_z - z), device)
+        )
+        baseline_neta = (
+            baseline_concept_projections.detach().cpu().numpy() @ baseline_wd.T
         )
         z = z / np.linalg.norm(z)
         z_md = z + md
 
-        neta = concept_projections.detach().cpu().numpy() @ wds[0].T
         neta = neta / np.linalg.norm(neta)
         z_neta = z + neta
         z_neta = z_neta / np.linalg.norm(z_neta)
         z_md = z_md / np.linalg.norm(z_md)
+        baseline_neta = baseline_neta / np.linalg.norm(baseline_neta)
+        z_aff = z + baseline_neta
+        z_aff = z_aff / np.linalg.norm(z_aff)
         tilde_z = tilde_z / np.linalg.norm(tilde_z)
-        cosines_md, cosines_neta = [], []
+        cosines_md, cosines_neta, cosines_aff = [], [], []
         for i in range(tilde_z.shape[0]):
             cosines_md.append(
                 cosine_similarity(
@@ -131,28 +157,55 @@ def main(args):
                     tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
                 )
             )
+            cosines_aff.append(
+                cosine_similarity(
+                    tilde_z[i].reshape(1, -1), z_aff[i].reshape(1, -1)
+                )
+            )
         plt.figure(figsize=(10, 6))
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
+        cosines_aff = [float(arr[0][0]) for arr in cosines_aff]
         sns.kdeplot(
             cosines_md,
             bw_adjust=0.75,
             label="$\theta$($ \tilde z $, $\tilde z_{\text{MD}}$",
             shade=True,
+            linewidths=1.5,
         )
         sns.kdeplot(
             cosines_neta,
             bw_adjust=0.75,
             label="$\theta$($ \tilde z $, $\tilde z_{\neta}$)",
             shade=True,
+            linewidths=1.5,
         )
-
+        sns.kdeplot(
+            cosines_aff,
+            bw_adjust=0.75,
+            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{aff}})$",
+            shade=True,
+            linewidths=1.5,
+        )
         # plt.title("Cosine Similarities")
-        plt.xlabel("Cosine Similarity")
-        plt.ylabel("Density")
-        plt.legend()
-        plt.savefig("kde____" + str(data_config.dataset) + "_" + ".png")
+        ax = plt.gca()  # Get current axis
+        ax.spines["top"].set_linewidth(1.5)
+        ax.spines["right"].set_linewidth(1.5)
+        ax.spines["left"].set_linewidth(1.5)
+        ax.spines["bottom"].set_linewidth(1.5)
+        for spine in ax.spines.values():
+            spine.set_linewidth(1.5)
 
+        # Setting font sizes for the plot elements
+        ax.tick_params(axis="both", which="major", labelsize=13)  # Ticks
+        plt.xlabel("Cosine Similarity", fontsize=15)  # X-axis label
+        plt.ylabel("Density", fontsize=15)  # Y-axis label
+        # plt.title("Cosine Similarities")
+        plt.legend(loc=2, prop={"size": 15})
+        plt.savefig("kde____" + str(data_config.dataset) + "_" + ".png")
+        import ipdb
+
+        ipdb.set_trace()
         data = np.vstack([tilde_z, z_md, z_neta])
 
         # Create labels for each set

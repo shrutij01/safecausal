@@ -9,3 +9,5 @@
 *.lock
 questions.txt
 script.txt
+*job_error*
+*job_output*
