@@ -38,26 +38,34 @@ def load_baseline(modeldir, dataconfig):
 
 
 def load_model(modeldir, dataconfig):
+    # with open(
+    #     os.path.join(modeldir, "prebias/", "model_config.yaml"),
+    #     "r",
+    # ) as file:
+    #     modelconfig = Box(yaml.safe_load(file))
     with open(
-        os.path.join(modeldir, "prebias/", "model_config.yaml"),
+        os.path.join(modeldir, "model_config.yaml"),
         "r",
     ) as file:
         modelconfig = Box(yaml.safe_load(file))
     model = LinearSAE(
         rep_dim=dataconfig.rep_dim,
         num_concepts=dataconfig.num_concepts,
-        norm_type=modelconfig.norm_type,
+        norm_type="bn",
     ).to(device)
+    # model.load_state_dict(
+    #     # torch.load(os.path.join(modeldir, "prebias/", "sparse_dict_model.pth"))
+    # )
     model.load_state_dict(
-        torch.load(os.path.join(modeldir, "prebias/", "sparse_dict_model.pth"))
+        torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
     )
     model.eval()
-    model_string = str(modelconfig.alpha) + "_" + str(modelconfig.primal_lr)
+    # model_string = str(modelconfig.alpha) + "_" + str(modelconfig.primal_lr)
     return (
         model,
         utils.numpify(model.decoder.weight.data),
         int(modelconfig.seed),
-        model_string,
+        # model_string,
     )
 
 
@@ -95,7 +103,8 @@ def main(args):
     ]
     models, wds, seeds = [], [], []
     for modeldir in modeldirs:
-        model, wd, seed, model_string = load_model(modeldir, data_config)
+        # model, wd, seed, model_string = load_model(modeldir, data_config)
+        model, wd, seed = load_model(modeldir, data_config)
         models.append(model)
         wds.append(wd)
         seeds.append(seed)
