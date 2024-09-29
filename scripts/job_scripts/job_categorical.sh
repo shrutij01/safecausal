@@ -22,8 +22,8 @@ indicator_thresholds=(
 norm_types=(
     "--norm-type bn"
 )
-dual_lrs=(
-    "--dual-lr 0.005"
+batch_sizes=(
+    "--batch_size 16" "--batch_size 21"
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2"
@@ -50,7 +50,7 @@ for embedding_file in "${embedding_files[@]}"; do
             for primal_lr in "${primal_lrs[@]}"; do
                 for indicator_threshold in "${indicator_thresholds[@]}"; do
                     for norm_type in "${norm_types[@]}"; do
-                        for dual_lr in "${dual_lrs[@]}"; do
+                        for batch_size in "${batch_sizes[@]}"; do
                             for epoch in "${epochs[@]}"; do
                                 for seed in "${seeds[@]}"; do
                                     # Define a script name
@@ -70,7 +70,7 @@ for embedding_file in "${embedding_files[@]}"; do
                                     echo "conda activate pytorch" >> "${script_name}"
                                     echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:\$PYTHONPATH\"" >> "${script_name}"
                                     echo "cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp" >> "${script_name}"
-                                    echo "python linear_sae.py --embeddings-file ${embedding_file} --data-config-file ${data_config} ${alpha} ${primal_lr} ${dual_lr} ${norm_type} ${indicator_threshold} ${epoch} ${seed}" >> "${script_name}"
+                                    echo "python linear_sae.py --embeddings-file ${embedding_file} --data-config-file ${data_config} ${alpha} ${primal_lr} ${batch_size} ${norm_type} ${indicator_threshold} ${epoch} ${seed}" >> "${script_name}"
 
                                     # Make the script executable
                                     chmod +x "${script_name}"
