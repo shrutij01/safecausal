@@ -16,6 +16,8 @@ from sklearn.metrics.pairwise import cosine_similarity
 import torch
 import matplotlib.pyplot as plt
 
+plt.style.use("tableau-colorblind10")
+
 import seaborn as sns
 from sklearn.manifold import TSNE
 
@@ -128,7 +130,7 @@ def main(args):
                     tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
                 )
             )
-        fig, ax = plt.plot(figsize=(10, 6))
+        plt.figure(figsize=(10, 6))
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
         sns.kdeplot(
@@ -145,15 +147,15 @@ def main(args):
             shade=True,
             linewidths=1.5,
         )
-        for axis in ["top", "bottom", "left", "right"]:
-            ax.spines[axis].set_linewidth(1.5)
-
-            # increase tick width
-            ax.tick_params(width=1.5)
-
+        ax = plt.gca()  # Get current axis
+        ax.spines["top"].set_linewidth(1.5)
+        ax.spines["right"].set_linewidth(1.5)
+        ax.spines["left"].set_linewidth(1.5)
+        ax.spines["bottom"].set_linewidth(1.5)
         # plt.title("Cosine Similarities")
         plt.xlabel("Cosine Similarity")
         plt.ylabel("Density")
+        plt.legend(loc=2, prop={"size": 6})
         plt.legend()
         plt.savefig("kde____" + str(data_config.dataset) + "_" + ".png")
 
