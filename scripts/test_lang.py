@@ -42,7 +42,7 @@ def load_model(modeldir, dataconfig):
     )
     model.eval()
     # model_string = str(modelconfig.alpha) + "_" + str(modelconfig.primal_lr)
-    model_string = str(modelconfig.primal_lr)
+    model_string = str(modelconfig.lr)
     return (
         model,
         utils.numpify(model.decoder.weight.data),
