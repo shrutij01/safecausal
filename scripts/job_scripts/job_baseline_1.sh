@@ -2,16 +2,16 @@
 
 # Define hyperparameters
 embedding_files=(
-    "/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_embeddings_layer_32.h5"
+    "/network/scratch/j/joshi.shruti/psp/binary_1_2/binary_1_2_embeddings_layer_32.h5"
 )
 data_configs=(
-    "/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_32_config.yaml"
+    "/network/scratch/j/joshi.shruti/psp/binary_1_2/binary_1_2_32_config.yaml"
 )
 epochs=(
     "--num-epochs 20000"
 )
 primal_lrs=(
-    "--primal-lr 0.01" "--primal-lr 0.005" "--primal-lr 0.007"
+    "--primal-lr 0.01"
 )
 indicator_thresholds=(
     "--indicator-threshold 0.1"
