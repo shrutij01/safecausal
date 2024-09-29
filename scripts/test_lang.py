@@ -151,7 +151,7 @@ def main(args):
         plt.xlabel("Cosine Similarity")
         plt.ylabel("Density")
         plt.legend()
-        plt.savefig("_kde_" + str(data_config.dataset) + "_" + ".png")
+        plt.savefig("kde____" + str(data_config.dataset) + "_" + ".png")
 
         data = np.vstack([tilde_z, z_md, z_neta])
 
