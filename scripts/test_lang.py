@@ -15,6 +15,9 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 import torch
 import matplotlib.pyplot as plt
+
+plt.rcParams["text.usetex"] = True
+
 import seaborn as sns
 from sklearn.manifold import TSNE
 
@@ -137,13 +140,13 @@ def main(args):
         sns.kdeplot(
             cosines_md,
             bw_adjust=0.75,
-            label="$\theta$($ \tilde z $, $\tilde z_{\text{MD}}$",
+            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{MD}})$",
             shade=True,
         )
         sns.kdeplot(
             cosines_neta,
             bw_adjust=0.75,
-            label="$\theta$($ \tilde z $, $\tilde z_{\neta}$)",
+            label=r"$\theta(\tilde{z}, \tilde{z}_{neta})$",
             shade=True,
         )
 
