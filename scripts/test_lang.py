@@ -103,6 +103,7 @@ def main(args):
             mean_mcc_string: mean_mcc,
             std_mcc_string: std_mcc,
         }
+        print(config_dict)
         import ipdb
 
         ipdb.set_trace()
