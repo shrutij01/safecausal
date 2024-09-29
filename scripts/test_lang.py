@@ -107,89 +107,51 @@ def main(args):
         with open(config_file, "w") as file:
             yaml.dump(config_dict, file)
 
-        concept_projections_for_all_seeds = []
-        for model in models:
-            _, concept_projections = model(
-                utils.tensorify((tilde_z - z), device)
-            )
-            concept_projections = concept_projections.detach().cpu().numpy()
-            concept_projections_for_all_seeds.append(concept_projections)
-
+        _, concept_projections = models[0](
+            utils.tensorify((tilde_z - z), device)
+        )
         z = z / np.linalg.norm(z)
         z_md = z + md
+
+        neta = concept_projections.detach().cpu().numpy() @ wds[0].T
+        neta = neta / np.linalg.norm(neta)
+        z_neta = z + neta
+        z_neta = z_neta / np.linalg.norm(z_neta)
         z_md = z_md / np.linalg.norm(z_md)
-
-        netas_for_all_seeds = []
-        for concept_projections in concept_projections_for_all_seeds:
-            neta = concept_projections @ wds[0].T
-            neta = neta / np.linalg.norm(neta)
-            netas_for_all_seeds.append(neta)
-        z_netas_for_all_seeds = []
-        for neta in netas_for_all_seeds:
-            z_neta = z + neta
-            z_neta = z_neta / np.linalg.norm(z_neta)
-            z_netas_for_all_seeds.append(z_neta)
-
         tilde_z = tilde_z / np.linalg.norm(tilde_z)
-        cosines_md = []
+        cosines_md, cosines_neta = [], []
         for i in range(tilde_z.shape[0]):
             cosines_md.append(
                 cosine_similarity(
                     tilde_z[i].reshape(1, -1), z_md[i].reshape(1, -1)
                 )
             )
-        cosines_neta_for_all_seeds = []
-        for z_neta in z_netas_for_all_seeds:
-            cosines_neta = []
-            for i in range(tilde_z.shape[0]):
-                cosines_neta.append(
-                    cosine_similarity(
-                        tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
-                    )
+            cosines_neta.append(
+                cosine_similarity(
+                    tilde_z[i].reshape(1, -1), z_neta[i].reshape(1, -1)
                 )
-            cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
-            cosines_neta_for_all_seeds.append(cosines_neta)
-        import ipdb
-
-        ipdb.set_trace()
-        means_ac = np.mean(cosines_neta_for_all_seeds, axis=1)
-        std_ac = np.std(cosines_neta_for_all_seeds, axis=1)
-        import ipdb
-
-        ipdb.set_trace()
+            )
         plt.figure(figsize=(10, 6))
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
+        cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
         sns.kdeplot(
             cosines_md,
             bw_adjust=0.75,
-            label="$\theta$($ \tilde z $, $\tilde z_{\text{MD}}$)",
+            label="$\theta$($ \tilde z $, $\tilde z_{\text{MD}}$",
             shade=True,
         )
-        for i, cs in enumerate(cosines_neta_for_all_seeds):
-            sns.kdeplot(
-                cs,
-                label=f"Variation {i+1} (a, c)",
-                linestyle="--",
-                alpha=0.5,
-                color="grey",
-            )
         sns.kdeplot(
-            means_ac,
+            cosines_neta,
+            bw_adjust=0.75,
             label="$\theta$($ \tilde z $, $\tilde z_{\neta}$)",
-            color="red",
+            shade=True,
         )
-        plt.fill_between(
-            np.linspace(0, 1, 100),
-            means_ac - std_ac,
-            means_ac + std_ac,
-            color="red",
-            alpha=0.3,
-        )  # Assuming a range for visualization
-        plt.title("KDE of Cosine Similarities")
+
+        # plt.title("Cosine Similarities")
         plt.xlabel("Cosine Similarity")
         plt.ylabel("Density")
         plt.legend()
-        plt.savefig("kde_" + str(data_config.dataset) + "_" + ".png")
+        plt.savefig("_kde_" + str(data_config.dataset) + "_" + ".png")
 
         data = np.vstack([tilde_z, z_md, z_neta])
 
