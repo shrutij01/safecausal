@@ -45,9 +45,6 @@ def load_model(modeldir, dataconfig):
 
 
 def compute_mccs(seeds, wds):
-    import ipdb
-
-    ipdb.set_trace()
     pairs = list(itertools.combinations(range(len(seeds)), 2))
     mccs = []
     for pair in pairs:
@@ -93,6 +90,9 @@ def main(args):
     ):
         md = utils.get_md_steering_vector(args.data_file)
         mccs = compute_mccs(seeds, wds)
+        import ipdb
+
+        ipdb.set_trace()
         mean_mcc = np.mean(mccs, axis=1)
         std_mcc = np.std(mccs, axis=1)
         mcc_string = "mccs_" + str(model_string)
