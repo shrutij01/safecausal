@@ -94,8 +94,8 @@ def main(args):
         args.modeldir_1,
         args.modeldir_2,
         args.modeldir_3,
-        args.modeldir_4,
-        args.modeldir_5,
+        # args.modeldir_4,
+        # args.modeldir_5,
     ]
 
     modeldirs = [
