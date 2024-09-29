@@ -152,10 +152,15 @@ def main(args):
         ax.spines["right"].set_linewidth(1.5)
         ax.spines["left"].set_linewidth(1.5)
         ax.spines["bottom"].set_linewidth(1.5)
+        for spine in ax.spines.values():
+            spine.set_linewidth(1.5)
+
+        # Setting font sizes for the plot elements
+        ax.tick_params(axis="both", which="major", labelsize=13)  # Ticks
+        plt.xlabel("Cosine Similarity", fontsize=15)  # X-axis label
+        plt.ylabel("Density", fontsize=15)  # Y-axis label
         # plt.title("Cosine Similarities")
-        plt.xlabel("Cosine Similarity")
-        plt.ylabel("Density")
-        plt.legend(loc=2, prop={"size": 6})
+        plt.legend(loc=2, prop={"size": 11})
         plt.legend()
         plt.savefig("kde____" + str(data_config.dataset) + "_" + ".png")
 
