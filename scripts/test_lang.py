@@ -101,13 +101,18 @@ def main(args):
             mean_mcc_string: mean_mcc,
             std_mcc_string: std_mcc,
         }
+        import ipdb
+
+        ipdb.set_trace()
         config_file = os.path.join(
             "/home/mila/j/joshi.shruti/causalrepl_space/psp/scripts/disentanglement_evals",
             "disentanglement_scores_binary_1.yaml",  # FLAG
         )
         with open(config_file, "w") as file:
             yaml.dump(config_dict, file)
+        import ipdb
 
+        ipdb.set_trace()
         _, concept_projections = models[0](
             utils.tensorify((tilde_z - z), device)
         )
