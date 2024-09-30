@@ -209,6 +209,7 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
     if (
         config.dataset == "binary_1"
         or config.dataset == "binary_1_2"
+        or config.dataset == "binary_1_1"
         or config.dataset == "binary_2"
         or config.dataset == "truthful_qa"
         or config.dataset == "categorical"
