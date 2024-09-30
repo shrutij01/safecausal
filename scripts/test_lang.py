@@ -203,7 +203,10 @@ def main(args):
         import ipdb
 
         ipdb.set_trace()
-    if data_config.dataset == "binary_2":
+    if (
+        data_config.dataset == "binary_2"
+        or data_config.dataset == "binary_corr"
+    ):
         onesp_tilde_z, onesp_z = utils.load_test_data(
             data_file=args.data_file2,
         )
@@ -292,7 +295,7 @@ def main(args):
         # plt.title("Cosine Similarities")
         plt.legend(loc=2, prop={"size": 15})
         plt.savefig(
-            "kde____" + str(data_config.dataset) + "_bin_2" + "_" + ".png"
+            "kde____" + str(data_config.dataset) + "_bin_1" + "_" + ".png"
         )
 
 
