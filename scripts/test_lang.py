@@ -40,7 +40,7 @@ def load_baseline(modeldir, dataconfig):
 def load_model(modeldir, dataconfig):
     with open(
         # os.path.join(modeldir, "prebias/", "model_config.yaml"),
-        os.path.join(modeldir, "prebias/", "model_config.yaml"),
+        os.path.join(modeldir, "model_config.yaml"),
         "r",
     ) as file:
         modelconfig = Box(yaml.safe_load(file))
