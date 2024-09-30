@@ -148,9 +148,6 @@ def main(args):
         z_aff = z_aff / np.linalg.norm(z_aff)
         tilde_z = tilde_z / np.linalg.norm(tilde_z)
         cosines_md, cosines_neta, cosines_aff = [], [], []
-        import ipdb
-
-        ipdb.set_trace()
         for i in range(tilde_z.shape[0]):
             cosines_md.append(
                 cosine_similarity(
@@ -167,6 +164,9 @@ def main(args):
                     tilde_z[i].reshape(1, -1), z_aff[i].reshape(1, -1)
                 )
             )
+        import ipdb
+
+        ipdb.set_trace()
         plt.figure(figsize=(10, 6))
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
