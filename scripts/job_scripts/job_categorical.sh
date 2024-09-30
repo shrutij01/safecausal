@@ -8,7 +8,7 @@ data_configs=(
     "/network/scratch/j/joshi.shruti/psp/categorical/categorical_32_config.yaml"
 )
 alphas=(
-    "--alpha 0.1" "--alpha 1" "--alpha 3"
+    "--alpha 21" "--alpha 25" "--alpha 31"
 )
 epochs=(
     "--num-epochs 1000"
