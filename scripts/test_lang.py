@@ -291,7 +291,7 @@ def main(args):
         # plt.title("Cosine Similarities")
         plt.legend(loc=2, prop={"size": 15})
         plt.savefig(
-            "kde____" + str(data_config.dataset) + "_bin_1" + "_" + ".png"
+            "kde____" + str(data_config.dataset) + "_bin_2" + "_" + ".png"
         )
 
 
