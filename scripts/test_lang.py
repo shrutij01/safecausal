@@ -81,7 +81,7 @@ def main(args):
     )
     with open(args.dataconfig_file, "r") as file:
         data_config = Box(yaml.safe_load(file))
-    modelrootdir = "/network/scratch/j/joshi.shruti/psp/categorical/"
+    modelrootdir = "/network/scratch/j/joshi.shruti/psp/binary_corr/"
     modeldirnames = [
         args.modeldir_1,
         args.modeldir_2,
