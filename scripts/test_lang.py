@@ -105,7 +105,7 @@ def main(args):
         data_config.dataset == "binary_1"
         or data_config.dataset == "binary_1_2"
         # or data_config.dataset == "binary_2"
-        or data_config.dataset == "binary_corr"
+        # or data_config.dataset == "binary_corr"
         or data_config.dataset == "truthful_qa"
         or data_config.dataset == "categorical"
     ):
@@ -205,9 +205,8 @@ def main(args):
 
         ipdb.set_trace()
     if (
-        data_config.dataset
-        == "binary_2"
-        # or data_config.dataset == "binary_corr"
+        data_config.dataset == "binary_2"
+        or data_config.dataset == "binary_corr"
     ):
         onesp_tilde_z, onesp_z = utils.load_test_data(
             data_file=args.data_file2,
@@ -311,7 +310,7 @@ if __name__ == "__main__":
     parser.add_argument("modeldir_3")
     parser.add_argument("modeldir_4")
     parser.add_argument("modeldir_5")
-    # parser.add_argument("baseline")
+    parser.add_argument("baseline")
     parser.add_argument(
         "--data-file2",
         default="/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_32_config.yaml",
