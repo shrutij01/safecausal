@@ -8,7 +8,7 @@ data_configs=(
     "/network/scratch/j/joshi.shruti/psp/categorical/categorical_32_config.yaml"
 )
 epochs=(
-    "--num-epochs 20000"
+    "--num-epochs 1000"
 )
 primal_lrs=(
     "--primal-lr 0.01"
