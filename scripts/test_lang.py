@@ -107,6 +107,7 @@ def main(args):
         # or data_config.dataset == "binary_2"
         # or data_config.dataset == "binary_corr"
         or data_config.dataset == "truthful_qa"
+        or data_config.dataset == "categorical"
     ):
         mccs = compute_mccs(seeds, wds)
         mean_mcc = np.mean(mccs, axis=0)
