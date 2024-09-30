@@ -241,7 +241,7 @@ def main(args):
                 )
             )
         cosines_neta_2_to1 = [float(arr[0][0]) for arr in cosines_neta_2_to1]
-        cosines_baseline = [float(arr[0][1]) for arr in cosines_baseline]
+        cosines_baseline = [float(arr[0][0]) for arr in cosines_baseline]
         md_2_to_1 = utils.get_md_steering_vector(args.data_file2)
         z_md_2_to_1 = onesp_z + md_2_to_1
         cosines_md_2_to_1 = []
