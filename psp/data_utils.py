@@ -5,6 +5,8 @@ from datasets import load_dataset as hf_load_dataset
 from data import base, categorical_base
 
 import numpy as np
+from random import shuffle
+
 import os
 import ast
 import re
@@ -68,6 +70,10 @@ def load_dataset(dataset_name, **kwargs):
         cfc_tuples = base.binary_1_2
     elif dataset_name == "binary_corr":
         cfc_tuples = base.binary_1 + base.binary_1_1
+        import ipdb
+
+        ipdb.set_trace()
+        shuffle(cfc_tuples)
     elif dataset_name == "binary_2":
         cfc_tuples = base.binary_2
     elif dataset_name == "categorical":
