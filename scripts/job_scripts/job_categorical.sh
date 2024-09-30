@@ -8,10 +8,10 @@ data_configs=(
     "/network/scratch/j/joshi.shruti/psp/categorical/categorical_32_config.yaml"
 )
 alphas=(
-    "--alpha 11" "--alpha 13" "--alpha 15"
+    "--alpha 11" # "--alpha 13" "--alpha 15"
 )
 epochs=(
-    "--num-epochs 20000"
+    "--num-epochs 1000"
 )
 primal_lrs=(
     "--primal-lr 0.01" "--primal-lr 0.005" "--primal-lr 0.007"
@@ -23,7 +23,7 @@ norm_types=(
     "--norm-type bn"
 )
 batch_sizes=(
-    "--batch_size 16" "--batch_size 21"
+    "--batch_size 16" #"--batch_size 21"
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2"
