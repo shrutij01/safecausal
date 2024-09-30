@@ -39,8 +39,8 @@ def load_baseline(modeldir, dataconfig):
 
 def load_model(modeldir, dataconfig):
     with open(
-        # os.path.join(modeldir, "prebias/", "model_config.yaml"),
-        os.path.join(modeldir, "model_config.yaml"),
+        os.path.join(modeldir, "prebias/", "model_config.yaml"),
+        # os.path.join(modeldir, "model_config.yaml"),
         "r",
     ) as file:
         modelconfig = Box(yaml.safe_load(file))
@@ -50,8 +50,8 @@ def load_model(modeldir, dataconfig):
         norm_type="bn",
     ).to(device)
     model.load_state_dict(
-        # torch.load(os.path.join(modeldir, "prebias/", "sparse_dict_model.pth"))
-        torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
+        torch.load(os.path.join(modeldir, "prebias/", "sparse_dict_model.pth"))
+        # torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
     )
     model.eval()
     # model_string = str(modelconfig.alpha) + "_" + str(modelconfig.primal_lr)
@@ -59,7 +59,7 @@ def load_model(modeldir, dataconfig):
         model,
         utils.numpify(model.decoder.weight.data),
         int(modelconfig.seed),
-        # model_string,
+        model_string,
     )
 
 
@@ -88,8 +88,8 @@ def main(args):
         args.modeldir_1,
         args.modeldir_2,
         args.modeldir_3,
-        # args.modeldir_4,
-        # args.modeldir_5,
+        args.modeldir_4,
+        args.modeldir_5,
     ]
 
     modeldirs = [
@@ -97,8 +97,8 @@ def main(args):
     ]
     models, wds, seeds = [], [], []
     for modeldir in modeldirs:
-        # model, wd, seed, model_string = load_model(modeldir, data_config)
-        model, wd, seed = load_model(modeldir, data_config)
+        model, wd, seed, model_string = load_model(modeldir, data_config)
+        # model, wd, seed = load_model(modeldir, data_config)
         models.append(model)
         wds.append(wd)
         seeds.append(seed)
@@ -115,7 +115,7 @@ def main(args):
         mccs = compute_mccs(seeds, wds)
         mean_mcc = np.mean(mccs, axis=0)
         std_mcc = np.std(mccs, axis=0)
-        model_string = "baseline"
+        # model_string = "baseline"
         mcc_string = "mccs_" + str(model_string)
         mean_mcc_string = "mean_mcc_" + str(model_string)
         std_mcc_string = "std_mcc_" + str(model_string)
@@ -313,9 +313,9 @@ if __name__ == "__main__":
     parser.add_argument("modeldir_1")
     parser.add_argument("modeldir_2")
     parser.add_argument("modeldir_3")
-    # parser.add_argument("modeldir_4")
-    # parser.add_argument("modeldir_5")
-    # parser.add_argument("baseline")
+    parser.add_argument("modeldir_4")
+    parser.add_argument("modeldir_5")
+    parser.add_argument("baseline")
     parser.add_argument(
         "--data-file2",
         default="/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_32_config.yaml",
