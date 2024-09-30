@@ -66,8 +66,8 @@ def load_dataset(dataset_name, **kwargs):
         cfc_tuples = base.binary_1
     elif dataset_name == "binary_1_2":
         cfc_tuples = base.binary_1_2
-    elif dataset_name == "binary_1_1":
-        cfc_tuples = base.binary_1_1
+    elif dataset_name == "binary_corr":
+        cfc_tuples = base.binary_1 + base.binary_1_1
     elif dataset_name == "binary_2":
         cfc_tuples = base.binary_2
     elif dataset_name == "categorical":

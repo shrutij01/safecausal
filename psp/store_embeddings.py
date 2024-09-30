@@ -57,7 +57,6 @@ def main(args):
     cfc_tuples = utils.load_dataset(
         dataset_name=args.dataset_name,
     )
-    cfc_tuples = cfc_tuples[: int(0.3 * len(cfc_tuples))]
     split = int(0.9 * len(cfc_tuples))
     cfc_train, cfc_test = cfc_tuples[0:split], cfc_tuples[split:]
 
@@ -100,13 +99,9 @@ def main(args):
         cfc_train_embeddings,
         cfc_test_embeddings,
     )
-    if (
-        args.dataset_name == "binary_1"
-        or args.dataset_name == "binary_1_2"
-        or args.dataset_name == "binary_1_1"
-    ):
+    if args.dataset_name == "binary_1" or args.dataset_name == "binary_1_2":
         num_concepts = 1
-    elif args.dataset_name == "binary_2":
+    elif args.dataset_name == "binary_2" or args.dataset_name == "binary_corr":
         num_concepts = 2
     elif args.dataset_name == "truthful_qa":
         num_concepts = 1
@@ -139,7 +134,7 @@ if __name__ == "__main__":
         choices=[
             "binary_1",
             "binary_1_2",
-            "binary_1_1",
+            "binary_corr",
             "binary_2",
             "truthful_qa",
             "categorical",
