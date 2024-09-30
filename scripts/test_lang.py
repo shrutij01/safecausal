@@ -105,6 +105,7 @@ def main(args):
         data_config.dataset == "binary_1"
         or data_config.dataset == "binary_1_2"
         # or data_config.dataset == "binary_2"
+        or data_config.dataset == "binary_corr"
         or data_config.dataset == "truthful_qa"
     ):
         mccs = compute_mccs(seeds, wds)
