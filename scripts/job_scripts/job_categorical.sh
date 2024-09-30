@@ -8,13 +8,13 @@ data_configs=(
     "/network/scratch/j/joshi.shruti/psp/categorical/categorical_32_config.yaml"
 )
 alphas=(
-    "--alpha 11" # "--alpha 13" "--alpha 15"
+    "--alpha 0.1" "--alpha 1" "--alpha 3"
 )
 epochs=(
     "--num-epochs 1000"
 )
 primal_lrs=(
-    "--primal-lr 0.01" "--primal-lr 0.005" "--primal-lr 0.007"
+    "--primal-lr 0.01"
 )
 indicator_thresholds=(
     "--indicator-threshold 0.1"
