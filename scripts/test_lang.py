@@ -256,7 +256,7 @@ def main(args):
         plt.figure(figsize=(10, 6))
         sns.kdeplot(
             cosines_neta_2_to1,
-            bw_adjust=0.75,
+            bw_adjust=0.5,
             label=r"$\theta(\tilde{z}, \tilde{z}_{\text{neta}})$",
             shade=True,
             linewidths=1.5,
