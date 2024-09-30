@@ -263,7 +263,7 @@ def main(args):
         )
         sns.kdeplot(
             cosines_md_2_to_1,
-            bw_adjust=0.5,
+            bw_adjust=0.75,
             label=r"$\theta(\tilde{z}, \tilde{z}_{\text{MD}})$",
             shade=True,
             linewidths=1.5,
