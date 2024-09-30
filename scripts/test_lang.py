@@ -54,7 +54,7 @@ def load_model(modeldir, dataconfig):
         # torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
     )
     model.eval()
-    # model_string = str(modelconfig.alpha) + "_" + str(modelconfig.primal_lr)
+    model_string = str(modelconfig.alpha) + "_" + str(modelconfig.primal_lr)
     return (
         model,
         utils.numpify(model.decoder.weight.data),
