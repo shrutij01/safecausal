@@ -161,12 +161,12 @@ def main(args):
                 )
             )
         plt.figure(figsize=(10, 6))
-        cosines_md = [float(arr[0][0]) + 0.2 for arr in cosines_md]
+        cosines_md = [float(arr[0][0]) for arr in cosines_md]
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
         cosines_aff = [float(arr[0][0]) - 0.1 for arr in cosines_aff]
         sns.kdeplot(
             cosines_md,
-            bw_adjust=0.5,
+            bw_adjust=0.75,
             label=r"$\theta(\tilde{z}, \tilde{z}_{\text{MD}})$",
             shade=True,
             linewidths=1.5,
