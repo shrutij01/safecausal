@@ -23,7 +23,7 @@ dual_lrs=(
     "--dual-lr 0.005"
 )
 seeds=(
-    "--seed 0" "--seed 1" "--seed 2" "--seed 5" "--seed 7"
+    "--seed 0" "--seed 1" "--seed 2"
 )
 
 # Job settings
@@ -43,40 +43,39 @@ counter=0
 # Loop through all combinations of hyperparameters
 for embedding_file in "${embedding_files[@]}"; do
     for data_config in "${data_configs[@]}"; do
-        for alpha in "${alphas[@]}"; do
-            for primal_lr in "${primal_lrs[@]}"; do
-                for indicator_threshold in "${indicator_thresholds[@]}"; do
-                    for norm_type in "${norm_types[@]}"; do
-                        for dual_lr in "${dual_lrs[@]}"; do
-                            for epoch in "${epochs[@]}"; do
-                                for seed in "${seeds[@]}"; do
-                                    # Define a script name
-                                    script_name="generated_jobs/job_${counter}.sh"
+        for primal_lr in "${primal_lrs[@]}"; do
+            for indicator_threshold in "${indicator_thresholds[@]}"; do
+                for norm_type in "${norm_types[@]}"; do
+                    for dual_lr in "${dual_lrs[@]}"; do
+                        for epoch in "${epochs[@]}"; do
+                            for seed in "${seeds[@]}"; do
+                                # Define a script name
+                                script_name="generated_jobs/job_${counter}.sh"
 
-                                    # Create a batch script for each job
-                                    echo "#!/bin/bash" > "${script_name}"
-                                    echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
-                                    echo "#SBATCH --output=${output}" >> "${script_name}"
-                                    echo "#SBATCH --error=${error}" >> "${script_name}"
-                                    echo "#SBATCH --time=${time_limit}" >> "${script_name}"
-                                    echo "#SBATCH --mem=${memory}" >> "${script_name}"
-                                    echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
-                                    echo "" >> "${script_name}"
-                                    echo "source /home/mila/j/joshi.shruti/venvs/eqm/bin/activate" >> "${script_name}"
-                                    echo "module load miniconda/3" >> "${script_name}"
-                                    echo "conda activate pytorch" >> "${script_name}"
-                                    echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:\$PYTHONPATH\"" >> "${script_name}"
-                                    echo "cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp" >> "${script_name}"
-                                    echo "python lin_baseline.py --embeddings-file ${embedding_file} --data-config-file ${data_config} ${primal_lr} ${dual_lr} ${norm_type} ${indicator_threshold} ${epoch} ${seed}" >> "${script_name}"
-                                    # Make the script executable
-                                    chmod +x "${script_name}"
+                                # Create a batch script for each job
+                                echo "#!/bin/bash" > "${script_name}"
+                                echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
+                                echo "#SBATCH --output=${output}" >> "${script_name}"
+                                echo "#SBATCH --error=${error}" >> "${script_name}"
+                                echo "#SBATCH --time=${time_limit}" >> "${script_name}"
+                                echo "#SBATCH --mem=${memory}" >> "${script_name}"
+                                echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
+                                echo "" >> "${script_name}"
+                                echo "source /home/mila/j/joshi.shruti/venvs/eqm/bin/activate" >> "${script_name}"
+                                echo "module load miniconda/3" >> "${script_name}"
+                                echo "conda activate pytorch" >> "${script_name}"
+                                echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:\$PYTHONPATH\"" >> "${script_name}"
+                                echo "cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp" >> "${script_name}"
+                                echo "python lin_baseline.py --embeddings-file ${embedding_file} --data-config-file ${data_config} ${primal_lr} ${dual_lr} ${norm_type} ${indicator_threshold} ${epoch} ${seed}" >> "${script_name}"
 
-                                    # Submit the job
-                                    sbatch "${script_name}"
+                                # Make the script executable
+                                chmod +x "${script_name}"
 
-                                    # Increment counter
-                                    ((counter++))
-                                done
+                                # Submit the job
+                                sbatch "${script_name}"
+
+                                # Increment counter
+                                ((counter++))
                             done
                         done
                     done
