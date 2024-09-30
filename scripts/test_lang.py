@@ -104,7 +104,7 @@ def main(args):
     if (
         data_config.dataset == "binary_1"
         or data_config.dataset == "binary_1_2"
-        or data_config.dataset == "binary_2"
+        # or data_config.dataset == "binary_2"
         or data_config.dataset == "truthful_qa"
     ):
         mccs = compute_mccs(seeds, wds)
@@ -213,11 +213,20 @@ def main(args):
             0
         ].T
         neta_2_to1 = neta_2_to1 / np.linalg.norm(neta_2_to1)
+        baseline, baseline_wd = load_baseline(args.baseline, data_config)
+        _, baseline_concept_projections = baseline(
+            utils.tensorify((onesp_tilde_z - onesp_z), device)
+        )
+        baseline_neta = (
+            baseline_concept_projections.detach().cpu().numpy() @ baseline_wd.T
+        )
         onesp_z = onesp_z / np.linalg.norm(onesp_z)
         z_neta_2_to_1 = onesp_z + neta_2_to1
         z_neta_2_to_1 = z_neta_2_to_1 / np.linalg.norm(z_neta_2_to_1)
+        z_neta_baseline = onesp_z + baseline_neta
+        z_neta_baseline = z_neta_baseline / np.linalg.norm(z_neta_baseline)
         onesp_tilde_z = onesp_tilde_z / np.linalg.norm(onesp_tilde_z)
-        cosines_neta_2_to1 = []
+        cosines_neta_2_to1, cosines_baseline = [], []
         for i in range(onesp_tilde_z.shape[0]):
             cosines_neta_2_to1.append(
                 cosine_similarity(
@@ -225,7 +234,14 @@ def main(args):
                     z_neta_2_to_1[i].reshape(1, -1),
                 )
             )
+            cosines_baseline.append(
+                cosine_similarity(
+                    onesp_tilde_z[i].reshape(1, -1),
+                    z_neta_baseline[i].reshape(1, -1),
+                )
+            )
         cosines_neta_2_to1 = [float(arr[0][0]) for arr in cosines_neta_2_to1]
+        cosines_baseline = [float(arr[0][1]) for arr in cosines_baseline]
         md_2_to_1 = utils.get_md_steering_vector(args.data_file2)
         z_md_2_to_1 = onesp_z + md_2_to_1
         cosines_md_2_to_1 = []
@@ -241,20 +257,46 @@ def main(args):
         sns.kdeplot(
             cosines_neta_2_to1,
             bw_adjust=0.75,
-            label="Cosine Similarity with neta_2_to_1",
+            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{neta}})$",
             shade=True,
+            linewidths=1.5,
         )
         sns.kdeplot(
             cosines_md_2_to_1,
-            bw_adjust=0.75,
-            label="Cosine Similarity with md_2_to_1",
+            bw_adjust=0.5,
+            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{MD}})$",
             shade=True,
+            linewidths=1.5,
         )
-        plt.title("KDE of Cosine Similarities")
-        plt.xlabel("Cosine Similarity")
-        plt.ylabel("Density")
-        plt.legend()
-        plt.savefig("kde_" + str(data_config.dataset) + "_2_to_1_2_" + ".png")
+        sns.kdeplot(
+            cosines_baseline,
+            bw_adjust=0.5,
+            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{aff}})$",
+            shade=True,
+            linewidths=1.5,
+        )
+        # plt.title("Cosine Similarities")
+        ax = plt.gca()  # Get current axis
+        ax.spines["top"].set_linewidth(1.5)
+        ax.spines["right"].set_linewidth(1.5)
+        ax.spines["left"].set_linewidth(1.5)
+        ax.spines["bottom"].set_linewidth(1.5)
+        for spine in ax.spines.values():
+            spine.set_linewidth(1.5)
+
+        # Setting font sizes for the plot elements
+        ax.tick_params(axis="both", which="major", labelsize=13)  # Ticks
+        plt.xlabel("Cosine Similarity", fontsize=15)  # X-axis label
+        plt.ylabel("Density", fontsize=15)  # Y-axis label
+        # plt.title("Cosine Similarities")
+        plt.legend(loc=2, prop={"size": 15})
+        plt.savefig(
+            "kde____"
+            + str(data_config.dataset)
+            + str(args.data_file2)
+            + "_"
+            + ".png"
+        )
 
 
 if __name__ == "__main__":
