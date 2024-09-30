@@ -49,7 +49,8 @@ def load_model(modeldir, dataconfig):
         norm_type="bn",
     ).to(device)
     model.load_state_dict(
-        torch.load(os.path.join(modeldir, "prebias/", "sparse_dict_model.pth"))
+        # torch.load(os.path.join(modeldir, "prebias/", "sparse_dict_model.pth"))
+        torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
     )
     model.eval()
     # model_string = str(modelconfig.alpha) + "_" + str(modelconfig.primal_lr)
