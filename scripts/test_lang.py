@@ -209,9 +209,9 @@ def main(args):
 
         ipdb.set_trace()
     if (
-        data_config.dataset
-        == "binary_2"
+        data_config.dataset == "binary_2"
         # or data_config.dataset == "binary_corr"
+        or data_config.dataset == "categorical"
     ):
         onesp_tilde_z, onesp_z = utils.load_test_data(
             data_file=args.data_file2,
