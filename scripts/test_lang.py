@@ -169,16 +169,16 @@ def main(args):
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
         cosines_aff = [float(arr[0][0]) for arr in cosines_aff]
         sns.kdeplot(
-            cosines_md,
+            cosines_neta,
             bw_adjust=0.75,
-            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{MD}})$",
+            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{neta}})$",
             shade=True,
             linewidths=1.5,
         )
         sns.kdeplot(
-            cosines_neta,
+            cosines_md,
             bw_adjust=0.75,
-            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{neta}})$",
+            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{MD}})$",
             shade=True,
             linewidths=1.5,
         )
@@ -263,6 +263,9 @@ def main(args):
                 )
             )
         cosines_md_2_to_1 = [float(arr[0][0]) for arr in cosines_md_2_to_1]
+        import ipdb
+
+        ipdb.set_trace()
         plt.figure(figsize=(10, 6))
         sns.kdeplot(
             cosines_neta_2_to1,
