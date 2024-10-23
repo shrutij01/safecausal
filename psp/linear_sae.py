@@ -314,6 +314,7 @@ def main(args):
         "alpha": args.alpha,
         "primal_lr": args.primal_lr,
         "dual_lr": args.primal_lr / 2,
+        "num_concepts": args.num_concepts,
         "norm_type": args.norm_type,
         "batch_size": args.batch_size,
         "num_epochs": args.num_epochs,
