@@ -205,7 +205,7 @@ class Logger:
 def load_training_data(args, config) -> tuple[DataLoader, int, int]:
     delta_z_train = None
     rep_dim = config.rep_dim
-    num_concepts = config.num_concepts
+    num_concepts = args.num_concepts
     if (
         config.dataset == "binary_1"
         or config.dataset == "binary_1_2"
@@ -364,7 +364,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-epochs", type=int, default=20000)
     parser.add_argument("--primal-lr", type=float, default=0.01)
     parser.add_argument("--dual-lr", type=float, default=0.005)
-    # leaving this here for now but changing it to primal_lr/2 in th code
+    # leaving this here for now but changing it to primal_lr/2 in the code
     # following the partial observability paper and repo
     parser.add_argument("--alpha", type=float, default=float(11))
     parser.add_argument("--indicator-threshold", type=float, default=0.1)

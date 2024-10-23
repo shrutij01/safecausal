@@ -8,7 +8,7 @@ data_configs=(
     "/network/scratch/j/joshi.shruti/psp/binary_1_2/binary_1_2_32_config.yaml"
 )
 alphas=(
-    "--alpha 11" "--alpha 5"
+    "--alpha 5" "--alpha 3"
 )
 epochs=(
     "--num-epochs 20000"
@@ -25,8 +25,11 @@ norm_types=(
 dual_lrs=(
     "--dual-lr 0.005"
 )
+num_concepts=(
+    "--num-concepts 100" "--num-concepts 5" "--num-concepts 1"
+)
 seeds=(
-    "--seed 0" "--seed 1" "--seed 2" "--seed 5" "--seed 7"
+    "--seed 0" "--seed 1" "--seed 2" # "--seed 5" "--seed 7"
 )
 
 # Job settings
