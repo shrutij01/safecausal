@@ -266,11 +266,12 @@ def train(
     coop_optimizer,
     formulation,
     logger,
-    num_epochs,
+    args,
 ):
-    for epoch in range(int(num_epochs)):
+    for epoch in range(int(args.num_epochs)):
         epoch_loss = 0.0
         sparsity_penalty_total = 0.0
+        l0_norm_total = 0.0
         for delta_z_list in train_loader:
             delta_z = delta_z_list[0]
             # this makes bn use batch statistics while training, doesn't have any
@@ -288,12 +289,18 @@ def train(
 
             # Adjust the gradients post-optimization step to maintain unit norms
             unit_norm_decoder_columns_grad_adjustment_(cmp_model.model)
-            delta_z_hat, _ = sae_model(delta_z)
+            delta_z_hat, concept_indicators = sae_model(delta_z)
 
             epoch_loss += cmp_model.compute_loss(delta_z_hat, delta_z).item()
             sparsity_penalty_total += cmp_model.ineq_defect.item()
+            l0_norm_total += (
+                torch.sum(concept_indicators >= args.indicator_threshold)
+                / args.batch_size
+                / args.num_concepts
+            )
         logger.logkv("total_loss", epoch_loss)
         logger.logkv("sparsity_penalty", sparsity_penalty_total)
+        logger.logkv("num_concepts_predicted", l0_norm_total)
         print(epoch, epoch_loss)
         logger.dumpkvs()
 
@@ -351,7 +358,7 @@ def main(args):
         coop_optimizer=coop_optimizer,
         formulation=formulation,
         logger=logger,
-        num_epochs=args.num_epochs,
+        args=args,
     )
     save(sae_model=sae_model, args=args, config_dict=config_dict)
 
