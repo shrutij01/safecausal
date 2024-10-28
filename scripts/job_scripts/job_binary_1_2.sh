@@ -56,7 +56,7 @@ for embedding_file in "${embedding_files[@]}"; do
                         for dual_lr in "${dual_lrs[@]}"; do
                             for epoch in "${epochs[@]}"; do
                                 for seed in "${seeds[@]}"; do
-                                    for num_concept in "${num_concepts[@]}]}"; do
+                                    for num_concept in "${num_concepts[@]}"; do
                                         # Define a script name
                                         script_name="generated_jobs/job_${counter}.sh"
 
