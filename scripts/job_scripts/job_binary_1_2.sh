@@ -26,7 +26,7 @@ dual_lrs=(
     "--dual-lr 0.005"
 )
 num_concepts=(
-    "--num-concepts 1000" "--num-concepts 100" "--num-concepts 50"
+    "--num-concepts 100" # "--num-concepts 100" "--num-concepts 50"
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2" # "--seed 5" "--seed 7"
