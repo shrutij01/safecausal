@@ -226,7 +226,7 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
         train_dataset,
         batch_size=int(args.batch_size),
         shuffle=True,
-        num_workers=0,
+        num_workers=4,
     )
     return train_loader, rep_dim, num_concepts
 
@@ -259,6 +259,13 @@ def save(args, sae_model, config_dict):
     torch.save(sae_model.state_dict(), sae_dict_path)
 
 
+def to_device(data, device):
+    # to handle oom error
+    if isinstance(data, (list, tuple)):
+        return [to_device(x, device) for x in data]
+    return data.to(device, non_blocking=True)
+
+
 def train(
     train_loader,
     sae_model,
@@ -273,6 +280,7 @@ def train(
         sparsity_penalty_total = 0.0
         l0_norm_total = 0.0
         for delta_z_list in train_loader:
+            delta_z_list = to_device(delta_z_list, device)
             delta_z = delta_z_list[0]
             # this makes bn use batch statistics while training, doesn't have any
             # effect for gn or ln
