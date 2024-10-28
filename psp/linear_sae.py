@@ -236,13 +236,13 @@ def save(args, sae_model, config_dict):
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
     modeldir = os.path.join(
         os.path.dirname(args.embeddings_file),
-        str(args.alpha)
+        str(args.num_concepts)
+        + "_"
+        + str(args.alpha)
         + "_"
         + str(args.primal_lr)
         + "_"
         + str(args.norm_type)
-        + "_"
-        + str(config_dict["llm_layer"])
         + "_"
         + str(args.seed),
         "prebias",
