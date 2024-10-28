@@ -226,7 +226,7 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
         train_dataset,
         batch_size=int(args.batch_size),
         shuffle=True,
-        num_workers=4,
+        num_workers=1,  # num_workers=0,
     )
     return train_loader, rep_dim, num_concepts
 
@@ -290,6 +290,11 @@ def train(
                 cmp_model.closure, delta_z
             )
             formulation.custom_backward(lagrangian)
+            for name, param in sae_model.named_parameters():
+                if param.grad is not None:
+                    grad_norm = torch.norm(param.grad).item()
+                    print(f"Gradient norm of {name}: {grad_norm}")
+
             coop_optimizer.step(cmp_model.closure, delta_z)
 
             # Normalize the decoder columns to unit length after the parameters update
@@ -306,6 +311,7 @@ def train(
                 / args.batch_size
                 / args.num_concepts
             )
+            del delta_z, delta_z_hat, concept_indicators
         logger.logkv("total_loss", epoch_loss)
         logger.logkv("sparsity_penalty", sparsity_penalty_total)
         logger.logkv("num_concepts_predicted", l0_norm_total)

@@ -36,8 +36,8 @@ seeds=(
 job_name="test"
 output="job_output_%j.txt"  # %j will be replaced by the job ID
 error="job_error_%j.txt"
-time_limit="1:00:00"
-memory="32Gb"
+time_limit="0:00:00"
+memory="48Gb"
 gpu_req="gpu:1"
 
 # Directory to store generated job scripts
