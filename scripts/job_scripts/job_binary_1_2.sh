@@ -8,13 +8,13 @@ data_configs=(
     "/network/scratch/j/joshi.shruti/psp/binary_1_2/binary_1_2_32_config.yaml"
 )
 alphas=(
-    "--alpha 5" "--alpha 3"
+    "--alpha 5" "--alpha 3" "--alpha 1"
 )
 epochs=(
     "--num-epochs 20000"
 )
 primal_lrs=(
-    "--primal-lr 0.01" "--primal-lr 0.005" "--primal-lr 0.007"
+    "--primal-lr 0.01"
 )
 indicator_thresholds=(
     "--indicator-threshold 0.1"
@@ -26,7 +26,7 @@ dual_lrs=(
     "--dual-lr 0.005"
 )
 num_concepts=(
-    "--num-concepts 100" "--num-concepts 5" "--num-concepts 1"
+    "--num-concepts 1000" "--num-concepts 100" "--num-concepts 5" "--num-concepts 1"
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2" # "--seed 5" "--seed 7"
