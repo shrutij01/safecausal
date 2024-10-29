@@ -103,7 +103,7 @@ def main(args):
         wds.append(wd)
         seeds.append(seed)
     _, concept_projections = models[0](utils.tensorify((tilde_z - z), device))
-    neta = torch.max(concept_projections.detach().cpu().numpy() @ wds[0].T)
+    neta = concept_projections.detach().cpu().numpy() @ wds[0].T
     if (
         data_config.dataset == "binary_1"
         or data_config.dataset == "binary_1_2"
