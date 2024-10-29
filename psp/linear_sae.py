@@ -238,19 +238,10 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
                 value = ast.literal_eval(value)
             return [int(x) for x in value]
 
-        import ipdb
-
-        ipdb.set_trace()
         for column in df_train[cfc_columns]:
             df_train[column] = df_train[column].apply(convert_to_list_of_ints)
 
-        delta_z = np.asarray(
-            (
-                df_train[cfc_columns[0]]
-                .apply(lambda row: sum(row, []), axis=1)
-                .tolist()
-            )
-        )
+        delta_z = np.asarray([list(row) for row in df_train[cfc_columns[0]]])
         delta_z_train = tensorify(delta_z, device)
         train_dataset = TensorDataset(
             delta_z_train,
@@ -427,7 +418,9 @@ if __name__ == "__main__":
     # indicator threshold needs to be decently low so that the concept_indicators
     # don't turn out to be all zeros
     parser.add_argument("--num-concepts", type=int, default=3)
-    parser.add_argument("--norm-type", choices=["ln", "gn", "bn"])
+    parser.add_argument(
+        "--norm-type", default="bn", choices=["ln", "gn", "bn"]
+    )
     parser.add_argument("--seed", default=0)
 
     args, unknown = parser.parse_known_args()
