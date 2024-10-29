@@ -316,8 +316,8 @@ if __name__ == "__main__":
     parser.add_argument("modeldir_1")
     parser.add_argument("modeldir_2")
     parser.add_argument("modeldir_3")
-    parser.add_argument("modeldir_4")
-    parser.add_argument("modeldir_5")
+    # parser.add_argument("modeldir_4")
+    # parser.add_argument("modeldir_5")
     parser.add_argument("baseline")
     parser.add_argument(
         "--data-file2",
