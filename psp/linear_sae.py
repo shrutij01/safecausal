@@ -238,6 +238,9 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
                 value = ast.literal_eval(value)
             return [int(x) for x in value]
 
+        import ipdb
+
+        ipdb.set_trace()
         for column in df_train[cfc_columns]:
             df_train[column] = df_train[column].apply(convert_to_list_of_ints)
 
