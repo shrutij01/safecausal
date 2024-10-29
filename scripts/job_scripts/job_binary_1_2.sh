@@ -11,7 +11,7 @@ alphas=(
     "--alpha 5" "--alpha 3" "--alpha 1"
 )
 epochs=(
-    "--num-epochs 20000"
+    "--num-epochs 2500"
 )
 primal_lrs=(
     "--primal-lr 0.01"
@@ -26,7 +26,7 @@ dual_lrs=(
     "--dual-lr 0.005"
 )
 num_concepts=(
-    "--num-concepts 100" # "--num-concepts 100" "--num-concepts 50"
+    "--num-concepts 50" "--num-concepts 100" "--num-concepts 500" "--num-concepts 1000"
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2" # "--seed 5" "--seed 7"
