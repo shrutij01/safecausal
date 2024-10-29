@@ -220,9 +220,9 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
             delta_z_train,
         )
     elif (
-        config.data_type == "synth1"
-        or config.data_type == "synth2"
-        or config.data_type == "synth3"
+        config.dataset == "synth1"
+        or config.dataset == "synth2"
+        or config.dataset == "synth3"
     ):
         config_file = os.path.join(args.embedding_dir, "data_config.yaml")
         with open(config_file, "r") as file:
