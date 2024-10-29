@@ -272,7 +272,7 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
         train_dataset,
         batch_size=int(args.batch_size),
         shuffle=True,
-        num_workers=1,  # num_workers=0,
+        num_workers=0,  # num_workers=0,
     )
     return train_loader, rep_dim, num_concepts
 
