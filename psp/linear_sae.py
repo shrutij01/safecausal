@@ -373,7 +373,6 @@ def main(args):
         "batch_size": args.batch_size,
         "num_epochs": args.num_epochs,
         "indicator_threshold": args.indicator_threshold,
-        "llm_layer": data_config.llm_layer,
     }
     set_seeds(int(args.seed))
     logger = Logger(project="iclrpsp", config=config_dict)
