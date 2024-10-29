@@ -224,21 +224,13 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
         or config.dataset == "synth2"
         or config.dataset == "synth3"
     ):
-        config_file = os.path.join(args.embedding_dir, "data_config.yaml")
-        with open(config_file, "r") as file:
-            config = Box(yaml.safe_load(file))
-        df_file = os.path.join(
-            args.embedding_dir,
-            "synth" + str(config.dgp) + ".csv",
-        )
-
         cfc_columns = [
             config.delta_z_column,
             config.delta_c_column,
             config.sigma_c_column,
         ]
         converters = {col: ast.literal_eval for col in cfc_columns}
-        df = pd.read_csv(df_file, converters=converters)
+        df = pd.read_csv(args.embeddings_file, converters=converters)
         df_train = df.iloc[0 : int(config.split * config.size)]
 
         def convert_to_list_of_ints(value):
