@@ -217,11 +217,57 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
         with h5py.File(args.embeddings_file, "r") as f:
             cfc_train = np.array(f["cfc_train"]).squeeze()
         delta_z_train = tensorify(cfc_train[:, 1] - cfc_train[:, 0], device)
+        train_dataset = TensorDataset(
+            delta_z_train,
+        )
+    elif args.data_type == "synth":
+        config_file = os.path.join(args.embedding_dir, "data_config.yaml")
+        with open(config_file, "r") as file:
+            config = Box(yaml.safe_load(file))
+        df_file = os.path.join(
+            args.embedding_dir,
+            "synth" + str(config.dgp) + ".csv",
+        )
+
+        cfc_columns = [
+            config.delta_z_column,
+            config.delta_c_column,
+            config.sigma_c_column,
+        ]
+        converters = {col: ast.literal_eval for col in cfc_columns}
+        df = pd.read_csv(df_file, converters=converters)
+        df_train = df.iloc[0 : int(config.split * config.size)]
+
+        def convert_to_list_of_ints(value):
+            if isinstance(value, str):
+                value = ast.literal_eval(value)
+            return [int(x) for x in value]
+
+        for column in df_train[cfc_columns]:
+            df_train[column] = df_train[column].apply(convert_to_list_of_ints)
+
+        delta_z = np.asarray(
+            (
+                df_train[cfc_columns[0]]
+                .apply(lambda row: sum(row, []), axis=1)
+                .tolist()
+            )
+        )
+        delta_c_gt = np.asarray(
+            (
+                df_train[cfc_columns[1]]
+                .apply(lambda row: sum(row, []), axis=1)
+                .tolist()
+            )
+        )
+        delta_z_train = tensorify(delta_z, device)
+        delta_c_gt = tensorify(delta_c_gt, device)
+        train_dataset = TensorDataset(
+            delta_z_train,
+            delta_c_gt,
+        )
     else:
         raise NotImplementedError
-    train_dataset = TensorDataset(
-        delta_z_train,
-    )
     train_loader = DataLoader(
         train_dataset,
         batch_size=int(args.batch_size),
@@ -280,7 +326,7 @@ def train(
         sparsity_penalty_total = 0.0
         l0_norm_total = 0.0
         for delta_z_list in train_loader:
-            delta_z_list = to_device(delta_z_list, device)
+            # delta_z_list = to_device(delta_z_list, device)
             delta_z = delta_z_list[0]
             # this makes bn use batch statistics while training, doesn't have any
             # effect for gn or ln
