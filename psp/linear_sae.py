@@ -219,7 +219,11 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
         train_dataset = TensorDataset(
             delta_z_train,
         )
-    elif args.data_type == "synth":
+    elif (
+        config.data_type == "synth1"
+        or config.data_type == "synth2"
+        or config.data_type == "synth3"
+    ):
         config_file = os.path.join(args.embedding_dir, "data_config.yaml")
         with open(config_file, "r") as file:
             config = Box(yaml.safe_load(file))
@@ -252,18 +256,9 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
                 .tolist()
             )
         )
-        delta_c = np.asarray(
-            (
-                df_train[cfc_columns[1]]
-                .apply(lambda row: sum(row, []), axis=1)
-                .tolist()
-            )
-        )
         delta_z_train = tensorify(delta_z, device)
-        delta_c = tensorify(delta_c, device)
         train_dataset = TensorDataset(
             delta_z_train,
-            delta_c,
         )
     else:
         raise NotImplementedError
@@ -324,95 +319,44 @@ def train(
         epoch_loss = 0.0
         sparsity_penalty_total = 0.0
         l0_norm_total = 0.0
-        if args.data_type == "synth":
-            for delta_z_list, delta_c_list in train_loader:
-                delta_z = delta_z_list[0]
-                delta_c = delta_c_list[0]
-                # this makes bn use batch statistics while training, doesn't have any
-                # effect for gn or ln
-                sae_model.train()
-                coop_optimizer.zero_grad()
-                lagrangian = formulation.composite_objective(
-                    cmp_model.closure, delta_z
-                )
-                formulation.custom_backward(lagrangian)
-                for name, param in sae_model.named_parameters():
-                    if param.grad is not None:
-                        grad_norm = torch.norm(param.grad).item()
-                        print(f"Gradient norm of {name}: {grad_norm}")
+        for delta_z_list in train_loader:
+            # delta_z_list = to_device(delta_z_list, device)
+            delta_z = delta_z_list[0]
+            # this makes bn use batch statistics while training, doesn't have any
+            # effect for gn or ln
+            sae_model.train()
+            coop_optimizer.zero_grad()
+            lagrangian = formulation.composite_objective(
+                cmp_model.closure, delta_z
+            )
+            formulation.custom_backward(lagrangian)
+            for name, param in sae_model.named_parameters():
+                if param.grad is not None:
+                    grad_norm = torch.norm(param.grad).item()
+                    print(f"Gradient norm of {name}: {grad_norm}")
 
-                coop_optimizer.step(cmp_model.closure, delta_z)
+            coop_optimizer.step(cmp_model.closure, delta_z)
 
-                # Normalize the decoder columns to unit length after the parameters update
-                unit_norm_decoder_columns(cmp_model.model)
+            # Normalize the decoder columns to unit length after the parameters update
+            unit_norm_decoder_columns(cmp_model.model)
 
-                # Adjust the gradients post-optimization step to maintain unit norms
-                unit_norm_decoder_columns_grad_adjustment_(cmp_model.model)
-                delta_z_hat, concept_indicators = sae_model(delta_z)
+            # Adjust the gradients post-optimization step to maintain unit norms
+            unit_norm_decoder_columns_grad_adjustment_(cmp_model.model)
+            delta_z_hat, concept_indicators = sae_model(delta_z)
 
-                epoch_loss += cmp_model.compute_loss(
-                    delta_z_hat, delta_z
-                ).item()
-                sparsity_penalty_total += cmp_model.ineq_defect.item()
-                l0_norm_total += (
-                    torch.sum(concept_indicators >= args.indicator_threshold)
-                    / args.batch_size
-                    / args.num_concepts
-                )
-                del delta_z, delta_z_hat, concept_indicators
-            logger.logkv("total_loss", epoch_loss)
-            logger.logkv("sparsity_penalty", sparsity_penalty_total)
-            logger.logkv("num_concepts_predicted", l0_norm_total)
-            print(epoch, epoch_loss)
-            logger.dumpkvs()
-        elif (
-            args.data_type == "binary_1"
-            or args.data_type == "binary_1_2"
-            or args.data_type == "binary_corr"
-            or args.data_type == "binary_2"
-            or args.data_type == "truthful_qa"
-            or args.data_type == "categorical"
-        ):
-            for delta_z_list in train_loader:
-                # delta_z_list = to_device(delta_z_list, device)
-                delta_z = delta_z_list[0]
-                # this makes bn use batch statistics while training, doesn't have any
-                # effect for gn or ln
-                sae_model.train()
-                coop_optimizer.zero_grad()
-                lagrangian = formulation.composite_objective(
-                    cmp_model.closure, delta_z
-                )
-                formulation.custom_backward(lagrangian)
-                for name, param in sae_model.named_parameters():
-                    if param.grad is not None:
-                        grad_norm = torch.norm(param.grad).item()
-                        print(f"Gradient norm of {name}: {grad_norm}")
-
-                coop_optimizer.step(cmp_model.closure, delta_z)
-
-                # Normalize the decoder columns to unit length after the parameters update
-                unit_norm_decoder_columns(cmp_model.model)
-
-                # Adjust the gradients post-optimization step to maintain unit norms
-                unit_norm_decoder_columns_grad_adjustment_(cmp_model.model)
-                delta_z_hat, concept_indicators = sae_model(delta_z)
-
-                epoch_loss += cmp_model.compute_loss(
-                    delta_z_hat, delta_z
-                ).item()
-                sparsity_penalty_total += cmp_model.ineq_defect.item()
-                l0_norm_total += (
-                    torch.sum(concept_indicators >= args.indicator_threshold)
-                    / args.batch_size
-                    / args.num_concepts
-                )
-                del delta_z, delta_z_hat, concept_indicators
-            logger.logkv("total_loss", epoch_loss)
-            logger.logkv("sparsity_penalty", sparsity_penalty_total)
-            logger.logkv("num_concepts_predicted", l0_norm_total)
-            print(epoch, epoch_loss)
-            logger.dumpkvs()
+            epoch_loss += cmp_model.compute_loss(delta_z_hat, delta_z).item()
+            sparsity_penalty_total += cmp_model.ineq_defect.item()
+            l0_norm_total += (
+                torch.sum(concept_indicators >= args.indicator_threshold)
+                / args.batch_size
+                / args.num_concepts
+            )
+            del delta_z, delta_z_hat, concept_indicators
+        logger.logkv("total_loss", epoch_loss)
+        logger.logkv("sparsity_penalty", sparsity_penalty_total)
+        logger.logkv("num_concepts_predicted", l0_norm_total)
+        print(epoch, epoch_loss)
+        logger.dumpkvs()
 
 
 def main(args):
