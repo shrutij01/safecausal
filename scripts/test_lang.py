@@ -24,7 +24,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 def load_baseline(modeldir, dataconfig):
     model = LinearSAE(
         rep_dim=dataconfig.rep_dim,
-        num_concepts=50,
+        num_concepts=1,
         norm_type="bn",
     ).to(device)
     model.load_state_dict(
@@ -46,7 +46,7 @@ def load_model(modeldir, dataconfig):
         modelconfig = Box(yaml.safe_load(file))
     model = LinearSAE(
         rep_dim=dataconfig.rep_dim,
-        num_concepts=dataconfig.num_concepts,
+        num_concepts=50,
         norm_type="bn",
     ).to(device)
     model.load_state_dict(
