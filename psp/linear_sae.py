@@ -230,6 +230,9 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
             config.delta_c_column,
             config.sigma_c_column,
         ]
+        import ipdb
+
+        ipdb.set_trace()
         converters = {col: ast.literal_eval for col in cfc_columns}
         df = pd.read_csv(args.embeddings_file, converters=converters)
         df_train = df.iloc[0 : int(config.train_split * config.size)]
