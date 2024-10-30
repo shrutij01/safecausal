@@ -117,7 +117,9 @@ def generate_binary_vectors(travellers_K, num_tuples):
     column_names = ["Tx", "x", "delta_C"]
     data = []
     lin_ent_tf = generate_invertible_matrix(travellers_K)
+    import ipdb
 
+    ipdb.set_trace()
     # Initialize an array to hold all vectors
     vectors = np.zeros((num_tuples, travellers_K), dtype=int)
 
@@ -127,6 +129,9 @@ def generate_binary_vectors(travellers_K, num_tuples):
     for i in range(num_tuples):
         indices = np.random.choice(travellers_K, ones_counts[i], replace=False)
         vectors[i, indices] = 1
+        import ipdb
+
+        ipdb.set_trace()
         transformed_vector = np.dot(vectors[i], lin_ent_tf.T)
         row = {
             "Tx": transformed_vector.tolist(),
