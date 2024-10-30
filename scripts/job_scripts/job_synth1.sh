@@ -11,7 +11,7 @@ alphas=(
     "--alpha 1" "--alpha 0.1" "--alpha 0.01"
 )
 epochs=(
-    "--num-epochs 2000"
+    "--num-epochs 1000"
 )
 primal_lrs=(
     "--primal-lr 0.01"
