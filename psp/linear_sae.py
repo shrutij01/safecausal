@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 import cooper
+from einops import rearrange
 
 import numpy as np
 
@@ -243,6 +244,9 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
 
         delta_z = np.asarray([list(row) for row in df_train[cfc_columns[0]]])
         delta_z_train = tensorify(delta_z, device)
+        import ipdb
+
+        ipdb.set_trace()
         train_dataset = TensorDataset(
             delta_z_train,
         )
@@ -310,6 +314,19 @@ def train(
             delta_z = delta_z_list[0]
             # this makes bn use batch statistics while training, doesn't have any
             # effect for gn or ln
+            if args.entangle_more:
+
+                def generate_invertible_matrix(n):
+                    while True:
+                        A = np.random.rand(n, n)
+                        if np.linalg.det(A) != 0:
+                            return A
+
+                entanglement = generate_invertible_matrix(delta_z.shape[1])
+                delta_z = rearrange(delta_z, "b i -> b i") @ rearrange(
+                    entanglement, "i j -> i j"
+                )
+
             sae_model.train()
             coop_optimizer.zero_grad()
             lagrangian = formulation.composite_objective(
@@ -411,6 +428,7 @@ if __name__ == "__main__":
     parser.add_argument("--num-epochs", type=int, default=20000)
     parser.add_argument("--primal-lr", type=float, default=0.01)
     parser.add_argument("--dual-lr", type=float, default=0.005)
+    parser.add_argument("--entangle-more", type=bool, default=False)
     # leaving this here for now but changing it to primal_lr/2 in the code
     # following the partial observability paper and repo
     parser.add_argument("--alpha", type=float, default=float(11))
