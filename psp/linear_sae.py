@@ -241,13 +241,12 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
             return [float(x) for x in value]
 
         for column in df_train[cfc_columns]:
-            df_train[column] = df_train[column].apply(convert_to_list_of_floats)
+            df_train[column] = df_train[column].apply(
+                convert_to_list_of_floats
+            )
 
         delta_z = np.asarray([list(row) for row in df_train[cfc_columns[0]]])
         delta_z_train = tensorify(delta_z, device)
-        import ipdb
-
-        ipdb.set_trace()
         train_dataset = TensorDataset(
             delta_z_train,
         )
