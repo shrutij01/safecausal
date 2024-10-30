@@ -230,20 +230,18 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
             config.delta_c_column,
             config.sigma_c_column,
         ]
-        import ipdb
 
-        ipdb.set_trace()
         converters = {col: ast.literal_eval for col in cfc_columns}
         df = pd.read_csv(args.embeddings_file, converters=converters)
         df_train = df.iloc[0 : int(config.train_split * config.size)]
 
-        def convert_to_list_of_ints(value):
+        def convert_to_list_of_floats(value):
             if isinstance(value, str):
                 value = ast.literal_eval(value)
-            return [int(x) for x in value]
+            return [float(x) for x in value]
 
         for column in df_train[cfc_columns]:
-            df_train[column] = df_train[column].apply(convert_to_list_of_ints)
+            df_train[column] = df_train[column].apply(convert_to_list_of_floats)
 
         delta_z = np.asarray([list(row) for row in df_train[cfc_columns[0]]])
         delta_z_train = tensorify(delta_z, device)
