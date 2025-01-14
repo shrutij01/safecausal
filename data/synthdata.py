@@ -196,7 +196,7 @@ def main(args):
         pickle.dump(gt_deltac, file)
     data_df.to_csv(df_location)
     config = {
-        "dataset_name": dataset_name,
+        "dataset": dataset_name,
         "size": args.num_tuples,
         "rep_dim": rep_dim,
         "num_concepts": num_concepts,
