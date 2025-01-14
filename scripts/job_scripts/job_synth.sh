@@ -2,10 +2,10 @@
 
 # Define hyperparameters
 embedding_files=(
-    "/network/scratch/j/joshi.shruti/psp/synthdata/2_2025-01-14_16-26-28/uniformsynth.csv"
+    "/network/scratch/j/joshi.shruti/psp/synthdata/2_2025-01-14_18-44-59/uniformsynth.csv"
 )
 data_configs=(
-    "/network/scratch/j/joshi.shruti/psp/synthdata/2_2025-01-14_16-26-28/data_config.yaml"
+    "/network/scratch/j/joshi.shruti/psp/synthdata/2_2025-01-14_18-44-59/data_config.yaml"
 )
 alphas=(
     "--alpha 0.1" "--alpha 0.3"
