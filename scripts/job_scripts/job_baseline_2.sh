@@ -17,7 +17,7 @@ indicator_thresholds=(
     "--indicator-threshold 0.1"
 )
 norm_types=(
-    "--norm_type bn"
+    "--norm-type bn"
 )
 dual_lrs=(
     "--dual-lr 0.005"

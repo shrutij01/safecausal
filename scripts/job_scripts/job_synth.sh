@@ -2,19 +2,19 @@
 
 # Define hyperparameters
 embedding_files=(
-    "/network/scratch/j/joshi.shruti/psp/travellers/2024-09-19_23-00-51/synth1.csv"
+    "/network/scratch/j/joshi.shruti/psp/synthdata/2_2025-01-14_16-26-28/uniformsynth.csv"
 )
 data_configs=(
-    "/network/scratch/j/joshi.shruti/psp/travellers/2024-09-19_23-00-51/data_config.yaml"
+    "/network/scratch/j/joshi.shruti/psp/synthdata/2_2025-01-14_16-26-28/data_config.yaml"
 )
 alphas=(
-    "--alpha 1" "--alpha 0.1" "--alpha 0.01"
+    "--alpha 0.1" "--alpha 0.3"
 )
 epochs=(
-    "--num-epochs 1000"
+    "--num-epochs 100"
 )
 primal_lrs=(
-    "--primal-lr 0.01"
+    "--primal-lr 0.01" "--primal-lr 0.005" "--primal-lr 0.001"
 )
 indicator_thresholds=(
     "--indicator-threshold 0.1"
@@ -26,7 +26,7 @@ dual_lrs=(
     "--dual-lr 0.005"
 )
 num_concepts=(
-    "--num-concepts 5" "--num-concepts 25" "--num-concepts 50"
+    "--num-concepts 3" "--num-concepts 9" "--num-concepts 30"
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2" # "--seed 5" "--seed 7"

@@ -55,9 +55,7 @@ def prepare_test_data(args, device):
         normalize=True,
         activation=topk,
     ).to(device)
-    model_1_file = os.path.join(
-        args.model_dir_1, "sparse_dict_model", "sparse_dict_model.pth"
-    )
+    model_1_file = os.path.join(args.model_dir_1, "sparse_dict_model.pth")
     model_2_file = os.path.join(
         args.model_dir_2, "sparse_dict_model", "sparse_dict_model.pth"
     )
@@ -91,6 +89,9 @@ def prepare_test_data(args, device):
     wd_1 = numpify(model_1.decoder.weight.data)
     wd_2 = numpify(model_2.decoder.weight.data)
     wd_3 = numpify(model_3.decoder.weight.data)
+    import ipdb
+
+    ipdb.set_trace()
     delta_z_hat_test = [
         delta_z_hat_test_1,
         delta_z_hat_test_2,
@@ -125,9 +126,6 @@ def prepare_eval_by_one_contrasts(args, device):
     md_2 = (
         tensorify(cfc2_eval_2 - cfc1_eval_2, device).mean(dim=0).unsqueeze(0)
     )
-    import ipdb
-
-    ipdb.set_trace()
     model_config_file = os.path.join(args.model_dir_1, "models_config.yaml")
     with open(model_config_file, "r") as file:
         model_config = Box(yaml.safe_load(file))

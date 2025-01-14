@@ -95,7 +95,7 @@ def main(args):
     ) = get_data(type=args.datatype)
 
     sns.set_style("darkgrid")
-    _, ax = plt.subplots(figsize=(15, 7))
+    _, ax = plt.subplots(figsize=(15, 9))
     ax.xaxis.grid(False)
     width = 0.35
     ax.bar(
@@ -112,11 +112,12 @@ def main(args):
         values_eta,
         yerr=std_devs_eta,
         fmt="o",
+        markersize=9,
         linestyle="",
         color="black",
-        elinewidth=2,
+        elinewidth=3,
         capsize=9,
-        capthick=2,
+        capthick=3,
     )
 
     ax.bar(
@@ -133,11 +134,12 @@ def main(args):
         values_aff,
         yerr=std_devs_aff,
         fmt="o",
+        markersize=9,
         linestyle="",
         color="black",
-        elinewidth=2,
+        elinewidth=3,
         capsize=9,
-        capthick=2,
+        capthick=3,
     )
     ax.bar(
         dataset_positions + width,
@@ -155,22 +157,24 @@ def main(args):
         values_md,
         yerr=std_devs_md,
         fmt="o",
+        markersize=9,
         linestyle="",
         color="black",
-        elinewidth=2,
+        elinewidth=3,
         capsize=9,
-        capthick=2,
+        capthick=3,
     )
     ax.set_xticks(dataset_positions)
 
     ax.set_xticklabels(
         labels=labels,
+        size=23,
     )
 
     ax.set_ylim([0, 0.9])
     ax.set_title(
         r"\textbf{Cosine Similarity} $\mathbf{\boldsymbol{\theta}(\tilde{z}, \circ)}$ (Higher is better)",
-        fontsize=25,
+        fontsize=33,
         pad=15,
     )
     ax.set_yticklabels(
@@ -186,14 +190,15 @@ def main(args):
             r"$\textbf{0.8}$",
             r"$\textbf{0.9}$",
         ],
+        size=23,
     )
 
     ax.legend(
         title=r"$\textbf{Steering Method} (\circ)$",
-        title_fontsize=16,
-        loc=2,
+        title_fontsize=23,
+        loc=1,
         prop={
-            "size": 21,
+            "size": 25,
             "weight": "bold",
         },
     )
@@ -206,7 +211,6 @@ def main(args):
         ax.axvline(
             x=3.75, color="lightslategray", linestyle="--", linewidth=0.9
         )
-    ax.tick_params(axis="both", which="major", labelsize=19)
 
     plt.tight_layout()
     if args.save:
@@ -216,10 +220,103 @@ def main(args):
         plt.show()
 
 
+def plot_varying_k_mccs():
+
+    mean_mccs_cat_eta = np.array(
+        [
+            0.9059,
+            0.8843,
+            0.8613,
+            0.8398,
+            0.8236,
+            0.8129,
+            0.7549,
+        ]
+    )
+    std_dev_cat_eta = np.array(
+        [0.02186, 0.0223, 0.0318, 0.0313, 0.0334, 0.0383, 0.0391]
+    )
+    k = np.array([135, 150, 200, 250, 300, 350, 500])
+    mean_mccs_cat_aff = np.array(
+        [
+            0.6607,
+            0.5987,
+            0.5353,
+            0.4892,
+            0.4681,
+            0.3473,
+            0.3226,
+        ]
+    )
+    std_dev_cat_aff = np.array(
+        [0.0189, 0.0214, 0.0205, 0.0205, 0.0217, 0.0228, 0.0213]
+    )
+    sns.set_style("darkgrid")
+    _, ax = plt.subplots(figsize=(10, 6))
+
+    # Plot the first line with shaded standard deviation
+    plt.plot(
+        k,
+        mean_mccs_cat_eta,
+        label=r"$\eta$",
+        color="mediumslateblue",
+        linewidth=3,
+    )
+    plt.fill_between(
+        k,
+        mean_mccs_cat_eta - std_dev_cat_eta,
+        mean_mccs_cat_eta + std_dev_cat_eta,
+        color="mediumslateblue",
+        alpha=0.2,
+    )
+
+    # Plot the second line with shaded standard deviation
+    plt.plot(
+        k,
+        mean_mccs_cat_aff,
+        label=r"$\text{aff}$",
+        color="lightseagreen",
+        linewidth=3,
+    )
+    plt.fill_between(
+        k,
+        mean_mccs_cat_aff - std_dev_cat_aff,
+        mean_mccs_cat_aff + std_dev_cat_aff,
+        color="lightseagreen",
+        alpha=0.2,
+    )
+
+    # Add labels and legend
+    plt.xlabel(r"\textbf{k}", fontweight="bold")
+    plt.ylabel(r"\textbf{Mean MCC}", fontweight="bold")
+    ax.set_title(
+        r"$\textbf{\textsc{CAT}}(135, 3): \text{MCCs for Increasing} \hspace{2mm} k$",
+        fontsize=33,
+        pad=15,
+    )
+    plt.legend(
+        title=r"$\textbf{Method}$",
+        title_fontsize=23,
+        loc=3,
+        prop={
+            "size": 25,
+            "weight": "bold",
+        },
+    )
+    ax.tick_params(labelsize=23)
+
+    plt.setp(ax.get_xticklabels(), fontweight="bold")
+    plt.setp(ax.get_yticklabels(), fontweight="bold")
+
+    # Display the plot
+    plt.savefig("varyingk_mccs.png")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument("datatype")
     parser.add_argument("--save", action="store_true")
     args = parser.parse_args()
-    main(args)
+    # main(args)
+    plot_varying_k_mccs()

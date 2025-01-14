@@ -221,14 +221,13 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
             delta_z_train,
         )
     elif (
-        config.dataset == "synth1"
-        or config.dataset == "synth2"
-        or config.dataset == "synth3"
+        config.dataset == "binsynth"
+        or config.dataset == "uniformsynth"
+        or config.dataset == "normalsynth"
     ):
         cfc_columns = [
             config.delta_z_column,
             config.delta_c_column,
-            config.sigma_c_column,
         ]
 
         converters = {col: ast.literal_eval for col in cfc_columns}
@@ -346,9 +345,6 @@ def train(
             # Adjust the gradients post-optimization step to maintain unit norms
             unit_norm_decoder_columns_grad_adjustment_(cmp_model.model)
             delta_z_hat, concept_indicators = sae_model(delta_z)
-            import ipdb
-
-            ipdb.set_trace()
             epoch_loss += cmp_model.compute_loss(delta_z_hat, delta_z).item()
             sparsity_penalty_total += cmp_model.ineq_defect.item()
             l0_norm_total += (
@@ -359,7 +355,7 @@ def train(
             del delta_z, delta_z_hat, concept_indicators
         logger.logkv("total_loss", epoch_loss)
         logger.logkv("sparsity_penalty", sparsity_penalty_total)
-        logger.logkv("num_concepts_predicted", l0_norm_total)
+        logger.logkv("num_concepts_predicted", l0_norm_total / args.batch_size)
         print(epoch, epoch_loss)
         logger.dumpkvs()
 

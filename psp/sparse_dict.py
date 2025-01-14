@@ -325,41 +325,37 @@ def main(args, device):
             "object_translations" + str(config.dgp) + ".csv",
         )
 
-        cfc_columns = config.cfc_column_names
+        cfc_columns = [
+            config.delta_z_column,
+            config.delta_c_column,
+            config.sigma_c_column,
+        ]
         converters = {col: ast.literal_eval for col in cfc_columns}
-        x_df = pd.read_csv(df_file, converters=converters)
-        x_df_train = x_df.iloc[0 : int(config.split * config.size)]
+        df = pd.read_csv(df_file, converters=converters)
+        df_train = df.iloc[0 : int(config.split * config.size)]
 
         def convert_to_list_of_ints(value):
             if isinstance(value, str):
                 value = ast.literal_eval(value)
             return [int(x) for x in value]
 
-        for column in x_df_train[cfc_columns]:
-            x_df_train[column] = x_df_train[column].apply(
-                convert_to_list_of_ints
-            )
+        for column in df_train[cfc_columns]:
+            df_train[column] = df_train[column].apply(convert_to_list_of_ints)
 
-        x_gt = np.asarray(
+        delta_z = np.asarray(
             (
-                x_df_train[cfc_columns]
+                df_train[cfc_columns[0]]
                 .apply(lambda row: sum(row, []), axis=1)
                 .tolist()
             )
         )
-        lin_ent_dim = x_gt.shape[1]
-
-        def generate_invertible_matrix(size):
-            while True:
-                matrix = np.random.randint(1, size, (size, size))
-                if np.linalg.det(matrix) != 0:
-                    return matrix
-
-        lin_ent_tf = generate_invertible_matrix(lin_ent_dim)
-        x_ent = np.array([lin_ent_tf @ x_gt[i] for i in range(x_gt.shape[0])])
-        if args.data_type == "gt_ent":
-            x = x_ent
-
+        delta_c_gt = np.asarray(
+            (
+                df_train[cfc_columns[1]]
+                .apply(lambda row: sum(row, []), axis=1)
+                .tolist()
+            )
+        )
     else:
         raise NotImplementedError
 
