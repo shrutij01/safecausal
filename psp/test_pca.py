@@ -107,10 +107,10 @@ def max_cosine_similarity(
 
 
 def main(args):
-    # tilde_z_test, z_test = utils.load_test_data(
-    #     data_file=args.data_file,
-    # )
-    # shifts = utils.tensorify((tilde_z_test - z_test), device)
+    tilde_z_test, z_test = utils.load_test_data(
+        data_file=args.data_file,
+    )
+    shifts = utils.tensorify((tilde_z_test - z_test), device)
 
     # shifts_transformed, components, mean = pca_transform(shifts.float())
     # pca_vec = (
