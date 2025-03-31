@@ -27,7 +27,7 @@ def first_pca_direction(X: torch.Tensor) -> torch.Tensor:
     X_centered = X - X.mean(dim=0, keepdim=True)
     _, _, Vh = torch.linalg.svd(X_centered, full_matrices=False)
     first_direction = Vh[0]  # This is already normalized
-    return first_direction
+    return utils.numpify(first_direction)
 
 
 def load_llamascope_checkpoint():
