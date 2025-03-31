@@ -90,8 +90,10 @@ def main(args):
     embeddings_path = os.path.join(
         directory_name,
         str(args.dataset_name)
-        + "_embeddings_layer_"
+        + "_L_"
         + str(args.llm_layer)
+        + "_M_"
+        + str(args.model_id)
         + ".h5",
     )
     store_embeddings(
