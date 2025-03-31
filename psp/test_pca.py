@@ -125,20 +125,19 @@ def main(args):
                 tilde_z_test[i].reshape(1, -1), z_pca[i].reshape(1, -1)
             )
         )
-
-    print(
-        "USING PCA cosine similarities",
-        np.mean(cosines_pca),
-        np.std(cosines_pca),
-    )
-
-    print("Now using Llamascope, computing max cosine similarities...")
     decoder_weight = load_llamascope_checkpoint()
     mean_scope, std_scope = max_cosine_similarity(
         z_test,
         utils.tensorify(tilde_z_test, device),
         decoder_weight,
     )
+    print(
+        "USING PCA cosine similarities",
+        np.mean(cosines_pca),
+        np.std(cosines_pca),
+    )
+
+    print("AND using Llamascope, computing max cosine similarities...")
     print("...", mean_scope, std_scope)
 
 
