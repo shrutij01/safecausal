@@ -87,13 +87,19 @@ def main(args):
     directory_name = os.path.join(directory_location, str(args.dataset_name))
     if not os.path.exists(directory_name):
         os.makedirs(directory_name)
+    if args.model_id == "meta-llama/Meta-Llama-3.1-8B-Instruct":
+        model_name = "llama3"
+    elif args.model_id == "deepseek-ai/DeepSeek-R1-Distill-Llama-8B":
+        model_name = "r1llama3"
+    else:
+        raise NotImplementedError
     embeddings_path = os.path.join(
         directory_name,
         str(args.dataset_name)
         + "_L_"
         + str(args.llm_layer)
         + "_M_"
-        + str(args.model_id)
+        + str(model_name)
         + ".h5",
     )
     store_embeddings(
