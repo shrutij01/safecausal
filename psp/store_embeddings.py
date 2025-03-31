@@ -56,7 +56,7 @@ def store_embeddings(filename, cfc_train, cfc_test):
 def main(args):
     cfc_tuples = utils.load_dataset(
         dataset_name=args.dataset_name,
-    )
+    )[0:100]
     split = int(0.9 * len(cfc_tuples))
     cfc_train, cfc_test = cfc_tuples[0:split], cfc_tuples[split:]
 
@@ -100,6 +100,7 @@ def main(args):
         + str(args.llm_layer)
         + "_M_"
         + str(model_name)
+        + "_small"
         + ".h5",
     )
     store_embeddings(
