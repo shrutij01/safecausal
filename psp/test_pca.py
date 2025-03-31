@@ -8,6 +8,7 @@ import numpy as np
 from safetensors.torch import load_file
 from huggingface_hub import hf_hub_download
 from tqdm import tqdm
+from sklearn.decomposition import PCA
 from sklearn.metrics.pairwise import cosine_similarity
 
 
@@ -26,14 +27,14 @@ def first_pca_direction(X: torch.Tensor) -> torch.Tensor:
     """
     X_centered = X - X.mean(dim=0, keepdim=True)
     _, _, Vh = torch.linalg.svd(X_centered, full_matrices=False)
-    first_direction = Vh[0]  # This is already normalized
+    first_direction = Vh[0]
     return utils.numpify(first_direction)
 
 
 def load_llamascope_checkpoint():
     model_id = "fnlp/Llama3_1-8B-Base-LXR-8x"
 
-    filename = "Llama3_1-8B-Base-L3R-8x/checkpoints/consolidated.safetensors"
+    filename = "Llama3_1-8B-Base-L31R-8x/checkpoints/final.safetensors"
 
     filepath = hf_hub_download(
         repo_id=model_id,
@@ -92,8 +93,10 @@ def main(args):
         data_file=args.data_file,
     )
     shifts = utils.tensorify((tilde_z_test - z_test), device)
+
     pca_vec = first_pca_direction(shifts)
     z_pca = z_test / np.linalg.norm(z_test) + pca_vec
+    z_pca = z_pca / np.linalg.norm(z_pca)
     cosines_pca = []
     for i in range(tilde_z_test.shape[0]):
         cosines_pca.append(
