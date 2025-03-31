@@ -66,11 +66,11 @@ def max_cosine_similarity(
         mean and std of max cosine similarities over decoder directions
     """
     z = F.normalize(z, dim=1)  # [B, D]
+    z_tilde = F.normalize(z_tilde, dim=1)  # [B, D]
     decoder = F.normalize(
         decoder_weight, dim=1
     )  # [V, D] — columns as directions
     decoder = decoder.to(z.device)
-    decoder = decoder.T  # [D, V]
 
     B, D = z.shape
     V = decoder.shape[0]
