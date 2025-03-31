@@ -107,35 +107,38 @@ def max_cosine_similarity(
 
 
 def main(args):
-    tilde_z_test, z_test = utils.load_test_data(
-        data_file=args.data_file,
-    )
-    shifts = utils.tensorify((tilde_z_test - z_test), device)
-    import ipdb
+    # tilde_z_test, z_test = utils.load_test_data(
+    #     data_file=args.data_file,
+    # )
+    # shifts = utils.tensorify((tilde_z_test - z_test), device)
 
-    ipdb.set_trace()
+    # shifts_transformed, components, mean = pca_transform(shifts.float())
+    # pca_vec = (
+    #     (components.sum(dim=0, keepdim=True) + mean).mean(0)
+    #     # .view(z_test[0].shape[0], z_test[0].shape[1])
+    # )
+    # z_test = utils.tensorify(z_test, device)
+    # z_pca = F.normalize(z_test) + pca_vec
+    # z_pca = F.normalize(z_pca)
+    # z_pca = utils.numpify(z_pca)
+    # cosines_pca = []
+    # for i in range(tilde_z_test.shape[0]):
+    #     cosines_pca.append(
+    #         cosine_similarity(
+    #             tilde_z_test[i].reshape(1, -1), z_pca[i].reshape(1, -1)
+    #         )
+    #     )
+    # import ipdb
 
-    shifts_transformed, components, mean = pca_transform(shifts.float())
-    pca_vec = (
-        (components.sum(dim=0, keepdim=True) + mean).mean(0)
-        # .view(z_test[0].shape[0], z_test[0].shape[1])
-    )
-    z_test = utils.tensorify(z_test, device)
-    z_pca = F.normalize(z_test) + pca_vec
-    z_pca = F.normalize(z_pca)
-    z_pca = utils.numpify(z_pca)
-    cosines_pca = []
-    for i in range(tilde_z_test.shape[0]):
-        cosines_pca.append(
-            cosine_similarity(
-                tilde_z_test[i].reshape(1, -1), z_pca[i].reshape(1, -1)
-            )
-        )
-    import ipdb
+    # ipdb.set_trace()
 
-    ipdb.set_trace()
+    # print(
+    #     "USING PCA cosine similarities",
+    #     np.mean(cosines_pca),
+    #     np.std(cosines_pca),
+    # )
 
-    print("Computing max cosine similarities...")
+    print("Now using Llamascope, computing max cosine similarities...")
     decoder_weight = load_llamascope_checkpoint()
     max_cosine_similarity(
         utils.tensorify(z_test, device),
