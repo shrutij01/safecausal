@@ -126,6 +126,9 @@ def main(args):
             )
         )
     decoder_weight = load_llamascope_checkpoint()
+    import ipdb
+
+    ipdb.set_trace()
     mean_scope, std_scope = max_cosine_similarity(
         z_test,
         utils.tensorify(tilde_z_test, device),
