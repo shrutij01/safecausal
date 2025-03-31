@@ -134,11 +134,12 @@ def main(args):
 
     print("Now using Llamascope, computing max cosine similarities...")
     decoder_weight = load_llamascope_checkpoint()
-    max_cosine_similarity(
+    mean_scope, std_scope = max_cosine_similarity(
         z_test,
         utils.tensorify(tilde_z_test, device),
         decoder_weight,
     )
+    print("...", mean_scope, std_scope)
 
 
 if __name__ == "__main__":
