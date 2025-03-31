@@ -15,7 +15,17 @@ from sklearn.metrics.pairwise import cosine_similarity
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-def first_pca_direction(X: torch.Tensor) -> torch.Tensor:
+def svd_flip(u, v):
+    # columns of u, rows of v
+    max_abs_cols = torch.argmax(torch.abs(u), 0)
+    i = torch.arange(u.shape[1]).to(u.device)
+    signs = torch.sign(u[max_abs_cols, i])
+    u *= signs
+    v *= signs.view(-1, 1)
+    return u, v
+
+
+def pca_transform(X: torch.Tensor):
     """
     Computes the first principal direction of X.
 
@@ -25,10 +35,13 @@ def first_pca_direction(X: torch.Tensor) -> torch.Tensor:
     Returns:
         direction (torch.Tensor): First principal direction (unit vector of shape [n_features])
     """
-    X_centered = X - X.mean(dim=0, keepdim=True)
-    _, _, Vh = torch.linalg.svd(X_centered, full_matrices=False)
-    first_direction = Vh[0]
-    return utils.numpify(first_direction)
+    n, d = X.shape
+    mean = X.mean(dim=0, keepdim=True)
+    X_centered = X - mean
+    U, _, Vh = torch.linalg.svd(X_centered, full_matrices=False)
+    U, Vh = svd_flip(U, Vh)
+    components = Vh
+    return torch.matmul(X - mean, components.t()), components, mean
 
 
 def load_llamascope_checkpoint():
@@ -98,8 +111,16 @@ def main(args):
         data_file=args.data_file,
     )
     shifts = utils.tensorify((tilde_z_test - z_test), device)
+    import ipdb
 
-    pca_vec = first_pca_direction(shifts)
+    ipdb.set_trace()
+
+    shifts_transformed, components, mean = pca_transform(shifts.float())
+    pca_vec = (
+        (components.sum(dim=0, keepdim=True) + mean)
+        .mean(0)
+        .view(z_test[0].shape[0], z_test[0].shape[1])
+    )
     z_pca = z_test / np.linalg.norm(z_test) + pca_vec
     z_pca = z_pca / np.linalg.norm(z_pca)
     cosines_pca = []
