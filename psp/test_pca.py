@@ -87,9 +87,6 @@ def max_cosine_similarity(
 
     B, D = z.shape
     V = decoder.shape[0]
-    import ipdb
-
-    ipdb.set_trace()
 
     # z: [B, D], decoder: [D, V]
     z_tilde_hat = z.unsqueeze(2) + decoder.unsqueeze(0)  # [B, D, V]
@@ -112,31 +109,28 @@ def main(args):
     )
     shifts = utils.tensorify((tilde_z_test - z_test), device)
 
-    # shifts_transformed, components, mean = pca_transform(shifts.float())
-    # pca_vec = (
-    #     (components.sum(dim=0, keepdim=True) + mean).mean(0)
-    #     # .view(z_test[0].shape[0], z_test[0].shape[1])
-    # )
-    # z_test = utils.tensorify(z_test, device)
-    # z_pca = F.normalize(z_test) + pca_vec
-    # z_pca = F.normalize(z_pca)
-    # z_pca = utils.numpify(z_pca)
-    # cosines_pca = []
-    # for i in range(tilde_z_test.shape[0]):
-    #     cosines_pca.append(
-    #         cosine_similarity(
-    #             tilde_z_test[i].reshape(1, -1), z_pca[i].reshape(1, -1)
-    #         )
-    #     )
-    # import ipdb
+    shifts_transformed, components, mean = pca_transform(shifts.float())
+    pca_vec = (
+        (components.sum(dim=0, keepdim=True) + mean).mean(0)
+        # .view(z_test[0].shape[0], z_test[0].shape[1])
+    )
+    z_test = utils.tensorify(z_test, device)
+    z_pca = F.normalize(z_test) + pca_vec
+    z_pca = F.normalize(z_pca)
+    z_pca = utils.numpify(z_pca)
+    cosines_pca = []
+    for i in range(tilde_z_test.shape[0]):
+        cosines_pca.append(
+            cosine_similarity(
+                tilde_z_test[i].reshape(1, -1), z_pca[i].reshape(1, -1)
+            )
+        )
 
-    # ipdb.set_trace()
-
-    # print(
-    #     "USING PCA cosine similarities",
-    #     np.mean(cosines_pca),
-    #     np.std(cosines_pca),
-    # )
+    print(
+        "USING PCA cosine similarities",
+        np.mean(cosines_pca),
+        np.std(cosines_pca),
+    )
 
     print("Now using Llamascope, computing max cosine similarities...")
     decoder_weight = load_llamascope_checkpoint()
@@ -145,10 +139,6 @@ def main(args):
         utils.tensorify(tilde_z_test, device),
         decoder_weight,
     )
-
-    import ipdb
-
-    ipdb.set_trace()
 
 
 if __name__ == "__main__":
