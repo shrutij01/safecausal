@@ -67,6 +67,7 @@ class LinearSAE(nn.Module):
             self.encoder_ln = nn.GroupNorm(1, num_concepts, device=device)
         elif norm_type == "bn":
             self.encoder_ln = nn.BatchNorm1d(num_concepts, device=device)
+            # really important mention in apx details
         else:
             raise ValueError("Invalid norm type, pass ln, gn, or bn")
         self.encoder_bias = nn.Parameter(
@@ -118,7 +119,8 @@ def unit_norm_decoder_columns(autoencoder: LinearSAE) -> None:
 
 
 def unit_norm_decoder_columns_grad_adjustment_(autoencoder) -> None:
-    """project out gradient information parallel to the dictionary vectors - assumes that the decoder is already unit normed"""
+    """project out gradient information parallel to the dictionary vectors
+    - assumes that the decoder is already unit normed"""
 
     assert autoencoder.decoder.weight.grad is not None
 
@@ -347,6 +349,7 @@ def train(
 
             # Adjust the gradients post-optimization step to maintain unit norms
             unit_norm_decoder_columns_grad_adjustment_(cmp_model.model)
+            # before or after gradient update
             delta_z_hat, concept_indicators = sae_model(delta_z)
             epoch_loss += cmp_model.compute_loss(delta_z_hat, delta_z).item()
             sparsity_penalty_total += cmp_model.ineq_defect.item()
@@ -379,7 +382,7 @@ def main(args):
         "indicator_threshold": args.indicator_threshold,
     }
     set_seeds(int(args.seed))
-    logger = Logger(project="iclrpsp", config=config_dict)
+    logger = Logger(entity="causalrepl", project="ssae", config=config_dict)
     train_loader, rep_dim, num_concepts = load_training_data(args, data_config)
     # Assuming the LinearSAE model and other parameters are already defined:
     sae_model = LinearSAE(
