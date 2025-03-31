@@ -108,9 +108,7 @@ def main(args):
         data_file=args.data_file,
     )
     shifts = utils.tensorify((tilde_z_test - z_test), device)
-    import ipdb
 
-    ipdb.set_trace()
     shifts_transformed, components, mean = pca_transform(shifts.float())
     pca_vec = (
         (components.sum(dim=0, keepdim=True) + mean).mean(0)
@@ -137,7 +135,7 @@ def main(args):
     print("Now using Llamascope, computing max cosine similarities...")
     decoder_weight = load_llamascope_checkpoint()
     max_cosine_similarity(
-        utils.tensorify(z_test, device),
+        z_test,
         utils.tensorify(tilde_z_test, device),
         decoder_weight,
     )
