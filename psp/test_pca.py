@@ -82,7 +82,7 @@ def max_cosine_similarity(
     z_tilde = F.normalize(z_tilde, dim=1)  # [B, D]
     decoder = F.normalize(
         decoder_weight, dim=1
-    )  # [V, D] — columns as directions
+    ).T  # [V, D] — columns as directions
     decoder = decoder.to(z.device)
 
     B, D = z.shape
@@ -117,12 +117,12 @@ def main(args):
 
     shifts_transformed, components, mean = pca_transform(shifts.float())
     pca_vec = (
-        (components.sum(dim=0, keepdim=True) + mean)
-        .mean(0)
-        .view(z_test[0].shape[0], z_test[0].shape[1])
+        (components.sum(dim=0, keepdim=True) + mean).mean(0)
+        # .view(z_test[0].shape[0], z_test[0].shape[1])
     )
-    z_pca = z_test / np.linalg.norm(z_test) + pca_vec
-    z_pca = z_pca / np.linalg.norm(z_pca)
+    z_test = utils.tensorify(z_test, device)
+    z_pca = F.normalize(z_test) + pca_vec
+    z_pca = F.normalize(z_pca)
     cosines_pca = []
     for i in range(tilde_z_test.shape[0]):
         cosines_pca.append(
