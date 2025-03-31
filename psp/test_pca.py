@@ -108,7 +108,9 @@ def main(args):
         data_file=args.data_file,
     )
     shifts = utils.tensorify((tilde_z_test - z_test), device)
+    import ipdb
 
+    ipdb.set_trace()
     shifts_transformed, components, mean = pca_transform(shifts.float())
     pca_vec = (
         (components.sum(dim=0, keepdim=True) + mean).mean(0)
