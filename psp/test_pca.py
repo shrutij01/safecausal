@@ -123,6 +123,7 @@ def main(args):
     z_test = utils.tensorify(z_test, device)
     z_pca = F.normalize(z_test) + pca_vec
     z_pca = F.normalize(z_pca)
+    z_pca = utils.numpify(z_pca)
     cosines_pca = []
     for i in range(tilde_z_test.shape[0]):
         cosines_pca.append(
