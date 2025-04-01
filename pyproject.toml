@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "psp"
+name = "ssae"
 version = "0.1.0"
 description = ""
 authors = ["shrutijoshi <shrutijoshi98@gmail.com>"]

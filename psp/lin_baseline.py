@@ -15,8 +15,8 @@ import pandas as pd
 import ast
 import datetime
 import argparse
-from psp.data_utils import tensorify, numpify
-from psp.metrics import mean_corr_coef
+from ssae.data_utils import tensorify, numpify
+from ssae.metrics import mean_corr_coef
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -272,7 +272,7 @@ def main(args):
         "llm_layer": data_config.llm_layer,
     }
     set_seeds(int(args.seed))
-    logger = Logger(project="iclrpsp", config=config_dict)
+    logger = Logger(project="iclrssae", config=config_dict)
     train_loader, rep_dim, num_concepts = load_training_data(args, data_config)
     # Assuming the LinearSAE model and other parameters are already defined:
     sae_model = LinearSAE(

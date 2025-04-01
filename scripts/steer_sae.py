@@ -1,35 +1,57 @@
 import torch
-from transformer_lens import HookedTransformer
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import numpy as np
+from safetensors.torch import load_file
+from huggingface_hub import hf_hub_download
+from tqdm import tqdm
 
-from lm_saes import SparseAutoEncoder
+# 1. Download safetensors file
+model_id = "fnlp/Llama3_1-8B-Base-LXR-8x"
+filename = "Llama3_1-8B-Base-L3R-8x/checkpoints/consolidated.safetensors"
 
-model_name = "meta-llama/Llama-3.1-8B"
-
-hf_model = AutoModelForCausalLM.from_pretrained(model_name)
-
-hf_tokenizer = AutoTokenizer.from_pretrained(
-    model_name,
-    trust_remote_code=True,
-    use_fast=True,
-    add_bos_token=True,
+filepath = hf_hub_download(
+    repo_id=model_id,
+    filename=filename,
+    local_dir="checkpoints",
+    local_dir_use_symlinks=False,
 )
-model = HookedTransformer.from_pretrained_no_processing(
-    model_name,
-    device="cuda",
-    hf_model=hf_model,
-    tokenizer=hf_tokenizer,
-    dtype=torch.bfloat16,
-).eval()
 
-sae = SparseAutoEncoder.from_pretrained("fnlp/Llama3_1-8B-Base-L32R-8x")
+print(f"Downloaded checkpoint to: {filepath}")
 
-text = "english"
+# 2. Load the safetensor
+state_dict = load_file(filepath)
+decoder_weight = state_dict["decoder.weight"]  # shape: (vocab_size, d_model)
+print(f"decoder.weight shape: {decoder_weight.shape}")
 
-tokens = model.to_tokens(text)
+# Transpose to make each column a decoder vector
+decoder_weight_t = decoder_weight.T  # shape: (d_model, vocab_size)
 
-_, cache = model.run_with_cache(tokens)
+# 3. Create some dummy z vectors to test (you can load your own)
+num_z = 128
+d_model = decoder_weight_t.shape[0]
+z_vectors = torch.randn((num_z, d_model), device=decoder_weight.device)
 
-import ipdb
+# 4. Cosine similarity computation
+# Normalize decoder columns once
+decoder_normed = torch.nn.functional.normalize(decoder_weight_t, dim=0)
 
-ipdb.set_trace()
+max_cosines = []
+
+print("Computing max cosine similarities...")
+
+for z in tqdm(z_vectors):
+    z = z.unsqueeze(1)  # shape: (d_model, 1)
+    z_normed = torch.nn.functional.normalize(z, dim=0)
+
+    z_tilde = z + decoder_normed  # shape: (d_model, vocab_size)
+    z_tilde_normed = torch.nn.functional.normalize(z_tilde, dim=0)
+
+    cos_sims = torch.matmul(
+        z_normed.T, z_tilde_normed
+    ).squeeze()  # shape: (vocab_size,)
+    max_cosine = cos_sims.max().item()
+    max_cosines.append(max_cosine)
+
+# 5. Report mean and std
+max_cosines = np.array(max_cosines)
+print(f"\nMean of max cosines: {max_cosines.mean():.6f}")
+print(f"Std  of max cosines: {max_cosines.std():.6f}")

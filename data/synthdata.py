@@ -175,7 +175,7 @@ def main(args):
 
     current_datetime = datetime.datetime.now()
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    dir_location = "/network/scratch/j/joshi.shruti/psp/synthdata"
+    dir_location = "/network/scratch/j/joshi.shruti/ssae/synthdata"
     directory_name = os.path.join(
         dir_location, str(args.dgp) + "_" + timestamp_str
     )

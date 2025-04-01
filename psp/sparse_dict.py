@@ -14,9 +14,9 @@ import pandas as pd
 import ast
 import datetime
 from terminalplot import plot
-import psp.data_utils as data_utils
+import ssae.data_utils as data_utils
 import wandb
-from psp.metrics import mean_corr_coef
+from ssae.metrics import mean_corr_coef
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -413,7 +413,7 @@ def main(args, device):
         "num_epochs": args.num_epochs,
         "gradient_clipping_for_dict": args.grad_clip_sae,
     }
-    wandb.init(project="psp", config=sparse_dict_model_config)
+    wandb.init(project="ssae", config=sparse_dict_model_config)
     losses = train(
         dataloader=loader,
         sparse_dict_model=sparse_dict_model,

@@ -1,5 +1,5 @@
 import torch
-from psp.linear_sae import LinearSAE, TopK
+from ssae.linear_sae import LinearSAE, TopK
 
 
 import argparse
@@ -10,11 +10,11 @@ import numpy as np
 import pandas as pd
 import h5py
 
-import psp.data_utils as data_utils
-from psp.data_utils import tensorify, numpify
+import ssae.data_utils as data_utils
+from ssae.data_utils import tensorify, numpify
 
-import psp.plot as psp_plot
-from psp.evaluate import EvaluatorSeeds, EvaluatorMD
+import ssae.plot as ssae_plot
+from ssae.evaluate import EvaluatorSeeds, EvaluatorMD
 
 
 def prepare_test_data(args, device):

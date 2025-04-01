@@ -16,8 +16,8 @@ import pandas as pd
 import ast
 import datetime
 import argparse
-from psp.data_utils import tensorify, numpify
-from psp.metrics import mean_corr_coef
+from ssae.data_utils import tensorify, numpify
+from ssae.metrics import mean_corr_coef
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

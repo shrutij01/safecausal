@@ -1,6 +1,6 @@
-from psp.linear_sae import LinearSAE
-import psp.data_utils as utils
-import psp.metrics as metrics
+from ssae.linear_sae import LinearSAE
+import ssae.data_utils as utils
+import ssae.metrics as metrics
 
 import argparse
 import yaml
@@ -83,7 +83,7 @@ def main(args):
     )
     with open(args.dataconfig_file, "r") as file:
         data_config = Box(yaml.safe_load(file))
-    modelrootdir = "/network/scratch/j/joshi.shruti/psp/binary_1_2/"
+    modelrootdir = "/network/scratch/j/joshi.shruti/ssae/binary_1_2/"
     modeldirnames = [
         args.modeldir_1,
         args.modeldir_2,
@@ -322,7 +322,14 @@ if __name__ == "__main__":
     parser.add_argument("baseline")
     parser.add_argument(
         "--data-file2",
-        default="/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_32_config.yaml",
+        default="/network/scratch/j/joshi.shruti/ssae/binary_1/binary_1_32_config.yaml",
     )
     args = parser.parse_args()
     main(args)
+
+
+
+\textsc{lang}($1, 1$) (eg. \textit{eng} $\rightarrow$ \textit{french}) and
+\textsc{gender}($1,1$) (eg. \textit{masculine} $\rightarrow$ \textit{feminine} vary a single concept between $\x$ and $\tilde \x$.
+\textsc{binary}($2,2$) allows two binary concepts (language, gender) to vary jointly, and 
+\textsc{correlated}$(2,1)$ enforces correlated binary changes (e.g., \textit{eng} $\rightarrow$ \textit{french} along with \textit{eng} $\rightarrow$ \textit{german}).

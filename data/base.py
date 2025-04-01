@@ -1,3 +1,4 @@
+# eng-french: household objects
 binary_1 = [
     ("Friday", "Vendredi"),
     ("Chair", "Chaise"),
@@ -101,6 +102,7 @@ binary_1 = [
     ("Fan", "Ventilateur"),
 ]
 
+# eng-german: household objects
 binary_1_1 = [
     ("apple", "Apfel"),
     ("book", "Buch"),
@@ -321,6 +323,7 @@ binary_1_neg = [
     ("fraise", "strawberry"),
 ]
 
+# gender: professions
 binary_1_2 = [
     ["actor", "actress"],
     ["batman", "batwoman"],
@@ -422,6 +425,7 @@ binary_1_2 = [
     ["prophet", "prophetess"],
 ]
 
+# eng-french + gender: professions
 binary_2 = [
     [
         "King",
@@ -881,6 +885,7 @@ CATEGORICAL_CODEBOOK = {
         "pyramidal",
         "cylindrical",
         "prismatic",
+        "hemispherical",
     ],
     "color": [
         "red",

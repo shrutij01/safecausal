@@ -1,5 +1,5 @@
 import torch
-from psp.linear_sae import LinearSAE, TopK
+from ssae.linear_sae import LinearSAE, TopK
 import numpy as np
 
 import argparse
@@ -7,7 +7,7 @@ import os
 
 from box import Box
 import yaml
-from psp.data_utils import tensorify, numpify
+from ssae.data_utils import tensorify, numpify
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 

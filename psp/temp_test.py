@@ -1,6 +1,6 @@
-from psp.linear_sae import LinearSAE
-import psp.data_utils as utils
-import psp.metrics as metrics
+from ssae.linear_sae import LinearSAE
+import ssae.data_utils as utils
+import ssae.metrics as metrics
 
 import argparse
 import yaml
@@ -81,7 +81,7 @@ def main(args):
     )
     with open(args.dataconfig_file, "r") as file:
         data_config = Box(yaml.safe_load(file))
-    modelrootdir = "/network/scratch/j/joshi.shruti/psp/truthful_qa/"
+    modelrootdir = "/network/scratch/j/joshi.shruti/ssae/truthful_qa/"
     modeldirnames = [
         args.modeldir_1,
         args.modeldir_2,
@@ -270,7 +270,7 @@ if __name__ == "__main__":
     parser.add_argument("baseline")
     parser.add_argument(
         "--data-file2",
-        default="/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_32_config.yaml",
+        default="/network/scratch/j/joshi.shruti/ssae/binary_1/binary_1_32_config.yaml",
     )
     args = parser.parse_args()
     main(args)

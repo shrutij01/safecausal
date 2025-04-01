@@ -1,5 +1,5 @@
 import torch
-from psp.sparse_dict import LinearAutoencoder
+from ssae.sparse_dict import LinearAutoencoder
 
 
 import argparse
@@ -12,11 +12,11 @@ import pandas as pd
 from terminalplot import plot
 import seaborn as sns
 import matplotlib.pyplot as plt
-import psp.data_utils as data_utils
-from psp.data_utils import tensorify, numpify
+import ssae.data_utils as data_utils
+from ssae.data_utils import tensorify, numpify
 
-import psp.plot as psp_plot
-from psp.evaluate import EvaluatorGT
+import ssae.plot as ssae_plot
+from ssae.evaluate import EvaluatorGT
 
 
 def prepare_test_data(args, device):
@@ -106,7 +106,7 @@ def main(args, device):
 
     ipdb.set_trace()
 
-    psp_plot.plot_embeddings(None, delta_c_test, num_tfs, tf_ids, args)
+    ssae_plot.plot_embeddings(None, delta_c_test, num_tfs, tf_ids, args)
     import ipdb
 
     ipdb.set_trace()

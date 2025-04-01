@@ -2,10 +2,10 @@
 
 # Define hyperparameters
 embedding_files=(
-    "/network/scratch/j/joshi.shruti/psp/binary_1_2/binary_1_2_embeddings_layer_32.h5"
+    "/network/scratch/j/joshi.shruti/ssae/binary_1_2/binary_1_2_embeddings_layer_32.h5"
 )
 data_configs=(
-    "/network/scratch/j/joshi.shruti/psp/binary_1_2/binary_1_2_32_config.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/binary_1_2/binary_1_2_32_config.yaml"
 )
 epochs=(
     "--num-epochs 20000"
@@ -64,8 +64,8 @@ for embedding_file in "${embedding_files[@]}"; do
                                 echo "source /home/mila/j/joshi.shruti/venvs/eqm/bin/activate" >> "${script_name}"
                                 echo "module load miniconda/3" >> "${script_name}"
                                 echo "conda activate pytorch" >> "${script_name}"
-                                echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:\$PYTHONPATH\"" >> "${script_name}"
-                                echo "cd /home/mila/j/joshi.shruti/causalrepl_space/psp/psp" >> "${script_name}"
+                                echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/ssae:\$PYTHONPATH\"" >> "${script_name}"
+                                echo "cd /home/mila/j/joshi.shruti/causalrepl_space/ssae/ssae" >> "${script_name}"
                                 echo "python lin_baseline.py --embeddings-file ${embedding_file} --data-config-file ${data_config} ${primal_lr} ${dual_lr} ${norm_type} ${indicator_threshold} ${epoch} ${seed}" >> "${script_name}"
 
                                 # Make the script executable

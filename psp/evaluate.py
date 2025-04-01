@@ -1,11 +1,11 @@
 import numpy as np
-import psp.metrics as metrics
+import ssae.metrics as metrics
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics.pairwise import cosine_similarity
 
 
 from dataclasses import dataclass
-import psp.data_utils as data_utils
+import ssae.data_utils as data_utils
 import seaborn as sns
 import matplotlib.pyplot as plt
 

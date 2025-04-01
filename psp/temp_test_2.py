@@ -1,6 +1,6 @@
-from psp.linear_sae import LinearSAE
-import psp.data_utils as utils
-import psp.metrics as metrics
+from ssae.linear_sae import LinearSAE
+import ssae.data_utils as utils
+import ssae.metrics as metrics
 
 import argparse
 import yaml
@@ -83,13 +83,30 @@ def compute_mccs(seeds, wds):
     return mccs
 
 
+def first_pca_direction(X: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the first principal direction of X.
+
+    Args:
+        X (torch.Tensor): Input data of shape (n_samples, n_features)
+
+    Returns:
+        direction (torch.Tensor): First principal direction (unit vector of shape [n_features])
+    """
+    X_centered = X - X.mean(dim=0, keepdim=True)
+    _, _, Vh = torch.linalg.svd(X_centered, full_matrices=False)
+    first_direction = Vh[0]  # This is already normalized
+    return first_direction
+
+
 def main(args):
     tilde_z, z = utils.load_test_data(
         data_file=args.data_file,
     )
+
     with open(args.dataconfig_file, "r") as file:
         data_config = Box(yaml.safe_load(file))
-    modelrootdir = "/network/scratch/j/joshi.shruti/psp/binary_2/"
+    modelrootdir = "/network/scratch/j/joshi.shruti/ssae/binary_2/"
     modeldirnames = [
         args.modeldir_1,
         args.modeldir_2,
@@ -147,10 +164,16 @@ def main(args):
         z_neta = z_neta / np.linalg.norm(z_neta)
         z_md = z_md / np.linalg.norm(z_md)
         baseline_neta = baseline_neta / np.linalg.norm(baseline_neta)
+
         z_aff = z + baseline_neta
         z_aff = z_aff / np.linalg.norm(z_aff)
         tilde_z = tilde_z / np.linalg.norm(tilde_z)
-        cosines_md, cosines_neta, cosines_aff = [], [], []
+
+        shifts = utils.tensorify((tilde_z - z), device)
+        pca_vec = first_pca_direction(shifts)
+        z_pca = z / np.linalg.norm(z) + pca_vec
+
+        cosines_md, cosines_neta, cosines_aff, cosines_pca = [], [], [], []
         for i in range(tilde_z.shape[0]):
             cosines_md.append(
                 cosine_similarity(
@@ -167,10 +190,19 @@ def main(args):
                     tilde_z[i].reshape(1, -1), z_aff[i].reshape(1, -1)
                 )
             )
+            cosines_pca.append(
+                cosine_similarity(
+                    tilde_z[i].reshape(1, -1), z_pca[i].reshape(1, -1)
+                )
+            )
+        import ipdb
+
+        ipdb.set_trace()
         plt.figure(figsize=(10, 6))
         cosines_md = [float(arr[0][0]) for arr in cosines_md]
         cosines_neta = [float(arr[0][0]) for arr in cosines_neta]
         cosines_aff = [float(arr[0][0]) for arr in cosines_aff]
+        cosines_pca = [float(arr[0][0]) for arr in cosines_pca]
         sns.kdeplot(
             cosines_md,
             bw_adjust=0.75,
@@ -187,6 +219,13 @@ def main(args):
         )
         sns.kdeplot(
             cosines_aff,
+            bw_adjust=0.75,
+            label=r"$\theta(\tilde{z}, \tilde{z}_{\text{aff}})$",
+            shade=True,
+            linewidths=1.5,
+        )
+        sns.kdeplot(
+            cosines_pca,
             bw_adjust=0.75,
             label=r"$\theta(\tilde{z}, \tilde{z}_{\text{aff}})$",
             shade=True,
@@ -362,7 +401,7 @@ if __name__ == "__main__":
     # parser.add_argument("baseline")
     parser.add_argument(
         "--data-file2",
-        default="/network/scratch/j/joshi.shruti/psp/binary_1/binary_1_32_config.yaml",
+        default="/network/scratch/j/joshi.shruti/ssae/binary_1/binary_1_32_config.yaml",
     )
     args = parser.parse_args()
     main(args)

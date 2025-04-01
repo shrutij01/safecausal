@@ -1,6 +1,6 @@
 import numpy as np
 
-import psp.data_utils as data_utils
+import ssae.data_utils as data_utils
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.manifold import TSNE
@@ -61,5 +61,3 @@ def plot_embeddings(
     ]
     ax.legend(legend_handles, legend_names, title="Legend")
     plt.savefig("clusterfck" + str(label) + str(args.perplexity) + ".png")
-
-

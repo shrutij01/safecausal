@@ -8,7 +8,7 @@ import h5py
 import os
 import yaml
 
-import psp.data_utils as utils
+import ssae.data_utils as utils
 
 ACCESS_TOKEN = "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"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -83,7 +83,7 @@ def main(args):
         tokenizer,
         args.llm_layer,
     )
-    directory_location = "/network/scratch/j/joshi.shruti/psp/"
+    directory_location = "/network/scratch/j/joshi.shruti/ssae/"
     directory_name = os.path.join(directory_location, str(args.dataset_name))
     if not os.path.exists(directory_name):
         os.makedirs(directory_name)

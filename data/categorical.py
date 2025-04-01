@@ -69,7 +69,7 @@ def write_to_python_file(filename, list_of_lists):
 
 
 if __name__ == "__main__":
-    datadir = "/home/mila/j/joshi.shruti/causalrepl_space/psp/data/"
+    datadir = "/home/mila/j/joshi.shruti/causalrepl_space/ssae/data/"
     filename = os.path.join(datadir, "categorical_base.py")
     size = 30000
     dataset = generate_data(size)
