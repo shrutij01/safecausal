@@ -1,6 +1,0 @@
-- good news: the sae works with the toy dataset
-- next few days: trying it out on the language model tasks
-- + applying a transformation to the ground truth reps
-- [burning]: does the setup for the language model task make sense? 
-1. swapping, 2. Cycling-- ablations on what we mean by sparsity
-
