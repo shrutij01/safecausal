@@ -2,6 +2,9 @@ import numpy as np
 
 
 def swap_pairs(n, d_type):
+    '''Generate an array of n pairs where each pair consists of two elements, then swaps the elements to create the second item in each pair 
+    returns: array where each row is [AB, BA] or [42, 24]'''
+    
     result = None
     if d_type == "str":
         # 1. generate number arrays
@@ -37,6 +40,8 @@ def swap_pairs(n, d_type):
 
 
 def cycle_strings(n, string_length, cycle_distance, d_type):
+    '''Generates list of n tuples each containing a random string/number and a permutation of it'''
+    
     tuples = None
     if d_type == "str":
         # 0. some checks and balances
