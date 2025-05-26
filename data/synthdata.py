@@ -62,15 +62,15 @@ def generate_binary_vectors(
     lin_ent_tf = generate_invertible_matrix(vector_size)
 
     # Apply the transformation and prepare the DataFrame
-    transformed_vectors = np.dot(np.asarray(vectors), lin_ent_tf)
+    transformed_vectors = np.dot(np.asarray(vectors), lin_ent_tf) 
     data = {
-        "deltaz": transformed_vectors.tolist(),
-        "deltac": vectors,
+        "deltaz": transformed_vectors.tolist(), # transformed dense real-valued vectors (observations)
+        "deltac": vectors, # sparse binary vectors (ground truth)
     }
     df = pd.DataFrame(data)
 
     # The ground truth deltac matrix
-    gt_deltac = np.eye(vector_size)
+    gt_deltac = np.eye(vector_size) # use to measure how close learned transformation (learned_matrix * deltaz ≅ deltac) is to identity matrix 
     return df, gt_deltac
 
 
