@@ -77,6 +77,13 @@ def prepare_test_data(args, device):
 
 
 def main(args, device):
+    """
+    Evaluation:
+    1. Structured evaluation using EvaluatorGT
+    2. Dictionary analysis for decoder weights (w_d) 
+    3. Sparsity analysis (L1 norm of representations)
+    4. Visualization (embedding plots, violin plots showing sparsity distribution across labels, reconstruction error)
+    """
     (
         delta_c_test,
         delta_z_test,
