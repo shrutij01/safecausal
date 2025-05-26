@@ -78,6 +78,11 @@ def compute_mccs(seeds, wds):
 
 
 def main(args):
+    """
+    Computes steering vectors using different methods: learned steering (neta), mean difference (MD), baseline affine transformations.
+    Analyzes their effectiveness by measuring cosine similarities between steered and target vectors. Results are visualized as KDE plots.
+    """
+    
     tilde_z, z = utils.load_test_data(
         data_file=args.data_file,
     )
@@ -117,7 +122,7 @@ def main(args):
         mean_mcc = np.mean(mccs, axis=0)
         std_mcc = np.std(mccs, axis=0)
         # model_string = "baseline"
-        mcc_string = "mccs_" + str(model_string)
+        mcc_string = "mccs_" + str(model_strinxfg)
         mean_mcc_string = "mean_mcc_" + str(model_string)
         std_mcc_string = "std_mcc_" + str(model_string)
         config_dict = {
@@ -129,7 +134,7 @@ def main(args):
         import ipdb
 
         ipdb.set_trace()
-        md = utils.get_md_steering_vector(args.data_file)
+        md = utils.get_md_steering_vector(args.data_file) # mean difference steering vector
         baseline, baseline_wd = load_baseline(args.baseline, data_config)
         _, baseline_concept_projections = baseline(
             utils.tensorify((tilde_z - z), device)
@@ -214,6 +219,10 @@ def main(args):
         # or data_config.dataset == "binary_corr"
         or data_config.dataset == "categorical"
     ):
+        """ 
+        Tests the generalization capacity of steering vectors by applying steering methods learned on 
+        dataset 1 to dataset 2. 
+        """
         onesp_tilde_z, onesp_z = utils.load_test_data(
             data_file=args.data_file2,
         )
