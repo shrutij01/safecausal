@@ -16,11 +16,16 @@ def sample_excluding_elements(list, exclude):
     return random.choice(filtered_list)
 
 
-def generate_counterfactual_pair():
+def generate_counterfactual_pair(dataset_type="train"):
     init_shape = tilde_shape = random.choice(CATEGORICAL_CODEBOOK["shape"])
     init_color = tilde_color = random.choice(CATEGORICAL_CODEBOOK["color"])
     init_object = tilde_object = random.choice(CATEGORICAL_CODEBOOK["object"])
-    num_tfs = random.randint(1, len(CATEGORICAL_CODEBOOK))
+    if dataset_type == "train":
+        num_tfs = 1
+    elif dataset_type == "test":
+        num_tfs = random.randint(1, len(CATEGORICAL_CODEBOOK))
+    else:
+        raise ValueError
     tf_ids = []
     factors_to_resample = random.sample(
         list(CATEGORICAL_CODEBOOK.keys()), num_tfs
@@ -51,20 +56,33 @@ def generate_counterfactual_pair():
     return [x, tilde_x]
 
 
-def generate_data(size):
-    dataset = []
-    for _ in range(size):
-        cf_pair = generate_counterfactual_pair()
-        dataset.append(cf_pair)
-    return dataset
+def generate_data(size, split=0.9):
+    def generate_counterfactual_pairs(size, dataset_type):
+        tuples = []
+        for _ in range(size):
+            cf_pair = generate_counterfactual_pair(dataset_type)
+            tuples.append(cf_pair)
+        return tuples
+
+    cfc_train_tuples = generate_counterfactual_pairs(
+        int(size * split), "train"
+    )
+    cfc_test_tuples = generate_counterfactual_pairs(
+        int(size * (1 - split)), "test"
+    )
+    return cfc_train_tuples, cfc_test_tuples
 
 
-def write_to_python_file(filename, list_of_lists):
+def write_to_python_file(filename, train_data, test_data):
     with open(filename, "w", buffering=2048) as file:
-        file.write("data = [\n")
-        for single_list in list_of_lists:
-            tuple_str = f"({repr(single_list[0])}, {repr(single_list[1])}),\n"
-            file.write(tuple_str)
+        file.write("cfc_train_tuples = [\n")
+        for pair in train_data:
+            file.write(f"    ({repr(pair[0])}, {repr(pair[1])}),\n")
+        file.write("]\n\n")
+
+        file.write("cfc_test_tuples = [\n")
+        for pair in test_data:
+            file.write(f"    ({repr(pair[0])}, {repr(pair[1])}),\n")
         file.write("]\n")
 
 
@@ -72,5 +90,5 @@ if __name__ == "__main__":
     datadir = "/home/mila/j/joshi.shruti/causalrepl_space/ssae/data/"
     filename = os.path.join(datadir, "categorical_base.py")
     size = 30000
-    dataset = generate_data(size)
-    write_to_python_file(filename, dataset)
+    cfc_train_tuples, cfc_test_tuples = generate_data(size)
+    write_to_python_file(filename, cfc_train_tuples, cfc_test_tuples)

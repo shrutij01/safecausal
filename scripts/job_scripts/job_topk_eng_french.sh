@@ -2,19 +2,19 @@
 
 # Define hyperparameters
 embedding_files=(
-    "/network/scratch/j/joshi.shruti/ssae/2-binary/L_32_M_llama32-binary.h5"
+    "/network/scratch/j/joshi.shruti/ssae/eng-french/L_32_M_llama3eng-french.h5"
 )
 data_configs=(
-    "/network/scratch/j/joshi.shruti/ssae/2-binary/L_322-binary.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/eng-french/L_32eng-french.yaml"
 )
 overcompleteness_factors=(
     "--overcompleteness-factor 10"
 )
 scheduler_epochs=(
-    "--scheduler-epochs 1000" "--scheduler-epochs 500" "--scheduler-epochs 750"
+    "--scheduler-epochs 500" "--scheduler-epochs 250" "--scheduler-epochs 750"
 )
 target_sparse_levels=(
-    "--target-sparse-level 0.1" "--target-sparse-level 0.2"
+    "--target-sparse-level 0.1"
 )
 batch_sizes=(
     "--batch-size 64"
@@ -23,7 +23,7 @@ norm_types=(
     "--norm-type ln"
 )
 loss_types=(
-    "--loss-type relative"
+    "--loss-type absolute"
 )
 primal_lrs=(
     "--primal-lr 0.0005"
@@ -75,7 +75,7 @@ for idx in "${!embedding_files[@]}"; do
                                     echo "source /network/scratch/j/joshi.shruti/venvs/myenv/bin/activate" >> "${script_name}"
                                     echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:/home/mila/j/joshi.shruti/causalrepl_space/cooper/:$PYTHONPATH\"" >> "${script_name}"
                                     echo "cd /home/mila/j/joshi.shruti/causalrepl_space/psp/ssae" >> "${script_name}"
-                                    echo "python linear_sae.py --embeddings-file ${embedding_file} --data-config-file ${data_config} ${overcompleteness_factor} ${primal_lr} ${loss_type} ${norm_type} ${target_sparse_level} ${batch_size} ${scheduler_epoch} ${seed}" >> "${script_name}"
+                                    echo "python topksae.py --embeddings-file ${embedding_file} --data-config-file ${data_config} ${overcompleteness_factor} ${primal_lr} ${loss_type} ${norm_type} ${target_sparse_level} ${batch_size} ${scheduler_epoch} ${seed}" >> "${script_name}"
 
                                     # Make the script executable
                                     chmod +x "${script_name}"

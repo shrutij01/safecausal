@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 from torch.utils.data import TensorDataset, DataLoader
 import cooper
-from einops import rearrange
+import geoopt
+import math
 
 import numpy as np
 
@@ -16,8 +17,9 @@ import pandas as pd
 import ast
 import datetime
 import argparse
-from ssae.data_utils import tensorify, numpify
-from ssae.metrics import mean_corr_coef
+from ssae.data_utils import tensorify
+
+import os
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -33,12 +35,12 @@ def set_seeds(seed):
 
 def layer_normalise(
     x: torch.Tensor, eps: float = 1e-5
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     mu = x.mean(dim=-1, keepdim=True)
     x = x - mu
     std = x.std(dim=-1, keepdim=True)
     x = x / (std + eps)
-    return x, mu, std
+    return x, dict(mu=mu, std=std)
 
 
 class LinearSAE(nn.Module):
@@ -54,41 +56,60 @@ class LinearSAE(nn.Module):
     def __init__(
         self,
         rep_dim: int,
-        num_concepts: int,
+        encoder_dim: int,
         norm_type: str,
     ) -> None:
         super(LinearSAE, self).__init__()
         self.encoder: nn.Module = nn.Linear(
-            rep_dim, num_concepts, bias=False, device=device
+            rep_dim, encoder_dim, bias=False, device=device
         )
         if norm_type == "ln":
-            self.encoder_ln = nn.LayerNorm(num_concepts, device=device)
+            self.encoder_ln = nn.LayerNorm(encoder_dim, device=device)
         elif norm_type == "gn":
-            self.encoder_ln = nn.GroupNorm(1, num_concepts, device=device)
+            self.encoder_ln = nn.GroupNorm(1, encoder_dim, device=device)
         elif norm_type == "bn":
-            self.encoder_ln = nn.BatchNorm1d(num_concepts, device=device)
+            self.encoder_ln = nn.BatchNorm1d(encoder_dim, device=device)
             # really important mention in apx details
         else:
             raise ValueError("Invalid norm type, pass ln, gn, or bn")
         self.encoder_bias = nn.Parameter(
-            torch.zeros(num_concepts, device=device)
+            torch.zeros(encoder_dim, device=device)
         )
+        # Bias (approach from nn.Linear)
+        fan_in = self.encoder.weight.size(1)
+        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+        nn.init.uniform(self.encoder_bias, -bound, bound)
+        # nn.init.xavier_uniform_(self.encoder.weight)  # diff
+
         self.decoder = nn.Linear(
-            num_concepts, rep_dim, bias=False, device=device
+            encoder_dim, rep_dim, bias=False, device=device
         )
-        self.act = nn.LeakyReLU(0.1)
         self.decoder_bias = nn.Parameter(torch.zeros(rep_dim, device=device))
         self.decoder.weight.data = self.encoder.weight.data.T.clone()
         unit_norm_decoder_columns(self)
+        # no unit norm init here for decoder # diff
 
     def preprocess(
         self, delta_z: torch.Tensor
     ) -> tuple[torch.Tensor, dict[str, Any]]:
-        delta_z, mu, std = layer_normalise(delta_z)
-        return delta_z, dict(mu=mu, std=std)
+        delta_z, info = layer_normalise(delta_z)
+        return delta_z, info
+
+    def encode(self, delta_z: torch.Tensor) -> torch.Tensor:
+        """
+        expects delta_z to be already normalised
+        :param delta_z: input data (shape: [batch, n_inputs])
+        :return: autoencoder latents (shape: [batch, n_latents])
+        """
+        delta_z = delta_z.to(device)
+        # delta_z, info = self.preprocess(delta_z)
+        concept_indicators = self.encoder(delta_z - self.decoder_bias)  # diff
+        concept_indicators = self.encoder_ln(concept_indicators)
+        concept_indicators += self.encoder_bias
+        return concept_indicators
 
     def forward(
-        self, delta_z: torch.Tensor
+        self, delta_z: torch.Tensor, info: dict[str, Any]
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         :param delta_z: input data (shape: [batch, n_inputs])
@@ -96,14 +117,10 @@ class LinearSAE(nn.Module):
                 autoencoder latents (shape: [batch, n_latents])
                 reconstructed data (shape: [batch, n_inputs])
         """
-        delta_z = delta_z.to(device)
-        delta_z, info = self.preprocess(delta_z)
-
-        concept_indicators = (
-            self.encoder_ln((self.encoder(delta_z - self.decoder_bias)))
-            + self.encoder_bias
-        )
-        delta_z_hat = self.decoder(concept_indicators) + self.decoder_bias
+        concept_indicators = self.encode(delta_z)
+        delta_z_hat = (
+            self.decoder(concept_indicators) + self.decoder_bias
+        )  # diff
         delta_z_hat = delta_z_hat * info["std"] + info["mu"]
 
         return delta_z_hat, concept_indicators
@@ -136,6 +153,7 @@ def unit_norm_decoder_columns_grad_adjustment_(autoencoder) -> None:
             b = b.cuda()
 
         # Perform the operation
+        # check if this step below needs to rebuild the computation graph
         x += a * b * c
 
         return x
@@ -153,47 +171,103 @@ def unit_norm_decoder_columns_grad_adjustment_(autoencoder) -> None:
 
 
 class ConstrainedLinearSAE(cooper.ConstrainedMinimizationProblem):
-    def __init__(self, model, sparse_level, batch_size, num_concepts):
+    def __init__(
+        self,
+        model,
+        overcompleteness_factor,
+        batch_size,
+        encoder_dim,
+        num_concepts,
+        warmup_epochs: int = 2000,
+        total_schedule_epochs: int = 5000,
+        target_sparse_level: float = 5,
+        sparsity_factor: int = 5,
+    ):
+        # here initial sparse level > target sparse level
         super().__init__(is_constrained=True)
         self.model = model
         self.criterion = nn.MSELoss(reduction="mean")
-        self.sparse_level = sparse_level
+        assert sparsity_factor >= 1
+        self.target_sparse_level = target_sparse_level  # diff
+        # assert (
+        #     self.target_sparse_level
+        #     >= 1 / (num_concepts * overcompleteness_factor)
+        # ) and (
+        #     self.target_sparse_level <= 1 / (overcompleteness_factor)
+        # ), "target sparse level should be in the range of all to just one concepts being present"
+        # the max value of the first term should be 1 / overcompleteness_factor when
+        # all the # (num_concepts) concept indicators are 1
+        # min is 1 / (num_concepts * overcompleteness_factor)
+        # so target sparse level should be between these values
+        self.initial_sparse_level = num_concepts
+        self.sparse_level = num_concepts
         self.batch_size = batch_size
+        self.encoder_dim = encoder_dim
         self.num_concepts = num_concepts
+        self.warmup_epochs = warmup_epochs
+        self.total_schedule_epochs = total_schedule_epochs
+        self.current_epoch = 0
 
-    def compute_loss(self, delta_z, delt_z_hat):
-        return (
-            ((delt_z_hat - delta_z) ** 2).mean(dim=1)
-            / (delta_z**2).mean(dim=1)
-        ).mean()
-        # return self.criterion(delta_z, delt_z_hat)
+    def compute_loss(self, delta_z, delta_z_hat, type="relative"):
+        if type == "relative":
+            return (
+                ((delta_z - delta_z_hat) ** 2).mean(dim=1)
+                / (delta_z**2).mean(dim=1)
+            ).mean()
+        elif type == "absolute":
+            return (((delta_z - delta_z_hat) ** 2).mean(dim=1)).mean()  # diff
+        else:
+            raise ValueError
 
-    def closure(self, delta_z):
+    def step_scheduler(self):
+        """
+        Linearly decrease sparse_level (enforce stricter sparsity) from initial to target after warmup.
+        """
+        if self.current_epoch < self.warmup_epochs:
+            return  # no update
+
+        relative_epoch = self.current_epoch - self.warmup_epochs
+        if self.total_schedule_epochs == 0:
+            ratio = 1.0
+        else:
+            ratio = min(1.0, relative_epoch / self.total_schedule_epochs)
+        self.sparse_level = self.initial_sparse_level - ratio * (
+            self.initial_sparse_level - self.target_sparse_level
+        )  # diff
+
+    def closure(self, delta_z, info, loss_type="relative"):
         """
         This closure function computes the model's loss and the constraints.
         :param inputs: Input tensor to the model
         :param targets: Target tensor for reconstruction comparison
         """
-        delta_z_hat, concept_indicators = self.model(delta_z)
-
-        self.loss = self.compute_loss(delta_z, delta_z_hat)
+        delta_z_hat, concept_indicators = self.model(delta_z, info)
+        self.loss = self.compute_loss(delta_z, delta_z_hat, loss_type)
         # Compute the sparsity constraint as an inequality defect
+        self.step_scheduler()  # diff missing piece
         self.ineq_defect = (
             torch.sum(torch.abs(concept_indicators))
             / self.batch_size
-            / self.num_concepts
+            / self.encoder_dim
             - self.sparse_level
         )
-
         return cooper.CMPState(
             loss=self.loss, ineq_defect=self.ineq_defect, eq_defect=None
         )
+
+    def get_loss_values(self):
+        return self.loss.item(), self.ineq_defect.item()
 
 
 class Logger:
     def __init__(self, **kws):
         self.vals = {}
-        wandb.init(**kws)
+        os.environ["WANDB_DIR"] = "/network/scratch/j/joshi.shruti/wandb_logs"
+        wandb.init(
+            dir="/network/scratch/j/joshi.shruti/wandb_logs",  # optional if WANDB_DIR is set
+            settings=wandb.Settings(code_dir="."),  # no code copying
+            **kws,
+        )
 
     def logkv(self, k, v):
         self.vals[k] = v.detach() if isinstance(v, torch.Tensor) else v
@@ -208,14 +282,19 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
     delta_z_train = None
     rep_dim = config.rep_dim
     num_concepts = args.num_concepts
-    if (
-        config.dataset == "binary_1"
-        or config.dataset == "binary_1_2"
-        or config.dataset == "binary_corr"
-        or config.dataset == "binary_2"
-        or config.dataset == "truthful_qa"
-        or config.dataset == "categorical"
-    ):
+    if config.dataset in [
+        "binary_1",
+        "eng-french",
+        "eng-german",
+        "masc-fem-eng",
+        "masc-fem-french",
+        "2-binary",
+        "corr-binary",
+        "truthful-qa",
+        "categorical",
+        "wildjailbreak",
+        "safearena",
+    ]:
         with h5py.File(args.embeddings_file, "r") as f:
             cfc_train = np.array(f["cfc_train"]).squeeze()
         delta_z_train = tensorify(cfc_train[:, 1] - cfc_train[:, 0], device)
@@ -248,9 +327,6 @@ def load_training_data(args, config) -> tuple[DataLoader, int, int]:
 
         delta_z = np.asarray([list(row) for row in df_train[cfc_columns[0]]])
         delta_z_train = tensorify(delta_z, device)
-        import ipdb
-
-        ipdb.set_trace()
         train_dataset = TensorDataset(
             delta_z_train,
         )
@@ -270,16 +346,23 @@ def save(args, sae_model, config_dict):
     timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
     modeldir = os.path.join(
         os.path.dirname(args.embeddings_file),
-        str(args.num_concepts)
+        str(config_dict["llm_layer"])
         + "_"
-        + str(args.alpha)
+        + str(config_dict["loss_type"])
         + "_"
-        + str(args.primal_lr)
+        + str(args.warmup_epochs)
+        + "_"
+        + str(args.scheduler_epochs)
+        + "_"
+        + str(args.batch_size)
+        + "_"
+        + str(args.overcompleteness_factor)
         + "_"
         + str(args.norm_type)
         + "_"
+        + str(args.primal_lr)
+        + "_"
         + str(args.seed),
-        "prebias",
     )
     if not os.path.exists(modeldir):
         os.makedirs(modeldir)
@@ -314,55 +397,51 @@ def train(
         sparsity_penalty_total = 0.0
         l0_norm_total = 0.0
         for delta_z_list in train_loader:
-            # delta_z_list = to_device(delta_z_list, device)
             delta_z = delta_z_list[0]
-            # this makes bn use batch statistics while training, doesn't have any
-            # effect for gn or ln
-            if args.entangle_more:
-
-                def generate_invertible_matrix(n):
-                    while True:
-                        A = np.random.rand(n, n)
-                        if np.linalg.det(A) != 0:
-                            return A
-
-                entanglement = generate_invertible_matrix(delta_z.shape[1])
-                delta_z = rearrange(delta_z, "b i -> b i") @ rearrange(
-                    entanglement, "i j -> i j"
-                )
-
+            delta_z, info = layer_normalise(delta_z)
             sae_model.train()
             coop_optimizer.zero_grad()
             lagrangian = formulation.composite_objective(
-                cmp_model.closure, delta_z
+                cmp_model.closure, delta_z, info, args.loss_type
             )
             formulation.custom_backward(lagrangian)
             for name, param in sae_model.named_parameters():
                 if param.grad is not None:
                     grad_norm = torch.norm(param.grad).item()
-                    print(f"Gradient norm of {name}: {grad_norm}")
-
-            coop_optimizer.step(cmp_model.closure, delta_z)
-
+                    # print(f"Gradient norm of {name}: {grad_norm}")
+            coop_optimizer.step(
+                cmp_model.closure, delta_z, info, args.loss_type
+            )
+            # fixme: accumulation, data loading,
             # Normalize the decoder columns to unit length after the parameters update
             unit_norm_decoder_columns(cmp_model.model)
-
+            # diff
             # Adjust the gradients post-optimization step to maintain unit norms
             unit_norm_decoder_columns_grad_adjustment_(cmp_model.model)
             # before or after gradient update
-            delta_z_hat, concept_indicators = sae_model(delta_z)
-            epoch_loss += cmp_model.compute_loss(delta_z_hat, delta_z).item()
-            sparsity_penalty_total += cmp_model.ineq_defect.item()
+            with torch.no_grad():
+                delta_z_hat, concept_indicators = sae_model(delta_z, info)
+            recon_loss, sparsity_penalty = cmp_model.get_loss_values()
+            epoch_loss += recon_loss
+            sparsity_penalty_total += sparsity_penalty
+
             l0_norm_total += (
-                torch.sum(concept_indicators >= args.indicator_threshold)
+                torch.sum(
+                    torch.abs(concept_indicators) >= args.indicator_threshold
+                )
                 / args.batch_size
-                / args.num_concepts
             )
-            del delta_z, delta_z_hat, concept_indicators
-        logger.logkv("total_loss", epoch_loss)
-        logger.logkv("sparsity_penalty", sparsity_penalty_total)
-        logger.logkv("num_concepts_predicted", l0_norm_total / args.batch_size)
-        print(epoch, epoch_loss)
+        logger.logkv("total_loss", epoch_loss / args.batch_size)
+        logger.logkv(
+            "sparsity_penalty", sparsity_penalty_total / args.batch_size
+        )
+        logger.logkv(
+            "num_concepts_predicted",
+            torch.sum(torch.abs(concept_indicators) > args.indicator_threshold)
+            / args.batch_size,
+        )
+        del delta_z, delta_z_hat, concept_indicators
+        print(epoch, epoch_loss / args.batch_size)
         logger.dumpkvs()
 
 
@@ -372,7 +451,7 @@ def main(args):
     config_dict = {
         "seed": args.seed,
         "embeddings_file": args.embeddings_file,
-        "alpha": args.alpha,
+        "overcompleteness_factor": args.overcompleteness_factor,
         "primal_lr": args.primal_lr,
         "dual_lr": args.primal_lr / 2,
         "num_concepts": args.num_concepts,
@@ -380,26 +459,45 @@ def main(args):
         "batch_size": args.batch_size,
         "num_epochs": args.num_epochs,
         "indicator_threshold": args.indicator_threshold,
+        "loss_type": args.loss_type,
+        "warmup_epochs": args.warmup_epochs,
+        "scheduler_epochs": args.scheduler_epochs,
+        "sparsity_factor": args.sparsity_factor,
+        "target_sparse_level": args.target_sparse_level,
+        "dataset": data_config.dataset,
+        "rep_dim": data_config.rep_dim,
+        "llm_layer": data_config.llm_layer,
     }
     set_seeds(int(args.seed))
     logger = Logger(entity="causalrepl", project="ssae", config=config_dict)
     train_loader, rep_dim, num_concepts = load_training_data(args, data_config)
     # Assuming the LinearSAE model and other parameters are already defined:
+    encoder_dim = int(args.overcompleteness_factor * num_concepts)
+    assert encoder_dim <= rep_dim
     sae_model = LinearSAE(
-        rep_dim=rep_dim, num_concepts=num_concepts, norm_type=args.norm_type
+        rep_dim=rep_dim, encoder_dim=encoder_dim, norm_type=args.norm_type
+    )
+    total_schedule_epochs = min(
+        args.scheduler_epochs, args.num_epochs - args.warmup_epochs
     )
     cmp_model = ConstrainedLinearSAE(
         model=sae_model,
-        sparse_level=float(args.alpha),
+        overcompleteness_factor=int(args.overcompleteness_factor),
         batch_size=int(args.batch_size),
-        num_concepts=num_concepts,
+        encoder_dim=encoder_dim,
+        num_concepts=int(args.num_concepts),
+        warmup_epochs=args.warmup_epochs,
+        total_schedule_epochs=total_schedule_epochs,
+        target_sparse_level=args.target_sparse_level,
+        sparsity_factor=args.sparsity_factor,
     )
 
     # Define optimizers
     primal_optimizer = cooper.optim.ExtraAdam(
         list(sae_model.parameters()), lr=args.primal_lr
     )
-    dual_lr = args.primal_lr / 2
+    dual_lr = args.primal_lr / 2  # dual_lr should be less than primal_lr
+    # 0.5 is common from extra gradient method literature
     dual_optimizer = cooper.optim.partial_optimizer(
         cooper.optim.ExtraAdam, lr=dual_lr
     )
@@ -430,18 +528,26 @@ if __name__ == "__main__":
     parser.add_argument("--data-config-file")
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--num-epochs", type=int, default=20000)
-    parser.add_argument("--primal-lr", type=float, default=0.01)
+    parser.add_argument("--primal-lr", type=float, default=0.0005)
     parser.add_argument("--dual-lr", type=float, default=0.005)
-    parser.add_argument("--entangle-more", type=bool, default=False)
+    # parser.add_argument("--entangle-more", type=bool, default=False)
     # leaving this here for now but changing it to primal_lr/2 in the code
     # following the partial observability paper and repo
-    parser.add_argument("--alpha", type=float, default=float(11))
+    parser.add_argument("--warmup-epochs", type=int, default=0)
+    parser.add_argument("--scheduler-epochs", type=int, default=500)
+    parser.add_argument("--sparsity-factor", type=float, default=5)
+    parser.add_argument("--target-sparse-level", type=float, default=0.1)
+    # say it starts at num_concepts and then goes down
+    parser.add_argument("--overcompleteness-factor", type=int, default=2)
     parser.add_argument("--indicator-threshold", type=float, default=0.1)
     # indicator threshold needs to be decently low so that the concept_indicators
     # don't turn out to be all zeros
-    parser.add_argument("--num-concepts", type=int, default=3)
+    parser.add_argument("--num-concepts", type=int, default=1)
     parser.add_argument(
-        "--norm-type", default="bn", choices=["ln", "gn", "bn"]
+        "--norm-type", default="ln", choices=["ln", "gn", "bn"]
+    )
+    parser.add_argument(
+        "--loss-type", default="relative", choices=["relative", "absolute"]
     )
     parser.add_argument("--seed", default=0)
 

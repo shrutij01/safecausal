@@ -2,15 +2,14 @@ import torch
 
 from datasets import load_dataset as hf_load_dataset
 
-from data import base, categorical_base
+from data import base
 
 import numpy as np
+import random
 from random import shuffle
 
 import os
-import ast
-import re
-import pandas as pd
+import json
 import h5py
 
 
@@ -22,11 +21,26 @@ def tensorify(np_array, device):
 
 
 def numpify(tensor):
-    return tensor.detach().cpu().numpy()
+    return tensor.detach().cpu().to(torch.float32).numpy()
 
 
-def load_dataset(dataset_name, **kwargs):
-    if dataset_name == "truthful_qa":
+def load_json(path: str):
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    return data
+
+
+def load_jsonl(filepath: str):
+    with open(filepath, "r", encoding="utf-8") as f:
+        return [json.loads(line) for line in f if line.strip()]
+
+
+def load_dataset(
+    dataset_name,
+    num_samples,
+    split=0.9,
+):
+    if dataset_name == "truthful-qa":
         hf_dataset_name = "truthfulqa/truthful_qa"
         dataset_params = {
             "split": "validation",
@@ -35,7 +49,7 @@ def load_dataset(dataset_name, **kwargs):
         data = hf_load_dataset(hf_dataset_name, **dataset_params)
         # mc1_targets have a single correct choice and mc2_targets have
         # multiple choices that can be correct
-        instruction = "The answer is..."
+        instruction = "True or False: "
         cfc_tuples = []
         for item in data:
             question = item["question"]
@@ -56,179 +70,272 @@ def load_dataset(dataset_name, **kwargs):
             ]
 
             # Create the tuple
-            correct_pair = (
-                question + " " + instruction + " " + correct_answer_choice
-            )
-            wrong_pair = (
-                question + " " + instruction + " " + wrong_answer_choice
-            )
+            correct_pair = f"{question} {instruction} {correct_answer_choice}"
+            wrong_pair = f"{question} {instruction} {wrong_answer_choice}"
             cfc_tuples.append([wrong_pair, correct_pair])
+        split_index = int(split * len(cfc_tuples))
+        cfc_train_tuples = cfc_tuples[:split_index]
+        cfc_test_tuples = cfc_tuples[split_index:]
+        concept_labels_test = None
+    elif dataset_name == "safearena":
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        safepath = os.path.join(script_dir, "..", "data", "safe.json")
+        harmpath = os.path.join(script_dir, "..", "data", "harm.json")
+        if not os.path.exists(safepath) or not os.path.exists(harmpath):
+            raise FileNotFoundError(
+                f"Please download the dataset from https://huggingface.co/datasets/McGill-NLP/safearena and place it in the data directory."
+            )
+        safe_data = load_json(safepath)
+        harm_data = load_json(harmpath)
+        safe_intents = [entry["intent"] for entry in safe_data]
+        harm_intents = [entry["intent"] for entry in harm_data]
+        cfc_tuples = [
+            [safe, harm] for safe, harm in zip(safe_intents, harm_intents)
+        ]
+        split_index = int(split * len(cfc_tuples))
+        cfc_train_tuples = cfc_tuples[:split_index]
+        cfc_test_tuples = cfc_tuples[split_index:]
+        concept_labels_test = None
+    elif dataset_name == "wildjailbreak":
+        paired_file_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..",
+            "data",
+            "generation_outputs/"
+            "generate_vanilla_wildbreak_make_safe_meta-llama-Llama-3.1-8B-Instruct_0.6_2025-04-29-01:48:25_90",
+            "paired_samples.jsonl",
+        )
+        if not os.path.exists(paired_file_path):
+            raise FileNotFoundError(
+                f"Please generate the safe-adversarial sample pairs first!"
+            )
+        paired_data = load_jsonl(paired_file_path)
+        cfc_tuples = [
+            [
+                d["instruction"],
+                d["model_output"]
+                .split("Original harmful prompt:", 1)[1]
+                .strip(),
+            ]
+            for d in paired_data
+            if "Original harmful prompt:" in d["model_output"]
+        ]
 
-    elif dataset_name == "binary_1":
-        cfc_tuples = base.binary_1
-    elif dataset_name == "binary_1_2":
-        cfc_tuples = base.binary_1_2
-    elif dataset_name == "binary_corr":
-        cfc_tuples = base.binary_1 + base.binary_1_1
-        import ipdb
+        skipped_entries = [
+            {
+                "instruction": d.get("instruction", ""),
+                "model_output": d["model_output"],
+                "reason": "Missing 'Original harmful prompt:' marker",
+            }
+            for d in paired_data
+            if "Original harmful prompt:" not in d["model_output"]
+        ]
+        with open(
+            "wildjailbreak_skipped_prompts.jsonl", "w", encoding="utf-8"
+        ) as f:
+            for entry in skipped_entries:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        split_index = int(split * len(cfc_tuples))
+        cfc_train_tuples = cfc_tuples[:split_index]
+        cfc_test_tuples = cfc_tuples[split_index:]
+        concept_labels_test = None
 
-        ipdb.set_trace()
-        shuffle(cfc_tuples)
-    elif dataset_name == "binary_2":
-        cfc_tuples = base.binary_2
-    elif dataset_name == "categorical":
-        cfc_tuples = categorical_base.data
+    elif dataset_name in [
+        "eng-french",
+        "eng-german",
+        "masc-fem-eng",
+        "masc-fem-mixed",
+        "2-binary",
+        "corr-binary",
+    ]:
+        split_index = int(split * num_samples)
+        cfc_train_tuples, cfc_test_tuples, concept_labels_test = (
+            generate_counterfactual_pairs(
+                dataset_name, split_index, num_samples
+            )
+        )
     else:
         raise NotImplementedError
-    return cfc_tuples
-
-
-def append_instruction(contexts, instruction):
-    instruction_plus_contexts = []
-    for context in contexts:
-        instruction_plus_contexts.append(
-            [str(instruction) + " " + str(context)]
+    if concept_labels_test is not None:
+        directory_location = "/network/scratch/j/joshi.shruti/ssae/"
+        directory_name = os.path.join(directory_location, str(dataset_name))
+        if not os.path.exists(directory_name):
+            print(f"📁 Directory does not exist. Creating: {directory_name}")
+            os.makedirs(directory_name)
+        concept_labels_test_path = os.path.join(
+            directory_name,
+            "concept_labels_test_.json",
         )
-    return instruction_plus_contexts
+        if os.path.exists(concept_labels_test_path):
+            print(
+                f"⚠️ Test labels already exist at: {concept_labels_test_path}. Skipping write."
+            )
+        else:
+            print(
+                f"✅ Test labels do not exist yet. Writing to {concept_labels_test_path}."
+            )
+            with open(concept_labels_test_path, "w") as file:
+                json.dump(concept_labels_test, file)
+    return cfc_train_tuples, cfc_test_tuples
 
 
-def load_test_data(data_file):
-    with h5py.File(data_file, "r") as f:
+def generate_counterfactual_pairs(dataset_name, split_index, num_samples):
+    num_train_samples = len(range(0, split_index))
+    num_test_samples = len(range(split_index, num_samples))
+    if dataset_name == "eng-french":
+        train_data_dict = {
+            "eng_objs": list(base.eng_objs)[0:split_index],
+            "french_objs": list(base.french_objs)[0:split_index],
+        }
+        test_data_dict = {
+            "eng_objs": list(base.eng_objs)[split_index:],
+            "french_objs": list(base.french_objs)[split_index:],
+        }
+        train_pair_sampling_plan = {
+            ("eng_objs", "french_objs"): num_train_samples,
+        }
+        test_pair_sampling_plan = {
+            ("eng_objs", "french_objs", "concept_1"): num_test_samples,
+        }
+    elif dataset_name == "eng-german":
+        train_data_dict = {
+            "eng_objs": list(base.eng_objs)[0:split_index],
+            "german_objs": list(base.german_objs)[0:split_index],
+        }
+        test_data_dict = {
+            "eng_objs": list(base.eng_objs)[split_index:],
+            "german_objs": list(base.german_objs)[split_index:],
+        }
+        train_pair_sampling_plan = {
+            ("eng_objs", "german_objs"): num_train_samples,
+        }
+        test_pair_sampling_plan = {
+            ("eng_objs", "german_objs", "concept_1"): num_test_samples,
+        }
+    elif dataset_name == "masc-fem-eng":
+        train_data_dict = {
+            "eng_masc": list(base.eng_masc)[0:split_index],
+            "eng_fem": list(base.eng_fem)[0:split_index],
+        }
+        test_data_dict = {
+            "eng_masc": list(base.eng_masc)[split_index:],
+            "eng_fem": list(base.eng_fem)[split_index:],
+        }
+        train_pair_sampling_plan = {
+            ("eng_masc", "eng_fem"): num_train_samples,
+        }
+        test_pair_sampling_plan = {
+            ("eng_masc", "eng_fem", "concept_1"): num_test_samples,
+        }
+    elif dataset_name == "masc-fem-mixed":
+        train_data_dict = {
+            "mixed_masc": list(base.eng_masc)[0:split_index]
+            + list(base.french_masc)[0:split_index],
+            "mixed_fem": list(base.eng_fem)[0:split_index]
+            + list(base.french_fem)[0:split_index],
+        }
+        test_data_dict = {
+            "mixed_masc": list(base.eng_masc)[split_index:]
+            + list(base.french_masc)[split_index:],
+            "mixed_fem": list(base.eng_fem)[split_index:]
+            + list(base.french_fem)[split_index:],
+        }
+        train_pair_sampling_plan = {
+            ("mixed_masc", "mixed_fem"): num_train_samples,
+        }
+        test_pair_sampling_plan = {
+            ("mixed_masc", "mixed_fem", "concept_1"): num_test_samples,
+        }
+    elif dataset_name == "2-binary":
+        train_data_dict = {
+            "eng_masc": list(base.eng_masc)[0:split_index],
+            "eng_fem": list(base.eng_fem)[0:split_index],
+            "french_masc": list(base.french_masc)[0:split_index],
+            "french_fem": list(base.french_fem)[0:split_index],
+        }
+        test_data_dict = {
+            "eng_masc": list(base.eng_masc)[split_index:],
+            "eng_fem": list(base.eng_fem)[split_index:],
+            "french_masc": list(base.french_masc)[split_index:],
+            "french_fem": list(base.french_fem)[split_index:],
+        }
+        train_pair_sampling_plan = {
+            ("eng_masc", "french_masc"): num_train_samples,
+            ("eng_fem", "french_fem"): num_train_samples,
+            ("eng_masc", "eng_fem"): num_train_samples,
+            ("french_masc", "french_fem"): num_train_samples,
+            ("eng_masc", "french_fem"): 4 * num_train_samples,
+        }
+        test_pair_sampling_plan = {
+            ("eng_masc", "french_masc", "concept_1"): num_test_samples,
+            ("eng_fem", "french_fem", "concept_1"): num_test_samples,
+            ("eng_masc", "eng_fem", "concept_2"): num_test_samples,
+            ("french_masc", "french_fem", "concept_2"): num_test_samples,
+        }
+    elif dataset_name == "corr-binary":
+        train_data_dict = {
+            "eng_objs": list(base.eng_objs)[0:split_index],
+            "french_objs": list(base.french_objs)[0:split_index],
+            "german_objs": list(base.german_objs)[0:split_index],
+        }
+        test_data_dict = {
+            "eng_objs": list(base.eng_objs)[split_index:],
+            "french_objs": list(base.french_objs)[split_index:],
+            "german_objs": list(base.german_objs)[split_index:],
+        }
+        train_pair_sampling_plan = {
+            ("eng_objs", "french_objs"): num_train_samples,
+            ("eng_objs", "german_objs"): num_train_samples,
+        }
+        test_pair_sampling_plan = {
+            ("eng_objs", "french_objs", "concept_1"): num_test_samples,
+            ("eng_objs", "german_objs", "concept_3"): num_test_samples,
+        }
+    else:
+        raise NotImplementedError
+    cfc_train_tuples, _ = sample_counterfactuals(
+        train_pair_sampling_plan, train_data_dict
+    )
+    cfc_test_tuples, concept_labels_test = sample_counterfactuals(
+        test_pair_sampling_plan, test_data_dict
+    )
+    shuffle(cfc_train_tuples)
+    return cfc_train_tuples, cfc_test_tuples, concept_labels_test
+
+
+def sample_counterfactuals(plan, data_dict):
+    all_pairs = []
+    concept_ids = []
+    for keys, n_samples in plan.items():
+        if len(keys) == 2:
+            src_key, tgt_key = keys
+            concept_id = None
+        else:
+            src_key, tgt_key, concept_id = keys
+        src_list = data_dict[src_key]
+        tgt_list = data_dict[tgt_key]
+        max_len = min(len(src_list), len(tgt_list))
+        n_samples = min(n_samples, max_len)
+        indices = random.sample(range(max_len), n_samples)
+
+        for idx in indices:
+            src_word = src_list[idx]
+            tgt_word = tgt_list[idx]
+
+            if src_key == tgt_key and src_word == tgt_word:
+                continue
+            # Append the concept_id as part of the tuple
+            if len(keys) == 3:
+                all_pairs.append([src_word, tgt_word])
+                concept_ids.append(concept_id)
+            else:
+                all_pairs.append([src_word, tgt_word])
+    return all_pairs, concept_ids
+
+
+def load_test_data(datafile):
+    with h5py.File(datafile, "r") as f:
         cfc_embeddings_test = np.array(f["cfc_test"])
         tilde_z = cfc_embeddings_test[:, 1]
         z = cfc_embeddings_test[:, 0]
     return tilde_z, z
-
-
-def get_md_steering_vector(data_file):
-    with h5py.File(data_file, "r") as f:
-        cfc_embeddings_train = np.array(f["cfc_train"])
-        md = np.mean(
-            cfc_embeddings_train[:, 1] - cfc_embeddings_train[:, 0], axis=0
-        )
-        md = md / np.linalg.norm(md)
-        return md
-
-
-def get_rep_pairs(num_pairs, data1, data2):
-    assert data1.shape[0] == data2.shape[0]
-    assert data1.shape[1] == data2.shape[1]
-    total_samples = data1.shape[0]
-    m = data1.shape[1]
-    reps1 = np.zeros((num_pairs, m))
-    reps2 = np.zeros((num_pairs, m))
-    for i in range(num_pairs):
-        id1, id2 = np.random.choice(total_samples, size=2, replace=False)
-        reps1[i] = data1[id1]
-        reps2[i] = data2[id2]
-    return reps1, reps2
-
-
-def archived_load_test_data(args, data_config):
-    # todo: after test dict features
-    delta_z = None
-    tf_ids = []
-    num_tfs = []
-    if data_config.dataset == "toy_translator":
-        data_type = data_config.dgp
-        df_file = os.path.join(
-            args.embedding_dir,
-            "object_translations" + str(data_type) + ".csv",
-        )
-        cfc_columns = data_config.cfc_column_names
-        converters = {col: ast.literal_eval for col in cfc_columns}
-        x_df = pd.read_csv(df_file, converters=converters)
-        x_df_test = x_df.iloc[int(data_config.split * data_config.size) :]
-
-        def convert_to_list_of_ints(value):
-            if isinstance(value, str):
-                value = ast.literal_eval(value)
-            return [int(delta_z) for delta_z in value]
-
-        for column in x_df_test[cfc_columns]:
-            x_df_test[column] = x_df_test[column].apply(
-                convert_to_list_of_ints
-            )
-        # x_df_test["num_coordinates_translated"] = x_df_test[
-        #     "num_coordinates_translated"
-        # ].apply(convert_to_list_of_ints)
-        # x_df_test["ids_coordinates_translated"] = x_df_test[
-        #     "ids_coordinates_translated"
-        # ].apply(convert_to_list_of_ints)
-
-        delta_z = np.asarray(
-            (
-                x_df_test[cfc_columns]
-                .apply(lambda row: sum(row, []), axis=1)
-                .tolist()
-            )
-        )
-        # num_tfs = np.asarray(x_df_test["num_coordinates_translated"].tolist())
-        # tf_ids = np.asarray(x_df_test["ids_coordinates_translated"].tolist())
-        return (
-            delta_z,
-            tf_ids,
-            num_tfs,
-        )
-
-    elif data_config.dataset == "gradeschooler":
-        embeddings_file = os.path.join(args.embedding_dir, "embeddings.h5")
-        with h5py.File(embeddings_file, "r") as f:
-            cfc1_embeddings_test = np.array(f["cfc1_test"])
-            cfc2_embeddings_test = np.array(f["cfc2_test"])
-        delta_z = cfc2_embeddings_test - cfc1_embeddings_test
-        data_file = os.path.join(args.embedding_dir, "gradeschooler.txt")
-        tf_ids = []
-        num_tfs = []
-        with open(data_file, "r") as f:
-            context_pairs = [
-                line.strip().split("\t") for line in f if line.strip()
-            ]
-        split = int(0.9 * data_config.dataset_length)
-        for cp in context_pairs[split:]:
-            match = re.search(r"\[(.*?)\]$", cp[0])
-            if match:
-                list_str = match.group(0)
-                parsed_list = ast.literal_eval(list_str)
-                int_list = [int(str(item).strip()) for item in parsed_list]
-            else:
-                raise ValueError
-            int_list.sort()
-            tf_id = int("".join(str(digit) for digit in int_list))
-            tf_ids.append(tf_id)
-            num_tfs.append(cp[0].split(",")[2])
-            num_tfs = list(map(int, num_tfs))
-            return (
-                delta_z,
-                tf_ids,
-                num_tfs,
-                cfc1_embeddings_test,
-                cfc2_embeddings_test,
-            )
-    else:
-        raise NotImplementedError(
-            "Datasets implemented: toy_translator and gradeschooler"
-        )
-
-
-def load_eval_by_one_contrasts(args):
-    eval_file_name_1 = "eval_embeddings_" + str(args.key_1) + ".h5"
-    embeddings_file_1 = os.path.join(args.embedding_dir, eval_file_name_1)
-    eval_file_name_2 = "eval_embeddings_" + str(args.key_2) + ".h5"
-    embeddings_file_2 = os.path.join(args.embedding_dir, eval_file_name_2)
-    with h5py.File(embeddings_file_1, "r") as f:
-        cfc1_eval_1 = np.array(f["cfc1_eval"])
-        cfc2_eval_1 = np.array(f["cfc2_eval"])
-    with h5py.File(embeddings_file_2, "r") as f:
-        cfc1_eval_2 = np.array(f["cfc1_eval"])
-        cfc2_eval_2 = np.array(f["cfc2_eval"])
-    return (cfc1_eval_1, cfc2_eval_1, cfc1_eval_2, cfc2_eval_2)
-
-
-def get_embeddings_for_num_tfs(
-    target_num_tfs, all_embeddings, all_num_tfs, all_tf_ids
-):
-    all_num_tfs_array = np.array(all_num_tfs)
-    mask_num_tfs = all_num_tfs_array == target_num_tfs
-    label_names = np.array(all_tf_ids)[mask_num_tfs]
-    return all_embeddings[mask_num_tfs], label_names

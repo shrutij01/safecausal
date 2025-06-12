@@ -54,12 +54,11 @@ def store_embeddings(filename, cfc_train, cfc_test):
 
 
 def main(args):
-    cfc_tuples = utils.load_dataset(
-        dataset_name=args.dataset_name,
-    )[0:100]
-    split = int(0.9 * len(cfc_tuples))
-    cfc_train, cfc_test = cfc_tuples[0:split], cfc_tuples[split:]
-
+    cfc_train_tuples, cfc_test_tuples = utils.load_dataset(
+        dataset_name=args.dataset,
+        split=args.split,
+        num_samples=args.num_samples,
+    )
     tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
         args.model_id, token=ACCESS_TOKEN
     )
@@ -72,19 +71,19 @@ def main(args):
         # torch_dtype=torch.bfloat16,  # check compatibility
     )
     cfc_train_embeddings = extract_embeddings(
-        cfc_train,
+        cfc_train_tuples,
         model,
         tokenizer,
         args.llm_layer,
     )
     cfc_test_embeddings = extract_embeddings(
-        cfc_test,
+        cfc_test_tuples,
         model,
         tokenizer,
         args.llm_layer,
     )
     directory_location = "/network/scratch/j/joshi.shruti/ssae/"
-    directory_name = os.path.join(directory_location, str(args.dataset_name))
+    directory_name = os.path.join(directory_location, str(args.dataset))
     if not os.path.exists(directory_name):
         os.makedirs(directory_name)
     if args.model_id == "meta-llama/Meta-Llama-3.1-8B-Instruct":
@@ -95,12 +94,11 @@ def main(args):
         raise NotImplementedError
     embeddings_path = os.path.join(
         directory_name,
-        str(args.dataset_name)
-        + "_L_"
+        "L_"
         + str(args.llm_layer)
         + "_M_"
         + str(model_name)
-        + "_small"
+        + str(args.dataset)
         + ".h5",
     )
     store_embeddings(
@@ -108,18 +106,28 @@ def main(args):
         cfc_train_embeddings,
         cfc_test_embeddings,
     )
-    if args.dataset_name == "binary_1" or args.dataset_name == "binary_1_2":
+    if args.dataset in [
+        "eng-french",
+        "eng-german",
+        "masc-fem-eng",
+        "masc-fem-mixed",
+        "truthful-qa",
+        "safearena",
+    ]:
         num_concepts = 1
-    elif args.dataset_name == "binary_2" or args.dataset_name == "binary_corr":
+    elif args.dataset in [
+        "2-binary",
+        "corr-binary",
+    ]:
         num_concepts = 2
-    elif args.dataset_name == "truthful_qa":
-        num_concepts = 1
-    elif args.dataset_name == "categorical":
-        num_concepts = 3
+    elif args.dataset == "categorical":
+        num_concepts = 135
+    elif args.dataset in ["safearena", "wildjailbreak"]:  # fixme
+        num_concepts = 10
     else:
         raise NotImplementedError
     config = {
-        "dataset": args.dataset_name,
+        "dataset": args.dataset,
         "training_dataset_length": len(cfc_train_embeddings),
         "test_dataset_length": len(cfc_test_embeddings),
         "rep_dim": cfc_train_embeddings[0][0].shape[0],
@@ -130,7 +138,7 @@ def main(args):
     }
     config_path = os.path.join(
         directory_name,
-        str(args.dataset_name) + "_" + str(args.llm_layer) + "_config.yaml",
+        "L_" + str(args.llm_layer) + str(args.dataset) + ".yaml",
     )
     with open(config_path, "w") as file:
         yaml.dump(config, file)
@@ -139,22 +147,36 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--dataset-name",
+        "--dataset",
         choices=[
-            "binary_1",
-            "binary_1_2",
-            "binary_corr",
-            "binary_2",
-            "truthful_qa",
+            "eng-french",
+            "eng-german",
+            "masc-fem-eng",
+            "masc-fem-mixed",
+            "2-binary",
+            "corr-binary",
+            "truthful-qa",
             "categorical",
+            "safearena",
+            "wildjailbreak",
         ],
-        default="binary_1",
+        default="eng-french",
     )
     parser.add_argument(
         "--model_id", default="meta-llama/Meta-Llama-3.1-8B-Instruct"
     )
     parser.add_argument(
         "--llm-layer", type=int, default=32, choices=range(0, 33)
+    )
+    parser.add_argument(
+        "--num-samples",
+        type=int,
+        default=100,
+    )
+    parser.add_argument(
+        "--split",
+        type=float,
+        default=0.9,
     )
     # Llama-3 has 32 layers, CAA paper showed most effective steering around the
     # 13th layer for Llama-2 with 33 layers

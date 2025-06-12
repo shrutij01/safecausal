@@ -2,19 +2,33 @@
 
 # Define hyperparameters
 embedding_files=(
-    "/network/scratch/j/joshi.shruti/ssae/2-binary/L_32_M_llama32-binary.h5"
+    "/network/scratch/j/joshi.shruti/ssae/masc-fem-eng/L_32_M_llama3masc-fem-eng.h5"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_31_M_llama3eng-french.h5"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_21_M_llama3eng-french.h5"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_15_M_llama3eng-french.h5"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_13_M_llama3eng-french.h5"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_5_M_llama3eng-french.h5"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_3_M_llama3eng-french.h5"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_1_M_llama3eng-french.h5"
 )
 data_configs=(
-    "/network/scratch/j/joshi.shruti/ssae/2-binary/L_322-binary.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/masc-fem-eng/L_32masc-fem-eng.yaml"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_31eng-french.yaml"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_21eng-french.yaml"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_15eng-french.yaml"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_13eng-french.yaml"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_5eng-french.yaml"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_3eng-french.yaml"
+    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_1eng-french.yaml"
 )
 overcompleteness_factors=(
     "--overcompleteness-factor 10"
 )
 scheduler_epochs=(
-    "--scheduler-epochs 1000" "--scheduler-epochs 500" "--scheduler-epochs 750"
+    "--scheduler-epochs 1000"
 )
 target_sparse_levels=(
-    "--target-sparse-level 0.1" "--target-sparse-level 0.2"
+    "--target-sparse-level 0.1"
 )
 batch_sizes=(
     "--batch-size 64"
@@ -23,7 +37,7 @@ norm_types=(
     "--norm-type ln"
 )
 loss_types=(
-    "--loss-type relative"
+    "--loss-type absolute"
 )
 primal_lrs=(
     "--primal-lr 0.0005"
