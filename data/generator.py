@@ -7,6 +7,7 @@ import random
 import re
 from prompt_toolkit.shortcuts.prompt import prompt
 from tqdm import tqdm
+import yaml
 
 
 import openai
@@ -58,7 +59,7 @@ def build_parser():
         "-exp_type",
         type=str,
         default="generate_vanilla",
-        choices=["generate_vanilla", "generate_confounding"],
+        choices=["generate_vanilla", "generate_confounding", "generate_ipd"],
         help="Which type of experiment",
     )
     parser.add_argument(
@@ -70,6 +71,7 @@ def build_parser():
             "wildbreak_make_safe",
             "confounding_causal",
             "confounding_anticausal",
+            "coop_defect",
         ],
         help="prompt type",
     )
@@ -173,12 +175,22 @@ def get_model_generation(args, previous_data, model):
         triplets = load_json(triplets_file_path)
         data = triplets
         instr_marker = ["A", "B", "C"]
+    elif args.exp_type == "generate_ipd":
+        instr_marker = ["cooperation", "defection"]
+        trajectories_file_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "trajectories.yaml"
+        )
+        with open(trajectories_file_path, "r") as f:
+            data = yaml.safe_load(f)
     else:
         raise NotImplementedError
 
     for item in tqdm(data, desc="Processing examples"):
         instr_marker = ensure_list(instr_marker)
         params = [item[marker] for marker in instr_marker]
+        import ipdb
+
+        ipdb.set_trace()
         prompt, sys_prompt = get_generator_prompt(
             args.prompt_type, params=params
         )
@@ -224,7 +236,11 @@ def main(args):
         port=args.port,
     )
 
-    if args.exp_type in ["generate_vanilla", "generate_confounding"]:
+    if args.exp_type in [
+        "generate_vanilla",
+        "generate_confounding",
+        "generate_ipd",
+    ]:
         if args.continue_name != "default":
             args.out_dir = os.path.join(args.out_dir_name, args.continue_name)
             previous_data = pd.read_json(
@@ -270,7 +286,3 @@ if __name__ == "__main__":
     # openai.api_key = os.getenv(" ")
 
     main(args)
-
-
-
-

@@ -3,6 +3,30 @@
 Generate YAML trajectories for two agents that eventually converge
 to either cooperation or defection.
 
+YAML schema
+-----------
+- prompt: 0
+cooperation:
+    - id: 0
+        - "(D, C)_0"
+        - "(C, C)_1"
+        ...
+    - id: 1
+        - "(C, D)_0"
+        - "(C, C)_1"
+        ...
+defection:
+    - id: 0
+        - "(D, C)_0"
+        - "(D, D)_1"
+        ...
+    - id: 1
+        - "(C, D)_0"
+        - "(D, D)_1"
+        ...
+- prompt: N
+[...]
+
 Usage (default N=5, T=10):
     python make_trajectories.py               # writes trajectories.yaml
     python make_trajectories.py 20 15 output.yaml
@@ -11,19 +35,21 @@ Usage (default N=5, T=10):
 import sys
 import random
 import yaml
+from typing import List
 
 
 # -------------------- configuration helpers -------------------- #
-def parse_args() -> tuple[int, int, str]:
+def parse_args() -> tuple[int, int, int, str]:
     """Read N, T, and output filename from command-line if provided."""
-    N = int(sys.argv[1]) if len(sys.argv) > 1 else 5  # trajectories per class
+    P = int(sys.argv[1]) if len(sys.argv) > 1 else 100
+    N = int(sys.argv[2]) if len(sys.argv) > 2 else 5  # episodes per prompt
     T = (
-        int(sys.argv[2]) if len(sys.argv) > 2 else 10
+        int(sys.argv[2]) if len(sys.argv) > 3 else 10
     )  # timesteps per trajectory
-    out_file = sys.argv[3] if len(sys.argv) > 3 else "trajectories.yaml"
+    out_file = sys.argv[3] if len(sys.argv) > 4 else "trajectories.yaml"
     if T < 2:
         raise ValueError("T should be at least 2 to observe convergence.")
-    return N, T, out_file
+    return P, N, T, out_file
 
 
 # -------------------- trajectory generation -------------------- #
@@ -55,32 +81,39 @@ def generate_trajectory(T: int, converge_to: str) -> list[str]:
     return traj
 
 
-def make_dataset(N: int, T: int) -> dict:
-    """Return a dict ready to be dumped with yaml.safe_dump."""
-    data = {
-        "cooperation": [
-            {"id": i, "steps": generate_trajectory(T, converge_to="C")}
-            for i in range(N)
-        ],
-        "defection": [
-            {"id": i, "steps": generate_trajectory(T, converge_to="D")}
-            for i in range(N)
-        ],
-    }
-    return data
+def make_dataset(P: int, K: int, T: int) -> List[dict]:
+    """
+    Build the full list-of-prompts structure.
+    """
+    dataset: List[dict] = []
+    for p in range(P):
+        block = {
+            "prompt": p,
+            "cooperation": [],
+            "defection": [],
+        }
+        for i in range(K):
+            block["cooperation"].append(
+                {"id": i, "steps": generate_trajectory(T, "C")}
+            )
+            block["defection"].append(
+                {"id": i, "steps": generate_trajectory(T, "D")}
+            )
+        dataset.append(block)
+    return dataset
 
 
 # -------------------- main entry point -------------------- #
 def main() -> None:
-    N, T, out_file = parse_args()
-    dataset = make_dataset(N, T)
+    P, N, T, out_path = parse_args()
+    data = make_dataset(P, N, T)
 
-    with open(out_file, "w") as f:
-        yaml.safe_dump(dataset, f, sort_keys=False)
+    with open(out_path, "w") as f:
+        yaml.safe_dump(data, f, sort_keys=False)
 
     print(
-        f"Wrote {2*N} trajectories ({N} cooperative, {N} defective) "
-        f"to '{out_file}'."
+        f"Wrote {P} prompt blocks (each with {N} cooperative and {N} defective "
+        f"trajectories of length {T}) to '{out_path}'."
     )
 
 

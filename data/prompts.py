@@ -56,5 +56,12 @@ def get_generator_prompt(prompt_type, params=None):
             "Cause-effect: <Yes/No> (Yes if {A} causes {B} is more significant, else No if it is important to consider {C}) \n"
             "Reasoning: <reasoning to conclude Yes/No in exactly two lines.> \n"
         ).format(A=params[0], B=params[1], C=params[2])
-
+    elif prompt_type == "coop_defect":
+        sys_prompt = ""
+        prompt = (
+            "You are an expert at understanding and playing social dilemma games. You have been tasked with observing gameplay by two other agents A1 and A2 for a game with the following payoff matrix: (C, C): , (C, D): , (D, C): , (D, D): , where the first letter of the tuple denotes the action taken by A1, and the second by A2. You will observe the actions of A1 and A2 for a total of T timesteps, over N episodes.\n\n"
+            "Please rewrite the text to remove any inappropriate or offensive content while maintaining its original meaning.\n\n"
+            "Text: {text}\n\n"
+            "Safe Text:"
+        ).format(text=params[0])
     return prompt, sys_prompt
