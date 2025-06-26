@@ -71,7 +71,8 @@ def build_parser():
             "wildbreak_make_safe",
             "confounding_causal",
             "confounding_anticausal",
-            "coop_defect",
+            "icl_coop",
+            "icl_defect",
         ],
         help="prompt type",
     )
@@ -187,10 +188,10 @@ def get_model_generation(args, previous_data, model):
 
     for item in tqdm(data, desc="Processing examples"):
         instr_marker = ensure_list(instr_marker)
-        params = [item[marker] for marker in instr_marker]
         import ipdb
 
         ipdb.set_trace()
+        params = [item[marker] for marker in instr_marker]
         prompt, sys_prompt = get_generator_prompt(
             args.prompt_type, params=params
         )
