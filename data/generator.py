@@ -186,6 +186,7 @@ def get_model_generation(args, previous_data, model):
         with open(trajectories_file_path, "r") as f:
             data = yaml.safe_load(f)
         kwargs = {"R": 3, "S": 0, "T": 2, "P": 1}
+
     else:
         raise NotImplementedError
 
@@ -193,7 +194,7 @@ def get_model_generation(args, previous_data, model):
         instr_marker = ensure_list(instr_marker)
         params = [item[marker] for marker in instr_marker]
         prompt, sys_prompt = get_generator_prompt(
-            args.prompt_type, params=params, kwargs=kwargs
+            args.prompt_type, params=params, **kwargs
         )
         og_pred = model.predict(
             prompt,

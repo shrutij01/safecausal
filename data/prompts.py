@@ -57,6 +57,9 @@ def get_generator_prompt(prompt_type, params=None, **kwargs):
             "Reasoning: <reasoning to conclude Yes/No in exactly two lines.> \n"
         ).format(A=params[0], B=params[1], C=params[2])
     elif prompt_type == "icl_coop":
+        import ipdb
+
+        ipdb.set_trace()
         R = kwargs["R"]
         S = kwargs["S"]
         T = kwargs["T"]
