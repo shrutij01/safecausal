@@ -156,7 +156,7 @@ def get_model_generation(args, previous_data, model):
             )
             covered_ids.append(previous_data.loc[j]["id_"])
         print("Loaded {} instructions...".format(len(data)))
-
+    payoffs: dict[str, int] = {}
     if args.exp_type == "generate_vanilla":
         ds = hf_load_dataset("allenai/wildjailbreak", "eval")
         adversarial_ds = ds.filter(
@@ -165,7 +165,6 @@ def get_model_generation(args, previous_data, model):
         )
         data = adversarial_ds["train"]
         instr_marker = ["adversarial"]
-        kwargs = None
     elif args.exp_type == "generate_confounding":
         triplets_file_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "vaw_triplets.json"
@@ -177,7 +176,6 @@ def get_model_generation(args, previous_data, model):
         triplets = load_json(triplets_file_path)
         data = triplets
         instr_marker = ["A", "B", "C"]
-        kwargs = None
     elif args.exp_type == "generate_ipd":
         instr_marker = ["cooperation", "defection"]
         trajectories_file_path = os.path.join(
@@ -185,7 +183,7 @@ def get_model_generation(args, previous_data, model):
         )
         with open(trajectories_file_path, "r") as f:
             data = yaml.safe_load(f)
-        kwargs = {"R": 3, "S": 0, "T": 2, "P": 1}
+        payoffs = {"R": 3, "S": 0, "T": 2, "P": 1}
 
     else:
         raise NotImplementedError
@@ -194,7 +192,7 @@ def get_model_generation(args, previous_data, model):
         instr_marker = ensure_list(instr_marker)
         params = [item[marker] for marker in instr_marker]
         prompt, sys_prompt = get_generator_prompt(
-            args.prompt_type, params=params, **kwargs
+            args.prompt_type, params=params, **payoffs
         )
         og_pred = model.predict(
             prompt,
