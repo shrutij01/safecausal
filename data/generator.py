@@ -209,6 +209,13 @@ def get_model_generation(args, previous_data, model):
             instr = prompt
         elif args.exp_type == "generate_vanilla":
             instr = item["adversarial"]
+        elif args.exp_type == "generate_ipd":
+            if args.prompt_type == "icl_coop":
+                instr = "Cooperation"
+            elif args.prompt_type == "icl_defect":
+                instr = "Defection"
+            else:
+                raise ValueError("Unknown type in IPD data")
         else:
             raise NotImplementedError
         entry = {"instruction": instr, "model_output": og_pred}
