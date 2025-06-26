@@ -1,4 +1,4 @@
-def get_generator_prompt(prompt_type, params=None):
+def get_generator_prompt(prompt_type, params=None, **kwargs):
     sys_prompt = ""
     prompt = ""
 
@@ -59,17 +59,17 @@ def get_generator_prompt(prompt_type, params=None):
     elif prompt_type == "icl_coop":
         sys_prompt = ""
         prompt = (
-            "You are an expert at understanding and playing social dilemma games. You have been tasked with observing gameplay by two other agents A1 and A2 for a game with the following payoff matrix: (C, C): , (C, D): , (D, C): , (D, D): , where the first letter of the tuple denotes the action taken by A1, and the second letter denotes the action taken by A2. You will observe the actions of A1 and A2 for a total of T timesteps, over N episodes.\n\n"
-            "Please rewrite the text to remove any inappropriate or offensive content while maintaining its original meaning.\n\n"
-            "Text: {text}\n\n"
-            "Safe Text:"
+            "You are an expert at understanding and playing social dilemma games. You have been tasked with observing gameplay by two other agents A1 and A2 for a game with the following payoff matrix: (C, C): ({kwargs.R}, {kwargs.R}), (C, D): ({kwargs.S}, {kwargs.T}), (D, C): ({kwargs.T}, {kwargs.S}), (D, D): ({kwargs.P}, {kwargs.P}). In the N observed episodes, each episode consists of a trajectory of action tuples till time step T like [(a1, a2), (a1, a2), ... T times], where where a1 denotes the action taken by A1, and a2 denotes the action taken by A2. You need to generate the (N+1)th trajectory of T timesteps in the same format : [(a1, a2), (a1, a2), ... T times] mimicing the same observed behaviour of the agents A1 and A2 as in the first N episodes.\n\n"
+            "The observed episodes are: {text}\n\n"
+            "Please generate this (N+1)th episode now.\n\n"
+            "Episode N + 1:"
         ).format(text=params[0])
     elif prompt_type == "icl_defect":
         sys_prompt = ""
         prompt = (
-            "You are an expert at understanding and playing social dilemma games. You have been tasked with observing gameplay by two other agents A1 and A2 for a game with the following payoff matrix: (C, C): , (C, D): , (D, C): , (D, D): , where the first letter of the tuple denotes the action taken by A1, and the second by A2. You will observe the actions of A1 and A2 for a total of T timesteps, over N episodes.\n\n"
-            "Please rewrite the text to remove any inappropriate or offensive content while maintaining its original meaning.\n\n"
-            "Text: {text}\n\n"
-            "Safe Text:"
-        ).format(text=params[0])
+            "You are an expert at understanding and playing social dilemma games. You have been tasked with observing gameplay by two other agents A1 and A2 for a game with the following payoff matrix: (C, C): ({kwargs.R}, {kwargs.R}), (C, D): ({kwargs.S}, {kwargs.T}), (D, C): ({kwargs.T}, {kwargs.S}), (D, D): ({kwargs.P}, {kwargs.P}). In the N observed episodes, each episode consists of a trajectory of action tuples till time step T like [(a1, a2), (a1, a2), ... T times], where where a1 denotes the action taken by A1, and a2 denotes the action taken by A2. You need to generate the (N+1)th trajectory of T timesteps in the same format : [(a1, a2), (a1, a2), ... T times] mimicing the same observed behaviour of the agents A1 and A2 as in the first N episodes.\n\n"
+            "The observed episodes are: {text}\n\n"
+            "Please generate this (N+1)th episode now.\n\n"
+            "Episode N + 1:"
+        ).format(text=params[1])
     return prompt, sys_prompt

@@ -58,7 +58,7 @@ def build_parser():
     parser.add_argument(
         "-exp_type",
         type=str,
-        default="generate_vanilla",
+        default="generate_ipd",
         choices=["generate_vanilla", "generate_confounding", "generate_ipd"],
         help="Which type of experiment",
     )
@@ -165,6 +165,7 @@ def get_model_generation(args, previous_data, model):
         )
         data = adversarial_ds["train"]
         instr_marker = ["adversarial"]
+        kwargs = None
     elif args.exp_type == "generate_confounding":
         triplets_file_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "vaw_triplets.json"
@@ -176,6 +177,7 @@ def get_model_generation(args, previous_data, model):
         triplets = load_json(triplets_file_path)
         data = triplets
         instr_marker = ["A", "B", "C"]
+        kwargs = None
     elif args.exp_type == "generate_ipd":
         instr_marker = ["cooperation", "defection"]
         trajectories_file_path = os.path.join(
@@ -183,17 +185,15 @@ def get_model_generation(args, previous_data, model):
         )
         with open(trajectories_file_path, "r") as f:
             data = yaml.safe_load(f)
+        kwargs = {"R": 3, "S": 0, "T": 2, "P": 1}
     else:
         raise NotImplementedError
 
     for item in tqdm(data, desc="Processing examples"):
         instr_marker = ensure_list(instr_marker)
-        import ipdb
-
-        ipdb.set_trace()
         params = [item[marker] for marker in instr_marker]
         prompt, sys_prompt = get_generator_prompt(
-            args.prompt_type, params=params
+            args.prompt_type, params=params, kwargs=kwargs
         )
         og_pred = model.predict(
             prompt,

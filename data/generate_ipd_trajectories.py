@@ -7,20 +7,20 @@ YAML schema
 -----------
 - prompt: 0
 cooperation:
-    - id: 0
+    - episode: 0
         - "(D, C)_0"
         - "(C, C)_1"
         ...
-    - id: 1
+    - episode: 1
         - "(C, D)_0"
         - "(C, C)_1"
         ...
 defection:
-    - id: 0
+    - episode: 0
         - "(D, C)_0"
         - "(D, D)_1"
         ...
-    - id: 1
+    - episode: 1
         - "(C, D)_0"
         - "(D, D)_1"
         ...
@@ -28,8 +28,8 @@ defection:
 [...]
 
 Usage (default N=5, T=10):
-    python make_trajectories.py               # writes trajectories.yaml
-    python make_trajectories.py 20 15 output.yaml
+    python generate_ipd_trajectories.py               # writes trajectories.yaml
+    python generate_ipd_trajectories.py 20 15 output.yaml
 """
 
 import sys
@@ -94,10 +94,20 @@ def make_dataset(P: int, K: int, T: int) -> List[dict]:
         }
         for i in range(K):
             block["cooperation"].append(
-                {"id": i, "steps": generate_trajectory(T, "C")}
+                {
+                    "Episode: ": i,
+                    "Trajectory of actions by A1 and A2: ": generate_trajectory(
+                        T, "C"
+                    ),
+                }
             )
             block["defection"].append(
-                {"id": i, "steps": generate_trajectory(T, "D")}
+                {
+                    "Episode: ": i,
+                    "Trajectory of actions by A1 and A2: ": generate_trajectory(
+                        T, "D"
+                    ),
+                }
             )
         dataset.append(block)
     return dataset
