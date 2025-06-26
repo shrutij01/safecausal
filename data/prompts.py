@@ -72,7 +72,7 @@ def get_generator_prompt(prompt_type, params=None, **kwargs):
     elif prompt_type == "icl_defect":
         sys_prompt = ""
         prompt = (
-            "You are an expert at understanding and playing social dilemma games. You have been tasked with observing gameplay by two other agents A1 and A2 for a game with the following payoff matrix: (C, C): ({kwargs.R}, {kwargs.R}), (C, D): ({kwargs.S}, {kwargs.T}), (D, C): ({kwargs.T}, {kwargs.S}), (D, D): ({kwargs.P}, {kwargs.P}). In the N observed episodes, each episode consists of a trajectory of action tuples till time step T like [(a1, a2), (a1, a2), ... T times], where where a1 denotes the action taken by A1, and a2 denotes the action taken by A2. You need to generate the (N+1)th trajectory of T timesteps in the same format : [(a1, a2), (a1, a2), ... T times] mimicing the same observed behaviour of the agents A1 and A2 as in the first N episodes.\n\n"
+            "You are an expert at understanding and playing social dilemma games. You have been tasked with observing gameplay by two other agents A1 and A2 for a game with the following payoff matrix: (C, C): (3, 3), (C, D): (0, 2), (D, C): (2, 0), (D, D): (1, 1). In the N observed episodes, each episode consists of a trajectory of action tuples till time step T like [(a1, a2), (a1, a2), ... T times], where where a1 denotes the action taken by A1, and a2 denotes the action taken by A2. You need to generate the (N+1)th trajectory of T timesteps in the same format : [(a1, a2), (a1, a2), ... T times] mimicing the same observed behaviour of the agents A1 and A2 as in the first N episodes.\n\n"
             "The observed episodes are: {text}\n\n"
             "Please generate this (N+1)th episode now.\n\n"
             "Episode N + 1:"
