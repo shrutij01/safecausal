@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import TensorDataset, DataLoader
+from torch.utils.data import Dataset, TensorDataset, DataLoader
 import cooper
 import geoopt
 import math
@@ -36,10 +36,11 @@ def set_seeds(seed):
 def layer_normalise(
     x: torch.Tensor, eps: float = 1e-5
 ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    # in-place operations indicated by _ suffix cuz non-normalized x
+    # is not needed
     mu = x.mean(dim=-1, keepdim=True)
-    x = x - mu
-    std = x.std(dim=-1, keepdim=True)
-    x = x / (std + eps)
+    std = x.std(-1, keepdim=True).clamp_min_(eps)
+    x.sub_(mu).div_(std)
     return x, dict(mu=mu, std=std)
 
 
@@ -270,7 +271,8 @@ class Logger:
         )
 
     def logkv(self, k, v):
-        self.vals[k] = v.detach() if isinstance(v, torch.Tensor) else v
+        self.vals[k] = float(v) if torch.is_tensor(v) else v
+        # v.detach() if isinstance(v, torch.Tensor) else v
         return v
 
     def dumpkvs(self):
@@ -278,67 +280,45 @@ class Logger:
         self.vals = {}
 
 
-def load_training_data(args, config) -> tuple[DataLoader, int, int]:
-    delta_z_train = None
-    rep_dim = config.rep_dim
-    num_concepts = args.num_concepts
-    if config.dataset in [
-        "binary_1",
-        "eng-french",
-        "eng-german",
-        "masc-fem-eng",
-        "masc-fem-french",
-        "2-binary",
-        "corr-binary",
-        "truthful-qa",
-        "categorical",
-        "wildjailbreak",
-        "safearena",
-    ]:
-        with h5py.File(args.embeddings_file, "r") as f:
-            cfc_train = np.array(f["cfc_train"]).squeeze()
-        delta_z_train = tensorify(cfc_train[:, 1] - cfc_train[:, 0], device)
-        train_dataset = TensorDataset(
-            delta_z_train,
-        )
-    elif (
-        config.dataset == "binsynth"
-        or config.dataset == "uniformsynth"
-        or config.dataset == "normalsynth"
-    ):
-        cfc_columns = [
-            config.delta_z_column,
-            config.delta_c_column,
-        ]
+class LazyCPUData(Dataset):
+    """
+    Lazy CPU-side view of delta_z.
+    No data lives on GPU until the DataLoader moves a batch.
+    We keep tensors on the CPU to avoid OOM errors.
+    """
 
-        converters = {col: ast.literal_eval for col in cfc_columns}
-        df = pd.read_csv(args.embeddings_file, converters=converters)
-        df_train = df.iloc[0 : int(config.train_split * config.size)]
-
-        def convert_to_list_of_floats(value):
-            if isinstance(value, str):
-                value = ast.literal_eval(value)
-            return [float(x) for x in value]
-
-        for column in df_train[cfc_columns]:
-            df_train[column] = df_train[column].apply(
-                convert_to_list_of_floats
+    def __init__(self, h5_path: str, key: str = "cfc_train"):
+        self.h5 = h5py.File(h5_path, "r")
+        obj = self.h5[key]
+        if not isinstance(obj, h5py.Dataset):
+            raise TypeError(
+                f"{key} is not an HDF5 dataset (found {type(obj)})"
             )
+        self.ds: h5py.Dataset = obj
 
-        delta_z = np.asarray([list(row) for row in df_train[cfc_columns[0]]])
-        delta_z_train = tensorify(delta_z, device)
-        train_dataset = TensorDataset(
-            delta_z_train,
-        )
-    else:
-        raise NotImplementedError
+    def __len__(self):
+        return len(self.ds)
+
+    def __getitem__(self, idx):
+        cfc = self.ds[idx]  # shape (2, rep_dim)
+        delta_z = np.asarray(cfc[1] - cfc[0], dtype=np.float32)
+        return torch.from_numpy(delta_z)
+
+    def __del__(self):
+        self.h5.close()
+
+
+def load_training_data(args) -> DataLoader:
     train_loader = DataLoader(
-        train_dataset,
+        LazyCPUData(args.embeddings_file, key="cfc_train"),
         batch_size=int(args.batch_size),
         shuffle=True,
-        num_workers=0,  # num_workers=0,
+        num_workers=2,  # num_workers=0,
+        prefetch_factor=2,
+        persistent_workers=True,
+        pin_memory=True,
     )
-    return train_loader, rep_dim, num_concepts
+    return train_loader
 
 
 def save(args, sae_model, config_dict):
@@ -470,9 +450,10 @@ def main(args):
     }
     set_seeds(int(args.seed))
     logger = Logger(entity="causalrepl", project="ssae", config=config_dict)
-    train_loader, rep_dim, num_concepts = load_training_data(args, data_config)
+    train_loader = load_training_data(args)
     # Assuming the LinearSAE model and other parameters are already defined:
-    encoder_dim = int(args.overcompleteness_factor * num_concepts)
+    encoder_dim = int(args.overcompleteness_factor) * int(args.num_concepts)
+    rep_dim = int(data_config.rep_dim)
     assert encoder_dim <= rep_dim
     sae_model = LinearSAE(
         rep_dim=rep_dim, encoder_dim=encoder_dim, norm_type=args.norm_type
