@@ -142,20 +142,13 @@ def unit_norm_decoder_columns_grad_adjustment_(autoencoder) -> None:
     assert autoencoder.decoder.weight.grad is not None
 
     def update_x(x, a, b, c):
-        # Ensure all tensors are on the same device
         if not x.is_cuda:
             x = x.cuda()
-
         if not a.is_cuda:
             a = a.cuda()
-
         if not b.is_cuda:
             b = b.cuda()
-
-        # Perform the operation
-        # check if this step below needs to rebuild the computation graph
         x += a * b * c
-
         return x
 
     # Calculate the gradient adjustment for each column of the decoder
@@ -384,20 +377,14 @@ def train(
                 cmp_model.closure, delta_z, info, args.loss_type
             )
             formulation.custom_backward(lagrangian)
-            for name, param in sae_model.named_parameters():
-                if param.grad is not None:
-                    grad_norm = torch.norm(param.grad).item()
-                    # print(f"Gradient norm of {name}: {grad_norm}")
+
             coop_optimizer.step(
                 cmp_model.closure, delta_z, info, args.loss_type
             )
-            # fixme: accumulation, data loading,
-            # Normalize the decoder columns to unit length after the parameters update
             unit_norm_decoder_columns(cmp_model.model)
-            # diff
-            # Adjust the gradients post-optimization step to maintain unit norms
             unit_norm_decoder_columns_grad_adjustment_(cmp_model.model)
-            # before or after gradient update
+            del lagrangian  # empty the graph
+            torch.cuda.empty_cache()  # clear cache to avoid OOM
             with torch.no_grad():
                 delta_z_hat, concept_indicators = sae_model(delta_z, info)
             recon_loss, sparsity_penalty = cmp_model.get_loss_values()
