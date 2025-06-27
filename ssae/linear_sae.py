@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, TensorDataset, DataLoader
+from torch.utils.data import Dataset, DataLoader
 import cooper
-import geoopt
 import math
 
 import numpy as np
