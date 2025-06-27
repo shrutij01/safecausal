@@ -17,8 +17,12 @@ import ast
 import datetime
 import argparse
 from ssae.data_utils import tensorify
+import debug_tools as dbg
 
 import os
+
+from IPython.core.debugger import Pdb
+from contextlib import contextmanager
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -519,5 +523,5 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=0)
 
     args, unknown = parser.parse_known_args()
-
-    main(args)
+    with dbg.debug_on_exception():
+        main(args)
