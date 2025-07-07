@@ -395,14 +395,6 @@ def train(
                 cmp_model.closure, delta_z, info, args.loss_type
             )
             scaler.update()  # update the scale factor
-            for name, p in sae_model.named_parameters():
-                if p.grad is None:
-                    print(f"{name:<40}  grad = ❌ None")
-                else:
-                    print(
-                        f"{name:<40}  grad ✔  shape={tuple(p.grad.shape)}  "
-                        f"norm={p.grad.data.norm():.3e}"
-                    )
 
             # ---------------------------------------------------------------
             # 5️⃣  Keep decoder columns unit normed
