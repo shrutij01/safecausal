@@ -79,8 +79,6 @@ for idx in "${!embedding_files[@]}"; do
                                     # Create a batch script for each job
                                     echo "#!/bin/bash" > "${script_name}"
                                     echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
-                                    # echo "#SBATCH --output=${output}" >> "${script_name}"
-                                    # echo "#SBATCH --error=${error}" >> "${script_name}"
                                     echo "#SBATCH --time=${time_limit}" >> "${script_name}"
                                     echo "#SBATCH --mem=${memory}" >> "${script_name}"
                                     echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"

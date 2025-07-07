@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
+from torch.cuda.amp import autocast, GradScaler
 import cooper
 import math
 
@@ -367,52 +368,84 @@ def train(
     formulation,
     logger,
     args,
-):
+) -> None:
+    scaler = GradScaler(enabled=torch.cuda.is_available())
+    num_batches = len(train_loader)
+    dataset_size = len(train_loader.dataset)
     for epoch in range(int(args.num_epochs)):
-        epoch_loss = 0.0
-        sparsity_penalty_total = 0.0
-        l0_norm_total = 0.0
-        for delta_z in train_loader:
-            delta_z = delta_z.to(device, non_blocking=True)
+        sae_model.train()
+        recon_sum = 0.0
+        sparsity_sum = 0.0
+        concept_counts = 0
+        for delta_z_cpu in train_loader:
+            delta_z = delta_z_cpu.to(device, non_blocking=True)
             delta_z, info = layer_normalise(delta_z)
-            sae_model.train()
             coop_optimizer.zero_grad()
-            lagrangian = formulation.composite_objective(
-                cmp_model.closure, delta_z, info, args.loss_type
-            )
-            formulation.custom_backward(lagrangian)
+            # ---------------------------------------------------------------
+            # 1️⃣  Forward pass under autocast
+            # ---------------------------------------------------------------
+            with autocast(enabled=torch.cuda.is_available()):
+                lagrangian = formulation.composite_objective(
+                    cmp_model.closure, delta_z, info, args.loss_type
+                )
+            # ---------------------------------------------------------------
+            # 2️⃣  Back-prop — scale the loss manually
+            # ---------------------------------------------------------------
+            scaled_loss = scaler.scale(lagrangian)  # multiply by scale factor
+            formulation.custom_backward(scaled_loss)  # custom backward
 
+            # ---------------------------------------------------------------
+            # 3️⃣  Un-scale the gradients **in place**
+            # ---------------------------------------------------------------
+            scaler.unscale_(coop_optimizer)
+            # ---------------------------------------------------------------
+            # 4️⃣  Optimiser step & scaler update
+            # ---------------------------------------------------------------
             coop_optimizer.step(
                 cmp_model.closure, delta_z, info, args.loss_type
             )
-            unit_norm_decoder_columns(cmp_model.model)
-            unit_norm_decoder_columns_grad_adjustment_(cmp_model.model)
-            del lagrangian  # empty the graph
-            torch.cuda.empty_cache()  # clear cache to avoid OOM
+            scaler.update()  # update the scale factor
+            # ---------------------------------------------------------------
+            # 5️⃣  Keep decoder columns unit normed
+            # ---------------------------------------------------------------
             with torch.no_grad():
-                delta_z_hat, concept_indicators = sae_model(delta_z, info)
+                unit_norm_decoder_columns(cmp_model.model)
+                unit_norm_decoder_columns_grad_adjustment_(cmp_model.model)
+            # ---------------------------------------------------------------
+            # 6️⃣  Log the loss and sparsity penalty
+            # ---------------------------------------------------------------
+            # Note: the loss is already scaled by the scaler, so no need to scale again
+            # and the sparsity penalty is not scaled, so we can log it directly
+            # Note: the lagrangian is a scalar, so we can log it directly
             recon_loss, sparsity_penalty = cmp_model.get_loss_values()
-            epoch_loss += recon_loss
-            sparsity_penalty_total += sparsity_penalty
+            recon_sum += recon_loss
+            sparsity_sum += sparsity_penalty
 
-            l0_norm_total += (
-                torch.sum(
-                    torch.abs(concept_indicators) >= args.indicator_threshold
+            with torch.no_grad():  # cheap: only encoder
+                concept_indicators = cmp_model.model.encode(delta_z)
+                concept_counts += (
+                    (concept_indicators.abs() >= args.indicator_threshold)
+                    .sum()
+                    .item()
                 )
-                / args.batch_size
-            )
-        logger.logkv("total_loss", epoch_loss / args.batch_size)
-        logger.logkv(
-            "sparsity_penalty", sparsity_penalty_total / args.batch_size
-        )
+            # ----------------------------------------------------------------
+            # 7️⃣  Housekeeping: clear the graph and empty the cache
+            # ----------------------------------------------------------------
+            del lagrangian  # empty the graph
+            del delta_z, concept_indicators  # clear unnecessary variables
+            torch.cuda.empty_cache()  # clear cache to avoid OOM
+        logger.logkv("total_loss", recon_sum / num_batches)
+        logger.logkv("sparsity_penalty", sparsity_sum / num_batches)
         logger.logkv(
             "num_concepts_predicted",
-            torch.sum(torch.abs(concept_indicators) > args.indicator_threshold)
-            / args.batch_size,
+            concept_counts / num_batches,
         )
-        del delta_z, delta_z_hat, concept_indicators
-        print(epoch, epoch_loss / args.batch_size)
         logger.dumpkvs()
+        print(
+            f"epoch {epoch:04d} | "
+            f"recon {recon_sum / num_batches:.5f} | "
+            f"sparsity {sparsity_sum / num_batches:.5f}"
+        )
 
 
 def main(args):
