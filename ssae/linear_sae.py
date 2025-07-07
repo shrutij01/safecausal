@@ -372,8 +372,8 @@ def train(
         epoch_loss = 0.0
         sparsity_penalty_total = 0.0
         l0_norm_total = 0.0
-        for delta_z_list in train_loader:
-            delta_z = delta_z_list[0].to(device, non_blocking=True)
+        for delta_z in train_loader:
+            delta_z = delta_z.to(device, non_blocking=True)
             delta_z, info = layer_normalise(delta_z)
             sae_model.train()
             coop_optimizer.zero_grad()
@@ -501,7 +501,6 @@ if __name__ == "__main__":
     parser.add_argument("--num-epochs", type=int, default=20000)
     parser.add_argument("--primal-lr", type=float, default=0.0005)
     parser.add_argument("--dual-lr", type=float, default=0.005)
-    # parser.add_argument("--entangle-more", type=bool, default=False)
     # leaving this here for now but changing it to primal_lr/2 in the code
     # following the partial observability paper and repo
     parser.add_argument("--warmup-epochs", type=int, default=0)
