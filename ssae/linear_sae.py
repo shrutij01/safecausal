@@ -388,10 +388,6 @@ def train(
             # 3️⃣  Un-scale the gradients **in place**
             # ---------------------------------------------------------------
             scaler.unscale_(coop_optimizer.primal_optimizer)
-            inv_scale = 1.0 / scaler.get_scale()
-            for p in cmp_model.parameters():
-                if p.grad is not None and not p.requires_grad:  # skip non-dual
-                    p.grad.mul_(inv_scale)
             # ---------------------------------------------------------------
             # 4️⃣  Optimiser step & scaler update
             # ---------------------------------------------------------------
@@ -399,6 +395,15 @@ def train(
                 cmp_model.closure, delta_z, info, args.loss_type
             )
             scaler.update()  # update the scale factor
+            for name, p in sae_model.named_parameters():
+                if p.grad is None:
+                    print(f"{name:<40}  grad = ❌ None")
+                else:
+                    print(
+                        f"{name:<40}  grad ✔  shape={tuple(p.grad.shape)}  "
+                        f"norm={p.grad.data.norm():.3e}"
+                    )
+
             # ---------------------------------------------------------------
             # 5️⃣  Keep decoder columns unit normed
             # ---------------------------------------------------------------
