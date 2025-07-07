@@ -372,30 +372,22 @@ def train(
             delta_z, info = layer_normalise(delta_z)
             coop_optimizer.zero_grad()
             # ---------------------------------------------------------------
-            # 1️⃣  Forward pass under autocast
+            # 1️⃣  Forward pass
             # ---------------------------------------------------------------
-            with autocast(enabled=torch.cuda.is_available()):
-                lagrangian = formulation.composite_objective(
-                    cmp_model.closure, delta_z, info, args.loss_type
-                )
+            lagrangian = formulation.composite_objective(
+                cmp_model.closure, delta_z, info, args.loss_type
+            )
             # ---------------------------------------------------------------
-            # 2️⃣  Back-prop — scale the loss manually
+            # 2️⃣  Back-prop
             # ---------------------------------------------------------------
-            scaled_loss = scaler.scale(lagrangian)  # multiply by scale factor
-            formulation.custom_backward(scaled_loss)  # custom backward
+            formulation.custom_backward(lagrangian)  # custom backward
 
-            # ---------------------------------------------------------------
-            # 3️⃣  Un-scale the gradients **in place**
-            # ---------------------------------------------------------------
-            scaler.unscale_(coop_optimizer.primal_optimizer)
             # ---------------------------------------------------------------
             # 4️⃣  Optimiser step & scaler update
             # ---------------------------------------------------------------
             coop_optimizer.step(
                 cmp_model.closure, delta_z, info, args.loss_type
             )
-            scaler.update()  # update the scale factor
-
             # ---------------------------------------------------------------
             # 5️⃣  Keep decoder columns unit normed
             # ---------------------------------------------------------------
