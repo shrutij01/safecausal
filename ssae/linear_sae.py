@@ -187,16 +187,6 @@ class ConstrainedLinearSAE(cooper.ConstrainedMinimizationProblem):
         self.criterion = nn.MSELoss(reduction="mean")
         assert sparsity_factor >= 1
         self.target_sparse_level = target_sparse_level  # diff
-        # assert (
-        #     self.target_sparse_level
-        #     >= 1 / (num_concepts * overcompleteness_factor)
-        # ) and (
-        #     self.target_sparse_level <= 1 / (overcompleteness_factor)
-        # ), "target sparse level should be in the range of all to just one concepts being present"
-        # the max value of the first term should be 1 / overcompleteness_factor when
-        # all the # (num_concepts) concept indicators are 1
-        # min is 1 / (num_concepts * overcompleteness_factor)
-        # so target sparse level should be between these values
         self.initial_sparse_level = num_concepts
         self.sparse_level = num_concepts
         self.batch_size = batch_size
@@ -397,7 +387,8 @@ def train(
             # ---------------------------------------------------------------
             # 3️⃣  Un-scale the gradients **in place**
             # ---------------------------------------------------------------
-            scaler.unscale_(coop_optimizer)
+            scaler.unscale_(coop_optimizer.primal_optimizer)
+            scaler.unscale_(coop_optimizer.dual_optimizer)
             # ---------------------------------------------------------------
             # 4️⃣  Optimiser step & scaler update
             # ---------------------------------------------------------------
@@ -438,7 +429,7 @@ def train(
         logger.logkv("sparsity_penalty", sparsity_sum / num_batches)
         logger.logkv(
             "num_concepts_predicted",
-            concept_counts / num_batches,
+            concept_counts / dataset_size,
         )
         logger.dumpkvs()
         print(
