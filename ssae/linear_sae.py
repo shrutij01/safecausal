@@ -373,7 +373,7 @@ def train(
         sparsity_penalty_total = 0.0
         l0_norm_total = 0.0
         for delta_z_list in train_loader:
-            delta_z = delta_z_list[0]
+            delta_z = delta_z_list[0].to(device, non_blocking=True)
             delta_z, info = layer_normalise(delta_z)
             sae_model.train()
             coop_optimizer.zero_grad()
