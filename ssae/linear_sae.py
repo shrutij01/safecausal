@@ -388,7 +388,10 @@ def train(
             # 3️⃣  Un-scale the gradients **in place**
             # ---------------------------------------------------------------
             scaler.unscale_(coop_optimizer.primal_optimizer)
-            scaler.unscale_(coop_optimizer.dual_optimizer)
+            inv_scale = 1.0 / scaler.get_scale()
+            for p in cmp_model.parameters():
+                if p.grad is not None and not p.requires_grad:  # skip non-dual
+                    p.grad.mul_(inv_scale)
             # ---------------------------------------------------------------
             # 4️⃣  Optimiser step & scaler update
             # ---------------------------------------------------------------
