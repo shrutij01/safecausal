@@ -86,7 +86,7 @@ for idx in "${!embedding_files[@]}"; do
                                     echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
                                     echo "" >> "${script_name}"
                                     echo "module load python/3.10" >> "${script_name}"
-                                    echo "source /network/scratch/j/joshi.shruti/venvs/myenv/bin/activate" >> "${script_name}"
+                                    echo "source /network/scratch/j/joshi.shruti/venvs/llm/bin/activate" >> "${script_name}"
                                     echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/steeragents:/home/mila/j/joshi.shruti/causalrepl_space/cooper/:$PYTHONPATH\"" >> "${script_name}"
                                     echo "cd /home/mila/j/joshi.shruti/causalrepl_space/steeragents/ssae" >> "${script_name}"
                                     echo "python linear_sae.py --embeddings-file ${embedding_file} --data-config-file ${data_config} ${overcompleteness_factor} ${primal_lr} ${loss_type} ${norm_type} ${target_sparse_level} ${batch_size} ${scheduler_epoch} ${seed}" >> "${script_name}"
