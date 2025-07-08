@@ -384,7 +384,7 @@ class Cfg:
     batch: int = 32
     epochs: int = 20_000
     lr: float = 5e-4
-    oc: int = 2
+    oc: int = 10
     n_concepts: int = 1
     warmup: int = 2_000
     schedule: int = 5_000
@@ -393,7 +393,6 @@ class Cfg:
     loss: str = "relative"
     ind_th: float = 0.1
     seed: int = 0
-    rep_dim: int = 1_024  # read from data-cfg in real code
 
     # spill-over lives here (read-only)
     extra: Dict[str, Any] = field(default_factory=dict, init=False)
