@@ -92,10 +92,9 @@ class DictLinearAE(nn.Module):
             bn=nn.BatchNorm1d(hid),
         ).get(norm_type) or self._bad_norm(norm_type)
 
-        self.decoder = nn.Linear(hid, rep_dim, bias=True, device=device)
+        self.decoder = nn.Linear(hid, rep_dim, bias=True)
         # copy, do NOT tie; we only want identical init
         self.decoder.weight.data.copy_(self.encoder.weight.T)
-        self.to(device)
         renorm_decoder_cols_(self.decoder.weight)
 
     @staticmethod
@@ -351,7 +350,13 @@ def main():
     dict = make_dict(cfg)
     ssae = make_ssae(dict, cfg)
     optim, form = make_optim(dict=dict, ssae=ssae, cfg=cfg)
-    dev = next(dict.parameters()).device
+    dev = (
+        torch.device("cuda")
+        if torch.cuda.is_available()
+        else torch.device("cpu")
+    )
+    dict.to(dev)
+    ssae.to(dev)
 
     for ep in range(cfg.epochs):
         rec, sp, l0 = train_epoch(
