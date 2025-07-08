@@ -383,7 +383,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 @dataclass(frozen=True)
 class Cfg:
     emb: Path
-    data: Path
+    data_cfg: Path
     batch: int = 32
     epochs: int = 20_000
     lr: float = 5e-4
