@@ -118,7 +118,7 @@ class DictLinearAE(nn.Module):
 # ----------------------------------------------------------------------
 def renorm_decoder_cols_(W: Tensor, eps: float = 1e-8) -> None:
     """
-    In-place column ℓ₂ normalisation.
+    In-place column l_2 normalisation.
     Safe for zero columns (leaves them unchanged).
     """
     col_norms = W.norm(dim=0, keepdim=True).clamp_min_(eps)
@@ -313,8 +313,8 @@ def train_epoch(
         # 5️⃣  Keep decoder columns unit normed
         # ---------------------------------------------------------------
         with torch.no_grad():
-            renorm_decoder_cols_(ssae.model)
-            project_decoder_grads_(ssae.model)
+            renorm_decoder_cols_(dict.decoder.weight)
+            project_decoder_grads_(dict.decoder.weight)
         # ---------------------------------------------------------------
         # 6️⃣  Log the loss and sparsity penalty
         # ---------------------------------------------------------------
@@ -326,7 +326,7 @@ def train_epoch(
         sparsity_sum += sparsity_penalty
 
         with torch.no_grad():  # cheap: only encoder
-            concept_indicators = ssae.model.encode(delta_z)
+            concept_indicators = dict.encode(delta_z)
             concept_counts += (
                 (concept_indicators.abs() >= cfg.indicator_threshold)
                 .sum()
