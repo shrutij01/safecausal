@@ -192,7 +192,6 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         self,
         z: Tensor,
         stats: dict[str, Tensor],
-        *,
         loss_type: str = "relative",
     ) -> cooper.CMPState:
         """Return CMPState used by Cooper’s optimiser."""
