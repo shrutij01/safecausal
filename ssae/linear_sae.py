@@ -424,7 +424,7 @@ def parse_cfg() -> Cfg:
     add("--seed", type=int, default=0)
     cli: Dict[str, Any] = vars(p.parse_args())
 
-    yaml_path = cli.pop("data_cfg")
+    yaml_path = cli.pop("data-cfg")
     yaml_cfg = _load_yaml(yaml_path)
     # ----- split YAML into (known, extra) -----------------------------------
     fields = {f.name for f in fields(Cfg)}
