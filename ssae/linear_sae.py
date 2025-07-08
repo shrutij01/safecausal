@@ -1,7 +1,6 @@
 import argparse
 import random
 from typing import Any, Dict, Tuple
-from types import MappingProxyType
 import hashlib, json, yaml
 from pathlib import Path
 from dataclasses import asdict, dataclass, field, fields
@@ -398,9 +397,7 @@ class Cfg:
     rep_dim: int = 1_024  # read from data-cfg in real code
 
     # spill-over lives here (read-only)
-    extra: MappingProxyType = field(
-        default_factory=lambda: MappingProxyType({}), init=False
-    )
+    extra: Dict[str, Any] = field(default_factory=dict, init=False)
 
     @property
     def hid(self) -> int:  # encoder dim
