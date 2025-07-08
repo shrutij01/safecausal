@@ -122,7 +122,7 @@ def renorm_decoder_cols_(W: Tensor, eps: float = 1e-8) -> None:
     Safe for zero columns (leaves them unchanged).
     """
     col_norms = W.norm(dim=0, keepdim=True).clamp_min_(eps)
-    W.div_(col_norms)
+    W.data.div_(col_norms)
 
 
 # ----------------------------------------------------------------------
