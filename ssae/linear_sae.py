@@ -347,16 +347,14 @@ def main():
 
     logger = Logger(entity="causalrepl", project="ssae", config=asdict(cfg))
     dataloader = make_dataloader(cfg)
-    dict = make_dict(cfg)
-    ssae = make_ssae(dict, cfg)
-    optim, form = make_optim(dict=dict, ssae=ssae, cfg=cfg)
     dev = (
         torch.device("cuda")
         if torch.cuda.is_available()
         else torch.device("cpu")
     )
-    dict.to(dev)
-    ssae.to(dev)
+    dict = make_dict(cfg).to(dev)
+    ssae = make_ssae(dict, cfg)
+    optim, form = make_optim(dict=dict, ssae=ssae, cfg=cfg)
 
     for ep in range(cfg.epochs):
         rec, sp, l0 = train_epoch(
