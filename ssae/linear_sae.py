@@ -355,11 +355,11 @@ def main():
     dev = next(dict.parameters()).device
 
     for ep in range(cfg.epochs):
-        bs = len(dataloader)
-        ds = len(dataloader.dataset)
         rec, sp, l0 = train_epoch(
             dataloader, dict, ssae, optim, form, cfg, dev
         )
+        bs = cfg.batch
+        ds = dataloader.__len__()
         for k, v in {
             "recon": rec / bs,
             "spars": sp / bs,
@@ -389,6 +389,9 @@ class Cfg:
     lr: float = 5e-4
     oc: int = 2
     n_concepts: int = 1
+    warmup: int = 2_000
+    schedule: int = 5_000
+    target: float = 0.1
     norm: str = "ln"
     loss: str = "relative"
     ind_th: float = 0.1
