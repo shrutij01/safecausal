@@ -295,9 +295,7 @@ def train_epoch(
         # ---------------------------------------------------------------
         # 1️⃣  Forward pass
         # ---------------------------------------------------------------
-        lagrangian = form.composite_objective(
-            ssae.closure, delta_z, info, cfg.loss
-        )
+        lagrangian = form.composite_objective(ssae.closure, delta_z, cfg.loss)
         # ---------------------------------------------------------------
         # 2️⃣  Back-prop
         # ---------------------------------------------------------------
@@ -306,7 +304,7 @@ def train_epoch(
         # ---------------------------------------------------------------
         # 4️⃣  Optimiser step & scaler update
         # ---------------------------------------------------------------
-        optim.step(ssae.closure, delta_z, info, cfg.loss)
+        optim.step(ssae.closure, delta_z, cfg.loss)
         # ---------------------------------------------------------------
         # 5️⃣  Keep decoder columns unit normed
         # ---------------------------------------------------------------
