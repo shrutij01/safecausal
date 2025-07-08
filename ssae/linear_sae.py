@@ -1,6 +1,8 @@
 import argparse
 import random
 from typing import Any, Dict, Tuple
+from types import SimpleNamespace
+from matplotlib.pyplot import box
 import hashlib, json, yaml
 from pathlib import Path
 from dataclasses import asdict, dataclass, field, fields
@@ -14,6 +16,7 @@ from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 import wandb
 import cooper
+from box import Box
 
 import debug_tools as dbg
 
@@ -374,7 +377,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(path)
     with path.open() as fh:
-        return yaml.safe_load(fh) or {}
+        return Box(yaml.safe_load(fh) or {})
 
 
 # ===== run config ============================================================
@@ -427,7 +430,8 @@ def parse_cfg() -> Cfg:
     field_names = {f.name for f in fields(Cfg)}
     extra = {k: v for k, v in yaml_cfg.items() if k not in field_names}
     cfg = Cfg(**cli)
-    object.__setattr__(cfg, "extra", extra)
+    object.__setattr__(cfg, "extra", SimpleNamespace(**extra))
+
     return cfg
 
 
@@ -445,7 +449,7 @@ def make_dataloader(cfg) -> DataLoader:
 
 
 def make_dict(cfg: Cfg) -> torch.nn.Module:
-    return DictLinearAE(cfg.rep_dim, cfg.hid, cfg.norm).cuda()
+    return DictLinearAE(cfg.extra.rep_dim, cfg.hid, cfg.norm)
 
 
 def make_ssae(model: torch.nn.Module, cfg: Cfg):
