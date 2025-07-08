@@ -4,7 +4,7 @@ from typing import Any, Dict, Tuple
 from types import MappingProxyType
 import hashlib, json, yaml
 from pathlib import Path
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, fields
 
 
 import h5py
@@ -427,8 +427,8 @@ def parse_cfg() -> Cfg:
     yaml_path = cli.pop("data-cfg")
     yaml_cfg = _load_yaml(yaml_path)
     # ----- split YAML into (known, extra) -----------------------------------
-    fields = {f.name for f in fields(Cfg)}
-    extra = {k: v for k, v in yaml_cfg.items() if k not in fields}
+    field_names = {f.name for f in fields(Cfg)}
+    extra = {k: v for k, v in yaml_cfg.items() if k not in field_names}
     cfg = Cfg(**cli)
     object.__setattr__(cfg, "extra", MappingProxyType(extra))
     return cfg
