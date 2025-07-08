@@ -412,7 +412,7 @@ def parse_cfg() -> Cfg:
     p = argparse.ArgumentParser()
     add = p.add_argument
     add("emb", type=Path)
-    add("data-cfg", type=Path)
+    add("data_cfg", type=Path)
     add("--batch", type=int, default=32)
     add("--epochs", type=int, default=20_000)
     add("--lr", type=float, default=5e-4)
@@ -427,7 +427,7 @@ def parse_cfg() -> Cfg:
     add("--seed", type=int, default=0)
     cli: Dict[str, Any] = vars(p.parse_args())
 
-    yaml_path = cli.pop("data-cfg")
+    yaml_path = cli.pop("data_cfg")
     yaml_cfg = _load_yaml(yaml_path)
     # ----- split YAML into (known, extra) -----------------------------------
     field_names = {f.name for f in fields(Cfg)}
