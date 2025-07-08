@@ -191,11 +191,10 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
     def closure(
         self,
         z: Tensor,
-        stats: dict[str, Tensor],
         loss_type: str = "relative",
     ) -> cooper.CMPState:
         """Return CMPState used by Cooper’s optimiser."""
-        z_hat, h = self.model(z, stats)
+        z_hat, h = self.model(z)
         loss = self._LOSS[loss_type](z, z_hat)
 
         self._tick_schedule()
