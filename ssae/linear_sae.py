@@ -429,7 +429,7 @@ def parse_cfg() -> Cfg:
     field_names = {f.name for f in fields(Cfg)}
     extra = {k: v for k, v in yaml_cfg.items() if k not in field_names}
     cfg = Cfg(**cli)
-    object.__setattr__(cfg, "extra", MappingProxyType(extra))
+    object.__setattr__(cfg, "extra", extra)
     return cfg
 
 
