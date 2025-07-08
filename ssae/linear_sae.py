@@ -1,54 +1,75 @@
+import argparse
+import random
+from typing import Any, Dict, Tuple
+from types import MappingProxyType
+import hashlib, json, yaml
+from pathlib import Path
+from dataclasses import asdict, dataclass, field
+
+
+import h5py
+import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
-from torch.cuda.amp import autocast, GradScaler
-import cooper
-import math
-
-import numpy as np
-
-from typing import Any
+from torch import Tensor
+from torch.utils.data import DataLoader, Dataset
 import wandb
-import h5py
-import os
-import yaml
-from box import Box
-import pandas as pd
-import ast
-import datetime
-import argparse
-from ssae.data_utils import tensorify
+import cooper
+
 import debug_tools as dbg
 
-import os
 
-from IPython.core.debugger import Pdb
-from contextlib import contextmanager
+def set_seeds(seed: int, deterministic: bool = True) -> None:
+    """
+    Initialise every RNG we care about.
+
+    Args
+    ----
+    seed : int
+        Non-negative seed.
+    deterministic : bool, default=True
+        Toggle PyTorch deterministic algorithms and turn off CUDNN bench-
+        mark mode (bench = speed, determinism = repro).
+
+    Notes
+    -----
+    • `torch.cuda.manual_seed_all` is a no-op on CPU-only boxes.
+    • We do *not* touch env-vars here (caller decides).
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+    if deterministic:
+        torch.use_deterministic_algorithms(True)
+        torch.backends.cudnn.benchmark = False
 
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+def layer_normalise_(
+    x: Tensor, *, eps: float = 1e-5
+) -> Tuple[Tensor, Dict[str, Tensor]]:
+    """
+    In-place `(x - μ) / σ` over the *last* dim.
+
+    Returns
+    -------
+    x    : same Tensor, normalised.
+    stats: dict with 'mu' and 'inv_std'     (cheaper to reuse inv-σ).
+
+    Complexity
+    ----------
+    O(N) memory-free; uses unbiased=False to avoid extra kernel.
+    """
+    mu = x.mean(dim=-1, keepdim=True)  # (⋯, 1)
+    var = x.var(dim=-1, keepdim=True, unbiased=False)
+    inv_std = (var + eps).rsqrt_()  # numerically stable inverse-σ
+
+    x.sub_(mu).mul_(inv_std)  # (x-μ)·σ⁻¹   (all in-place)
+    return x, {"mu": mu, "inv_std": inv_std}
 
 
-def set_seeds(seed):
-    """Set seeds for reproducibility."""
-    np.random.seed(seed)  # NumPy random generator
-    torch.manual_seed(seed)  # PyTorch random seed
-    torch.cuda.manual_seed(seed)  # Seeds the GPU if available
-    torch.cuda.manual_seed_all(seed)  # For multi-GPU setups
-
-
-def layer_normalise(
-    x: torch.Tensor, eps: float = 1e-5
-) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    # in-place operations indicated by _ suffix cuz non-normalized x
-    # is not needed
-    mu = x.mean(dim=-1, keepdim=True)
-    std = x.std(-1, keepdim=True).clamp_min_(eps)
-    x.sub_(mu).div_(std)
-    return x, dict(mu=mu, std=std)
-
-
-class LinearSAE(nn.Module):
+class DictLinearAE(nn.Module):
     """
     Implements:
         coefficients = encoder(delta_z) + encoder_bias
@@ -61,210 +82,155 @@ class LinearSAE(nn.Module):
     def __init__(
         self,
         rep_dim: int,
-        encoder_dim: int,
+        hid: int,
         norm_type: str,
     ) -> None:
-        super(LinearSAE, self).__init__()
-        self.encoder: nn.Module = nn.Linear(
-            rep_dim, encoder_dim, bias=False, device=device
-        )
-        if norm_type == "ln":
-            self.encoder_ln = nn.LayerNorm(encoder_dim, device=device)
-        elif norm_type == "gn":
-            self.encoder_ln = nn.GroupNorm(1, encoder_dim, device=device)
-        elif norm_type == "bn":
-            self.encoder_ln = nn.BatchNorm1d(encoder_dim, device=device)
-            # really important mention in apx details
-        else:
-            raise ValueError("Invalid norm type, pass ln, gn, or bn")
-        self.encoder_bias = nn.Parameter(
-            torch.zeros(encoder_dim, device=device)
-        )
-        # Bias (approach from nn.Linear)
-        fan_in = self.encoder.weight.size(1)
-        bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-        nn.init.uniform(self.encoder_bias, -bound, bound)
-        # nn.init.xavier_uniform_(self.encoder.weight)  # diff
+        super(DictLinearAE, self).__init__()
+        self.encoder = nn.Linear(rep_dim, hid, bias=True)
+        self.norm = dict(
+            ln=nn.LayerNorm(hid),
+            gn=nn.GroupNorm(1, hid),
+            bn=nn.BatchNorm1d(hid),
+        ).get(norm_type) or self._bad_norm(norm_type)
 
-        self.decoder = nn.Linear(
-            encoder_dim, rep_dim, bias=False, device=device
-        )
-        self.decoder_bias = nn.Parameter(torch.zeros(rep_dim, device=device))
-        self.decoder.weight.data = self.encoder.weight.data.T.clone()
-        unit_norm_decoder_columns(self)
-        # no unit norm init here for decoder # diff
+        self.decoder = nn.Linear(hid, rep_dim, bias=True, device=device)
+        # copy, do NOT tie; we only want identical init
+        self.decoder.weight.data.copy_(self.encoder.weight.T)
+        self.to(device)
+        renorm_decoder_cols_(self.decoder.weight)
 
-    def preprocess(
-        self, delta_z: torch.Tensor
-    ) -> tuple[torch.Tensor, dict[str, Any]]:
-        delta_z, info = layer_normalise(delta_z)
-        return delta_z, info
+    @staticmethod
+    def _bad_norm(nt):
+        raise ValueError(f"norm_type {nt!r} not in ln/gn/bn")
 
-    def encode(self, delta_z: torch.Tensor) -> torch.Tensor:
-        """
-        expects delta_z to be already normalised
-        :param delta_z: input data (shape: [batch, n_inputs])
-        :return: autoencoder latents (shape: [batch, n_latents])
-        """
-        delta_z = delta_z.to(device)
-        # delta_z, info = self.preprocess(delta_z)
-        concept_indicators = self.encoder(delta_z - self.decoder_bias)  # diff
-        concept_indicators = self.encoder_ln(concept_indicators)
-        concept_indicators += self.encoder_bias
-        return concept_indicators
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
+        x -= self.decoder.bias
+        return self.norm(self.encoder(x))
 
-    def forward(
-        self, delta_z: torch.Tensor, info: dict[str, Any]
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        :param delta_z: input data (shape: [batch, n_inputs])
-        :return:  autoencoder latents pre activation (shape: [batch, n_latents])
-                autoencoder latents (shape: [batch, n_latents])
-                reconstructed data (shape: [batch, n_inputs])
-        """
-        concept_indicators = self.encode(delta_z)
-        delta_z_hat = (
-            self.decoder(concept_indicators) + self.decoder_bias
-        )  # diff
-        delta_z_hat = delta_z_hat * info["std"] + info["mu"]
-
-        return delta_z_hat, concept_indicators
+    def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        x, stats = layer_normalise_(x)  # standardise
+        h = self.encode(x)
+        x_hat = self.decoder(h)
+        x_hat.mul_(stats["inv_std"]).add_(stats["mu"])  # de-standardise
+        return x_hat, h
 
 
-def unit_norm_decoder_columns(autoencoder: LinearSAE) -> None:
+# ----------------------------------------------------------------------
+# 1. Hard projection: W ← W / ||W||₂ column-wise
+# ----------------------------------------------------------------------
+def renorm_decoder_cols_(W: Tensor, eps: float = 1e-8) -> None:
     """
-    Unit normalize the columns of the decoder weights of an autoencoder.
+    In-place column ℓ₂ normalisation.
+    Safe for zero columns (leaves them unchanged).
     """
-    autoencoder.decoder.weight.data /= autoencoder.decoder.weight.data.norm(
-        dim=0, keepdim=True
-    )
+    col_norms = W.norm(dim=0, keepdim=True).clamp_min_(eps)
+    W.div_(col_norms)
 
 
-def unit_norm_decoder_columns_grad_adjustment_(autoencoder) -> None:
-    """project out gradient information parallel to the dictionary vectors
-    - assumes that the decoder is already unit normed"""
+# ----------------------------------------------------------------------
+# 2. Project decoder gradients to the tangent space of unit-norm columns
+#    g ← g − (wᵀg) w     (vectorised, no Python loop)
+# ----------------------------------------------------------------------
+def project_decoder_grads_(W: Tensor) -> None:
+    """
+    In-place orthogonal-projection of ∇W so future SGD preserves
+    unit-norm columns.  Assumes `W.grad` exists and `W` is already
+    normalised.
+    """
+    g = W.grad
+    if g is None:
+        return  # nothing to do
 
-    assert autoencoder.decoder.weight.grad is not None
-
-    def update_x(x, a, b, c):
-        if not x.is_cuda:
-            x = x.cuda()
-        if not a.is_cuda:
-            a = a.cuda()
-        if not b.is_cuda:
-            b = b.cuda()
-        x += a * b * c
-        return x
-
-    # Calculate the gradient adjustment for each column of the decoder
-    for i in range(autoencoder.decoder.weight.shape[1]):
-        column = autoencoder.decoder.weight[:, i]
-        grad = autoencoder.decoder.weight.grad[:, i]
-        update_x(
-            grad,
-            torch.einsum("b,b->", column, grad),
-            column,
-            c=-1,
-        )
+    # (wᵀg) for each column  → shape (1, C)
+    col_dot = (W * g).sum(dim=0, keepdim=True)
+    # g ← g − w (wᵀg)
+    g.sub_(W * col_dot)
 
 
-class ConstrainedLinearSAE(cooper.ConstrainedMinimizationProblem):
+class SSAE(cooper.ConstrainedMinimizationProblem):
+    """MSE + l_1 sparsity constraint on a linear schedule."""
+
+    _LOSS: dict[str, callable] = {
+        "relative": lambda z, z_hat: (
+            nn.functional.mse_loss(z_hat, z, reduction="none").mean(1)
+            / z.pow(2).mean(1)
+        ).mean(),
+        "absolute": lambda z, z_hat: nn.functional.mse_loss(
+            z_hat, z, reduction="mean"
+        ),
+    }
+
     def __init__(
         self,
-        model,
-        overcompleteness_factor,
-        batch_size,
-        encoder_dim,
-        num_concepts,
-        warmup_epochs: int = 2000,
-        total_schedule_epochs: int = 5000,
-        target_sparse_level: float = 5,
-        sparsity_factor: int = 5,
-    ):
-        # here initial sparse level > target sparse level
+        model: torch.nn.Module,
+        *,
+        batch: int,
+        hid: int,
+        n_concepts: int,
+        warmup: int = 2_000,
+        schedule: int = 5_000,
+        target: float = 0.10,
+    ) -> None:
         super().__init__(is_constrained=True)
         self.model = model
-        self.criterion = nn.MSELoss(reduction="mean")
-        assert sparsity_factor >= 1
-        self.target_sparse_level = target_sparse_level  # diff
-        self.initial_sparse_level = num_concepts
-        self.sparse_level = num_concepts
-        self.batch_size = batch_size
-        self.encoder_dim = encoder_dim
-        self.num_concepts = num_concepts
-        self.warmup_epochs = warmup_epochs
-        self.total_schedule_epochs = total_schedule_epochs
-        self.current_epoch = 0
+        self.batch, self.hid = batch, hid
 
-    def compute_loss(self, delta_z, delta_z_hat, type="relative"):
-        if type == "relative":
-            return (
-                ((delta_z - delta_z_hat) ** 2).mean(dim=1)
-                / (delta_z**2).mean(dim=1)
-            ).mean()
-        elif type == "absolute":
-            return (((delta_z - delta_z_hat) ** 2).mean(dim=1)).mean()  # diff
-        else:
-            raise ValueError
+        # sparsity schedule
+        self._lvl0 = n_concepts
+        self._lvl1 = target
+        self._warm = warmup
+        self._T = max(schedule, 1)
+        self.level = n_concepts
 
-    def step_scheduler(self):
-        """
-        Linearly decrease sparse_level (enforce stricter sparsity) from initial to target after warmup.
-        """
-        if self.current_epoch < self.warmup_epochs:
-            return  # no update
+        self.epoch = 0
 
-        relative_epoch = self.current_epoch - self.warmup_epochs
-        if self.total_schedule_epochs == 0:
-            ratio = 1.0
-        else:
-            ratio = min(1.0, relative_epoch / self.total_schedule_epochs)
-        self.sparse_level = self.initial_sparse_level - ratio * (
-            self.initial_sparse_level - self.target_sparse_level
-        )  # diff
+    def _tick_schedule(self) -> None:
+        if self.epoch < self._warm:
+            return
+        t = (self.epoch - self._warm) / self._T
+        self.level = self._lvl0 + min(1.0, t) * (self._lvl1 - self._lvl0)
 
-    def closure(self, delta_z, info, loss_type="relative"):
-        """
-        This closure function computes the model's loss and the constraints.
-        :param inputs: Input tensor to the model
-        :param targets: Target tensor for reconstruction comparison
-        """
-        delta_z_hat, concept_indicators = self.model(delta_z, info)
-        self.loss = self.compute_loss(delta_z, delta_z_hat, loss_type)
-        # Compute the sparsity constraint as an inequality defect
-        self.step_scheduler()  # diff missing piece
-        self.ineq_defect = (
-            torch.sum(torch.abs(concept_indicators))
-            / self.batch_size
-            / self.encoder_dim
-            - self.sparse_level
-        )
-        return cooper.CMPState(
-            loss=self.loss, ineq_defect=self.ineq_defect, eq_defect=None
-        )
+    def closure(
+        self,
+        z: Tensor,
+        stats: dict[str, Tensor],
+        *,
+        loss_type: str = "relative",
+    ) -> cooper.CMPState:
+        """Return CMPState used by Cooper’s optimiser."""
+        z_hat, h = self.model(z, stats)
+        loss = self._LOSS[loss_type](z, z_hat)
 
-    def get_loss_values(self):
-        return self.loss.item(), self.ineq_defect.item()
+        self._tick_schedule()
+        ineq = h.abs().sum() / (self.batch * self.hid) - self.level
+        return cooper.CMPState(loss=loss, ineq_defect=ineq, eq_defect=None)
+
+    # ──────────────────────────────────────────────────────────────
+    def metrics(self) -> tuple[float, float]:
+        """(loss, ineq) as floats – call *after* the last closure."""
+        state = self.last_cmp_state  # Cooper stores it here
+        return float(state.loss), float(state.ineq_defect)
 
 
 class Logger:
+    "A thin, side-effect-free wrapper around wandb."
+
     def __init__(self, **kws):
-        self.vals = {}
-        os.environ["WANDB_DIR"] = "/network/scratch/j/joshi.shruti/wandb_logs"
-        wandb.init(
-            dir="/network/scratch/j/joshi.shruti/wandb_logs",  # optional if WANDB_DIR is set
-            settings=wandb.Settings(code_dir="."),  # no code copying
+        self._run = wandb.init(
+            settings=wandb.Settings(code_dir="."),
+            dir="./wandb",
             **kws,
         )
+        self._buf: Dict[str, float] = {}
 
     def logkv(self, k, v):
-        self.vals[k] = float(v) if torch.is_tensor(v) else v
-        # v.detach() if isinstance(v, torch.Tensor) else v
+        self._buf[k] = float(v) if torch.is_tensor(v) else v
         return v
 
     def dumpkvs(self):
-        wandb.log(self.vals)
-        self.vals = {}
+        if self._buf:
+            self._run.log(self._buf)
+            self._buf = {}
 
 
 class LazyCPUData(Dataset):
@@ -295,10 +261,183 @@ class LazyCPUData(Dataset):
         self.h5.close()
 
 
-def load_training_data(args) -> DataLoader:
+KEYS = ("batch", "lr", "oc", "seed", "norm")  # choose what matters
+
+
+def _hash_cfg(cfg) -> str:
+    blob = json.dumps(asdict(cfg), sort_keys=True).encode()
+    return hashlib.sha1(blob).hexdigest()[:6]  # short & stable
+
+
+def dump_run(root: Path, model: torch.nn.Module, cfg) -> Path:
+    tag = "_".join(f"{k}{getattr(cfg, k)}" for k in KEYS)
+    run = root / f"{tag}_{_hash_cfg(cfg)}"
+    run.mkdir(parents=True, exist_ok=False)
+
+    torch.save(model.state_dict(), run / "weights.pth")
+    (run / "cfg.yaml").write_text(yaml.safe_dump(asdict(cfg), sort_keys=False))
+    return run
+
+
+def train_epoch(
+    dataloader,
+    dict,
+    ssae,
+    optim,
+    form,
+    cfg,
+    dev,
+) -> Tuple[float, float, float]:
+    dict.train()
+    recon_sum = 0.0
+    sparsity_sum = 0.0
+    concept_counts = 0
+    for delta_z_cpu in dataloader:
+        delta_z = delta_z_cpu.to(dev, non_blocking=True)
+        delta_z, info = layer_normalise_(delta_z)
+        optim.zero_grad()
+        # ---------------------------------------------------------------
+        # 1️⃣  Forward pass
+        # ---------------------------------------------------------------
+        lagrangian = form.composite_objective(
+            ssae.closure, delta_z, info, cfg.loss
+        )
+        # ---------------------------------------------------------------
+        # 2️⃣  Back-prop
+        # ---------------------------------------------------------------
+        form.custom_backward(lagrangian)  # custom backward
+
+        # ---------------------------------------------------------------
+        # 4️⃣  Optimiser step & scaler update
+        # ---------------------------------------------------------------
+        optim.step(ssae.closure, delta_z, info, cfg.loss)
+        # ---------------------------------------------------------------
+        # 5️⃣  Keep decoder columns unit normed
+        # ---------------------------------------------------------------
+        with torch.no_grad():
+            renorm_decoder_cols_(ssae.model)
+            project_decoder_grads_(ssae.model)
+        # ---------------------------------------------------------------
+        # 6️⃣  Log the loss and sparsity penalty
+        # ---------------------------------------------------------------
+        # Note: the loss is already scaled by the scaler, so no need to scale again
+        # and the sparsity penalty is not scaled, so we can log it directly
+        # Note: the lagrangian is a scalar, so we can log it directly
+        recon_loss, sparsity_penalty = ssae.get_loss_values()
+        recon_sum += recon_loss
+        sparsity_sum += sparsity_penalty
+
+        with torch.no_grad():  # cheap: only encoder
+            concept_indicators = ssae.model.encode(delta_z)
+            concept_counts += (
+                (concept_indicators.abs() >= cfg.indicator_threshold)
+                .sum()
+                .item()
+            )
+        # ----------------------------------------------------------------
+        # 7️⃣  Housekeeping: clear the graph and empty the cache
+        # ----------------------------------------------------------------
+        del lagrangian  # empty the graph
+        del delta_z, concept_indicators  # clear unnecessary variables
+        torch.cuda.empty_cache()  # clear cache to avoid OOM
+    return recon_sum, sparsity_sum, concept_counts
+
+
+def main():
+    cfg = parse_cfg()
+    set_seeds(cfg.seed)
+
+    logger = Logger(entity="causalrepl", project="ssae", config=asdict(cfg))
+    dataloader = make_dataloader(cfg)
+    dict = make_dict(cfg)
+    ssae = make_ssae(dict, cfg)
+    optim, form = make_optim(dict=dict, ssae=ssae, cfg=cfg)
+    dev = next(dict.parameters()).device
+
+    for ep in range(cfg.epochs):
+        bs = len(dataloader)
+        ds = len(dataloader.dataset)
+        rec, sp, l0 = train_epoch(
+            dataloader, dict, ssae, optim, form, cfg, dev
+        )
+        for k, v in {
+            "recon": rec / bs,
+            "spars": sp / bs,
+            "l0": l0 / ds,
+        }.items():
+            logger.logkv(k, v)
+        logger.dumpkvs()
+        print(f"ep {ep:04d}  rec {rec:.4f}  spars {sp:.4f}")
+
+    dump_run(cfg.emb.parent / "run_out", dict, cfg)
+
+
+def _load_yaml(path: Path) -> Dict[str, Any]:
+    if not path.exists():
+        raise FileNotFoundError(path)
+    with path.open() as fh:
+        return yaml.safe_load(fh) or {}
+
+
+# ===== run config ============================================================
+@dataclass(frozen=True)
+class Cfg:
+    emb: Path
+    data: Path
+    batch: int = 32
+    epochs: int = 20_000
+    lr: float = 5e-4
+    oc: int = 2
+    n_concepts: int = 1
+    norm: str = "ln"
+    loss: str = "relative"
+    ind_th: float = 0.1
+    seed: int = 0
+    rep_dim: int = 1_024  # read from data-cfg in real code
+
+    # spill-over lives here (read-only)
+    extra: MappingProxyType = field(
+        default_factory=lambda: MappingProxyType({}), init=False
+    )
+
+    @property
+    def hid(self) -> int:  # encoder dim
+        return self.oc * self.n_concepts
+
+
+def parse_cfg() -> Cfg:
+    p = argparse.ArgumentParser()
+    add = p.add_argument
+    add("emb", type=Path)
+    add("data-cfg", type=Path)
+    add("--batch", type=int, default=32)
+    add("--epochs", type=int, default=20_000)
+    add("--lr", type=float, default=5e-4)
+    add("--oc", type=int, default=2)
+    add("--n-concepts", "-C", type=int, default=1)
+    add("--warmup", type=int, default=2_000)
+    add("--schedule", type=int, default=5_000)
+    add("--target", type=float, default=0.1)
+    add("--norm", choices=["ln", "gn", "bn"], default="ln")
+    add("--loss", default="relative", choices=["relative", "absolute"])
+    add("--ind-th", type=float, default=0.1)
+    add("--seed", type=int, default=0)
+    cli: Dict[str, Any] = vars(p.parse_args())
+
+    yaml_path = cli.pop("data_cfg")
+    yaml_cfg = _load_yaml(yaml_path)
+    # ----- split YAML into (known, extra) -----------------------------------
+    fields = {f.name for f in fields(Cfg)}
+    extra = {k: v for k, v in yaml_cfg.items() if k not in fields}
+    cfg = Cfg(**cli)
+    object.__setattr__(cfg, "extra", MappingProxyType(extra))
+    return cfg
+
+
+def make_dataloader(cfg) -> DataLoader:
     train_loader = DataLoader(
-        LazyCPUData(args.embeddings_file, key="cfc_train"),
-        batch_size=int(args.batch_size),
+        LazyCPUData(cfg.emb, key="cfc_train"),
+        batch_size=int(cfg.batch),
         shuffle=True,
         num_workers=2,  # num_workers=0,
         prefetch_factor=2,
@@ -308,235 +447,42 @@ def load_training_data(args) -> DataLoader:
     return train_loader
 
 
-def save(args, sae_model, config_dict):
-    current_datetime = datetime.datetime.now()
-    timestamp_str = current_datetime.strftime("%Y-%m-%d_%H-%M-%S")
-    modeldir = os.path.join(
-        os.path.dirname(args.embeddings_file),
-        str(config_dict["llm_layer"])
-        + "_"
-        + str(config_dict["loss_type"])
-        + "_"
-        + str(args.warmup_epochs)
-        + "_"
-        + str(args.scheduler_epochs)
-        + "_"
-        + str(args.batch_size)
-        + "_"
-        + str(args.overcompleteness_factor)
-        + "_"
-        + str(args.norm_type)
-        + "_"
-        + str(args.primal_lr)
-        + "_"
-        + str(args.seed),
-    )
-    if not os.path.exists(modeldir):
-        os.makedirs(modeldir)
-    config_file = os.path.join(
-        modeldir,
-        "model_config.yaml",
-    )
-    with open(config_file, "w") as file:
-        yaml.dump(config_dict, file)
-    sae_dict_path = os.path.join(modeldir, "sparse_dict_model.pth")
-    torch.save(sae_model.state_dict(), sae_dict_path)
+def make_dict(cfg: Cfg) -> torch.nn.Module:
+    return DictLinearAE(cfg.rep_dim, cfg.hid, cfg.norm).cuda()
 
 
-def to_device(data, device):
-    # to handle oom error
-    if isinstance(data, (list, tuple)):
-        return [to_device(x, device) for x in data]
-    return data.to(device, non_blocking=True)
-
-
-def train(
-    train_loader,
-    sae_model,
-    cmp_model,
-    coop_optimizer,
-    formulation,
-    logger,
-    args,
-) -> None:
-    scaler = GradScaler(enabled=torch.cuda.is_available())
-    num_batches = len(train_loader)
-    dataset_size = len(train_loader.dataset)
-    for epoch in range(int(args.num_epochs)):
-        sae_model.train()
-        recon_sum = 0.0
-        sparsity_sum = 0.0
-        concept_counts = 0
-        for delta_z_cpu in train_loader:
-            delta_z = delta_z_cpu.to(device, non_blocking=True)
-            delta_z, info = layer_normalise(delta_z)
-            coop_optimizer.zero_grad()
-            # ---------------------------------------------------------------
-            # 1️⃣  Forward pass
-            # ---------------------------------------------------------------
-            lagrangian = formulation.composite_objective(
-                cmp_model.closure, delta_z, info, args.loss_type
-            )
-            # ---------------------------------------------------------------
-            # 2️⃣  Back-prop
-            # ---------------------------------------------------------------
-            formulation.custom_backward(lagrangian)  # custom backward
-
-            # ---------------------------------------------------------------
-            # 4️⃣  Optimiser step & scaler update
-            # ---------------------------------------------------------------
-            coop_optimizer.step(
-                cmp_model.closure, delta_z, info, args.loss_type
-            )
-            # ---------------------------------------------------------------
-            # 5️⃣  Keep decoder columns unit normed
-            # ---------------------------------------------------------------
-            with torch.no_grad():
-                unit_norm_decoder_columns(cmp_model.model)
-                unit_norm_decoder_columns_grad_adjustment_(cmp_model.model)
-            # ---------------------------------------------------------------
-            # 6️⃣  Log the loss and sparsity penalty
-            # ---------------------------------------------------------------
-            # Note: the loss is already scaled by the scaler, so no need to scale again
-            # and the sparsity penalty is not scaled, so we can log it directly
-            # Note: the lagrangian is a scalar, so we can log it directly
-            recon_loss, sparsity_penalty = cmp_model.get_loss_values()
-            recon_sum += recon_loss
-            sparsity_sum += sparsity_penalty
-
-            with torch.no_grad():  # cheap: only encoder
-                concept_indicators = cmp_model.model.encode(delta_z)
-                concept_counts += (
-                    (concept_indicators.abs() >= args.indicator_threshold)
-                    .sum()
-                    .item()
-                )
-            # ----------------------------------------------------------------
-            # 7️⃣  Housekeeping: clear the graph and empty the cache
-            # ----------------------------------------------------------------
-            del lagrangian  # empty the graph
-            del delta_z, concept_indicators  # clear unnecessary variables
-            torch.cuda.empty_cache()  # clear cache to avoid OOM
-        logger.logkv("total_loss", recon_sum / num_batches)
-        logger.logkv("sparsity_penalty", sparsity_sum / num_batches)
-        logger.logkv(
-            "num_concepts_predicted",
-            concept_counts / dataset_size,
-        )
-        logger.dumpkvs()
-        print(
-            f"epoch {epoch:04d} | "
-            f"recon {recon_sum / num_batches:.5f} | "
-            f"sparsity {sparsity_sum / num_batches:.5f}"
-        )
-
-
-def main(args):
-    with open(args.data_config_file, "r") as file:
-        data_config = Box(yaml.safe_load(file))
-    config_dict = {
-        "seed": args.seed,
-        "embeddings_file": args.embeddings_file,
-        "overcompleteness_factor": args.overcompleteness_factor,
-        "primal_lr": args.primal_lr,
-        "dual_lr": args.primal_lr / 2,
-        "num_concepts": args.num_concepts,
-        "norm_type": args.norm_type,
-        "batch_size": args.batch_size,
-        "num_epochs": args.num_epochs,
-        "indicator_threshold": args.indicator_threshold,
-        "loss_type": args.loss_type,
-        "warmup_epochs": args.warmup_epochs,
-        "scheduler_epochs": args.scheduler_epochs,
-        "sparsity_factor": args.sparsity_factor,
-        "target_sparse_level": args.target_sparse_level,
-        "dataset": data_config.dataset,
-        "rep_dim": data_config.rep_dim,
-        "llm_layer": data_config.llm_layer,
-    }
-    set_seeds(int(args.seed))
-    logger = Logger(entity="causalrepl", project="ssae", config=config_dict)
-    train_loader = load_training_data(args)
-    # Assuming the LinearSAE model and other parameters are already defined:
-    encoder_dim = int(args.overcompleteness_factor) * int(args.num_concepts)
-    rep_dim = int(data_config.rep_dim)
-    assert encoder_dim <= rep_dim
-    sae_model = LinearSAE(
-        rep_dim=rep_dim, encoder_dim=encoder_dim, norm_type=args.norm_type
-    )
-    total_schedule_epochs = min(
-        args.scheduler_epochs, args.num_epochs - args.warmup_epochs
-    )
-    cmp_model = ConstrainedLinearSAE(
-        model=sae_model,
-        overcompleteness_factor=int(args.overcompleteness_factor),
-        batch_size=int(args.batch_size),
-        encoder_dim=encoder_dim,
-        num_concepts=int(args.num_concepts),
-        warmup_epochs=args.warmup_epochs,
-        total_schedule_epochs=total_schedule_epochs,
-        target_sparse_level=args.target_sparse_level,
-        sparsity_factor=args.sparsity_factor,
+def make_ssae(model: torch.nn.Module, cfg: Cfg):
+    return SSAE(
+        model=model,
+        batch=cfg.batch,
+        hid=cfg.hid,
+        n_concepts=cfg.n_concepts,
+        warmup=cfg.warmup,
+        schedule=cfg.schedule,
+        target=cfg.target,
     )
 
-    # Define optimizers
+
+def make_optim(dict: torch.nn.Module, ssae, cfg: Cfg):
     primal_optimizer = cooper.optim.ExtraAdam(
-        list(sae_model.parameters()), lr=args.primal_lr
+        list(dict.parameters()), lr=cfg.lr
     )
-    dual_lr = args.primal_lr / 2  # dual_lr should be less than primal_lr
+    dual_lr = cfg.lr / 2  # dual_lr should be less than primal_lr
     # 0.5 is common from extra gradient method literature
     dual_optimizer = cooper.optim.partial_optimizer(
         cooper.optim.ExtraAdam, lr=dual_lr
     )
 
     # Setup the constrained optimizer using Cooper's Lagrangian formulation
-    formulation = cooper.LagrangianFormulation(cmp_model)
+    formulation = cooper.LagrangianFormulation(ssae)
     coop_optimizer = cooper.ConstrainedOptimizer(
         formulation=formulation,
         primal_optimizer=primal_optimizer,
         dual_optimizer=dual_optimizer,
     )
-
-    train(
-        train_loader=train_loader,
-        sae_model=sae_model,
-        cmp_model=cmp_model,
-        coop_optimizer=coop_optimizer,
-        formulation=formulation,
-        logger=logger,
-        args=args,
-    )
-    save(sae_model=sae_model, args=args, config_dict=config_dict)
+    return coop_optimizer, formulation
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--embeddings-file")
-    parser.add_argument("--data-config-file")
-    parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--num-epochs", type=int, default=20000)
-    parser.add_argument("--primal-lr", type=float, default=0.0005)
-    parser.add_argument("--dual-lr", type=float, default=0.005)
-    # leaving this here for now but changing it to primal_lr/2 in the code
-    # following the partial observability paper and repo
-    parser.add_argument("--warmup-epochs", type=int, default=0)
-    parser.add_argument("--scheduler-epochs", type=int, default=500)
-    parser.add_argument("--sparsity-factor", type=float, default=5)
-    parser.add_argument("--target-sparse-level", type=float, default=0.1)
-    # say it starts at num_concepts and then goes down
-    parser.add_argument("--overcompleteness-factor", type=int, default=2)
-    parser.add_argument("--indicator-threshold", type=float, default=0.1)
-    # indicator threshold needs to be decently low so that the concept_indicators
-    # don't turn out to be all zeros
-    parser.add_argument("--num-concepts", type=int, default=1)
-    parser.add_argument(
-        "--norm-type", default="ln", choices=["ln", "gn", "bn"]
-    )
-    parser.add_argument(
-        "--loss-type", default="relative", choices=["relative", "absolute"]
-    )
-    parser.add_argument("--seed", default=0)
-
-    args, unknown = parser.parse_known_args()
     with dbg.debug_on_exception():
-        main(args)
+        main()
