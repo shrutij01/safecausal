@@ -52,23 +52,20 @@ def layer_normalise_(
     x: Tensor, *, eps: float = 1e-5
 ) -> Tuple[Tensor, Dict[str, Tensor]]:
     """
-    In-place `(x - μ) / σ` over the *last* dim.
+    Out-of-place `(x - μ) / σ` over the *last* dim.
 
     Returns
     -------
     x    : same Tensor, normalised.
     stats: dict with 'mu' and 'inv_std'     (cheaper to reuse inv-σ).
-
-    Complexity
-    ----------
-    O(N) memory-free; uses unbiased=False to avoid extra kernel.
     """
     mu = x.mean(dim=-1, keepdim=True)  # (⋯, 1)
     var = x.var(dim=-1, keepdim=True, unbiased=False)
-    inv_std = (var + eps).rsqrt_()  # numerically stable inverse-σ
-
-    x.sub_(mu).mul_(inv_std)  # (x-μ)·σ⁻¹   (all in-place)
-    return x, {"mu": mu, "inv_std": inv_std}
+    inv_std = (var + eps).rsqrt()  # numerically stable inverse-σ
+    return (
+        (x - mu) * inv_std,
+        {"mu": mu, "inv_std": inv_std},
+    )
 
 
 class DictLinearAE(nn.Module):
@@ -293,7 +290,7 @@ def train_epoch(
     concept_counts = 0
     for delta_z_cpu in dataloader:
         delta_z = delta_z_cpu.to(dev, non_blocking=True)
-        delta_z, info = layer_normalise_(delta_z)
+        delta_z, _ = layer_normalise_(delta_z)
         optim.zero_grad()
         # ---------------------------------------------------------------
         # 1️⃣  Forward pass
