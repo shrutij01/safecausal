@@ -382,7 +382,7 @@ def _load_yaml(path: Path) -> Dict[str, Any]:
 class Cfg:
     emb: Path
     batch: int = 32
-    epochs: int = 5000
+    epochs: int = 20_000
     lr: float = 5e-4
     oc: int = 10
     n_concepts: int = 1
