@@ -295,11 +295,11 @@ class LazyCPUData(Dataset):
         with h5py.File(self.h5_path, "r", libver="latest", swmr=True) as f:
             if key not in f or not isinstance(f[key], h5py.Dataset):
                 raise TypeError(f"{key} is not an HDF5 dataset")
+            breakpoint()
             self._len = len(f[key])
             self._rep_dim = f[key].shape[1]  # (N, rep_dim)
 
         # Pre-allocate numpy buffer for zero-copy operations
-        breakpoint()
         self._buffer = np.empty((2, self._rep_dim), dtype=np.float32)
         self._delta_buffer = np.empty(self._rep_dim, dtype=np.float32)
 
