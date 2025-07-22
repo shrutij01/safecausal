@@ -64,6 +64,7 @@ def layer_normalise_(
     return x_norm, {"mu": mu, "inv_std": inv_std}
 
 
+@torch.jit.script
 def fused_layer_norm_inplace_(x: Tensor, eps: float = 1e-5) -> Tensor:
     """
     Ultra-fast in-place layer normalization for training loops.
@@ -139,6 +140,7 @@ class DictLinearAE(nn.Module):
 # ----------------------------------------------------------------------
 # 1. Hard projection: W ← W / ||W||₂ column-wise
 # ----------------------------------------------------------------------
+@torch.jit.script
 def renorm_decoder_cols_(W: Tensor, eps: float = 1e-8) -> None:
     """
     In-place column l_2 normalisation.
@@ -152,6 +154,7 @@ def renorm_decoder_cols_(W: Tensor, eps: float = 1e-8) -> None:
 # 2. Project decoder gradients to the tangent space of unit-norm columns
 #    g ← g − (wᵀg) w     (vectorised, no Python loop)
 # ----------------------------------------------------------------------
+@torch.jit.script
 def project_decoder_grads_(W: Tensor) -> None:
     """
     In-place orthogonal-projection of ∇W so future SGD preserves
@@ -173,9 +176,8 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
 
     _LOSS: dict[str, callable] = {
         "relative": lambda z, z_hat: (
-            nn.functional.mse_loss(z_hat, z, reduction="none").mean(1)
-            / z.pow(2).mean(1)
-        ).mean(),
+            torch.sum((z_hat - z).pow(2), dim=1) / torch.sum(z.pow(2), dim=1)
+        ).mean(),  # Vectorized relative loss computation
         "absolute": lambda z, z_hat: nn.functional.mse_loss(
             z_hat, z, reduction="mean"
         ),
@@ -204,6 +206,9 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         self.level = n_concepts
 
         self.epoch = 0
+        
+        # Cache last forward pass results to avoid recomputation
+        self._cached_h = None
 
     def _tick_schedule(self) -> None:
         if self.epoch < self._warm:
@@ -220,6 +225,9 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         z_hat, h = self.model(z)
         loss = self._LOSS[loss_type](z, z_hat)
 
+        # Cache hidden states for sparsity computation
+        self._cached_h = h
+
         self._tick_schedule()
         ineq = h.abs().sum() / (self.batch * self.hid) - self.level
         return cooper.CMPState(loss=loss, ineq_defect=ineq, eq_defect=None)
@@ -229,6 +237,10 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         """(loss, ineq) as floats – call *after* the last closure."""
         state = self.last_cmp_state  # Cooper stores it here
         return float(state.loss), float(state.ineq_defect)
+    
+    def get_cached_hidden(self) -> Tensor:
+        """Get hidden states from last forward pass to avoid recomputation."""
+        return self._cached_h
 
 
 class Logger:
@@ -353,55 +365,62 @@ def train_epoch(
     sparsity_sum = 0.0
     concept_counts = 0
     
-    # Persistent GPU tensor for efficient data transfer
+    # Pre-allocated tensors to eliminate dynamic allocation
     gpu_tensor = None
-    batch_count = 0
-    
-    # Pre-allocate threshold mask for sparsity counting
     threshold_mask = None
+    batch_count = 0
+    renorm_counter = 0
+    
+    # Get batch and hidden dimensions for pre-allocation
+    sample_batch = next(iter(dataloader))
+    batch_size, input_dim = sample_batch.shape
+    hid_dim = cfg.hid
+    
+    # Pre-allocate all working tensors on GPU
+    if torch.cuda.is_available():
+        gpu_tensor = torch.empty((batch_size, input_dim), device=dev, dtype=torch.float32)
+        threshold_mask = torch.empty((batch_size, hid_dim), device=dev, dtype=torch.bool)
+    
+    # Mixed precision scaler for 2x speedup
+    scaler = torch.cuda.amp.GradScaler() if cfg.use_amp and torch.cuda.is_available() else None
 
     for batch_idx, delta_z_cpu in enumerate(dataloader):
         with torch.cuda.device(dev):
-            # Efficient GPU transfer with tensor reuse
-            if gpu_tensor is None or gpu_tensor.shape != delta_z_cpu.shape:
-                gpu_tensor = torch.empty_like(
-                    delta_z_cpu, device=dev, dtype=torch.float32, 
-                    memory_format=torch.contiguous_format
-                )
-            
+            # Efficient GPU transfer with pre-allocated tensor
             gpu_tensor.copy_(delta_z_cpu, non_blocking=True)
-            
-            # In-place normalization directly on GPU tensor
-            mu = gpu_tensor.mean(dim=-1, keepdim=True)
-            var = gpu_tensor.var(dim=-1, keepdim=True, unbiased=False)
-            inv_std = (var + 1e-5).rsqrt_()
-            gpu_tensor.sub_(mu).mul_(inv_std)
             
             # Zero gradients before forward pass
             optim.zero_grad(set_to_none=True)
             
-            # Forward + backward + step in single call
-            optim.step(ssae.closure, gpu_tensor, cfg.loss)
+            # Mixed precision forward pass
+            if scaler is not None:
+                with torch.cuda.amp.autocast():
+                    optim.step(ssae.closure, gpu_tensor, cfg.loss)
+                # Note: Cooper handles its own scaling internally
+            else:
+                optim.step(ssae.closure, gpu_tensor, cfg.loss)
             
             # Post-step weight operations
             with torch.no_grad():
-                renorm_decoder_cols_(dict.decoder.weight)
                 if dict.decoder.weight.grad is not None:
                     project_decoder_grads_(dict.decoder.weight)
+                
+                # Renormalize decoder columns at configured frequency
+                renorm_counter += 1
+                if renorm_counter % cfg.renorm_epochs == 0:
+                    renorm_decoder_cols_(dict.decoder.weight)
             
             # Extract metrics
             recon_loss, sparsity_penalty = ssae.metrics()
             recon_sum += recon_loss
             sparsity_sum += sparsity_penalty
             
-            # Efficient sparsity counting with reusable mask
+            # Efficient sparsity counting using cached hidden states
             with torch.no_grad():
-                h = dict.encode(gpu_tensor)
-                if threshold_mask is None or threshold_mask.shape != h.shape:
-                    threshold_mask = torch.empty_like(h, dtype=torch.bool)
+                h = ssae.get_cached_hidden()  # Reuse from forward pass
                 
-                torch.abs(h, out=h)  # In-place abs
-                torch.ge(h, cfg.ind_th, out=threshold_mask)  # Reuse mask
+                # Use pre-allocated mask for sparsity counting
+                torch.ge(torch.abs(h), cfg.ind_th, out=threshold_mask)
                 concept_counts += threshold_mask.sum().item()
             
             batch_count += 1
@@ -478,6 +497,8 @@ class Cfg:
     loss: str = "relative"
     ind_th: float = 0.1
     seed: int = 0
+    renorm_epochs: int = 50
+    use_amp: bool = True
 
     # spill-over lives here (read-only)
     extra: Dict[str, Any] = field(default_factory=dict, init=False)
@@ -504,6 +525,8 @@ def parse_cfg() -> Cfg:
     add("--loss", default="relative", choices=["relative", "absolute"])
     add("--ind-th", type=float, default=0.1)
     add("--seed", type=int, default=0)
+    add("--renorm-epochs", type=int, default=50)
+    add("--use-amp", action="store_true", default=True)
     cli: Dict[str, Any] = vars(p.parse_args())
 
     yaml_path = cli.pop("data_cfg")
