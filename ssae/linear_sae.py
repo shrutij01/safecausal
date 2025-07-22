@@ -296,11 +296,18 @@ class LazyCPUData(Dataset):
             if key not in f or not isinstance(f[key], h5py.Dataset):
                 raise TypeError(f"{key} is not an HDF5 dataset")
             dataset_shape = f[key].shape
-            breakpoint()
+            if len(dataset_shape) == 3:
+                self._rep_dim = dataset_shape[2]  # (N, T, rep_dim)
+            elif len(dataset_shape) == 2:
+                self._rep_dim = dataset_shape[1]  # (N, rep_dim)
+            else:
+                raise ValueError(
+                    f"Unexpected shape {dataset_shape} for dataset {key}"
+                )
             self._len = len(f[key])
-            self._rep_dim = f[key].shape[1]  # (N, rep_dim)
 
         # Pre-allocate numpy buffer for zero-copy operations
+        # expects two samples to take diff between
         self._buffer = np.empty((2, self._rep_dim), dtype=np.float32)
         self._delta_buffer = np.empty(self._rep_dim, dtype=np.float32)
 
@@ -576,6 +583,7 @@ def make_dataloader(cfg) -> DataLoader:
 
 
 def make_dict(cfg: Cfg) -> torch.nn.Module:
+    breakpoint()  # Debugging point to inspect cfg
     return DictLinearAE(cfg.extra.rep_dim, cfg.hid, cfg.norm)
 
 
