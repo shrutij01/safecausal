@@ -52,20 +52,29 @@ def layer_normalise_(
     x: Tensor, *, eps: float = 1e-5
 ) -> Tuple[Tensor, Dict[str, Tensor]]:
     """
-    Out-of-place `(x - μ) / σ` over the *last* dim.
-
-    Returns
-    -------
-    x    : same Tensor, normalised.
-    stats: dict with 'mu' and 'inv_std'     (cheaper to reuse inv-σ).
+    Memory-efficient layer normalization over the last dimension.
     """
-    mu = x.mean(dim=-1, keepdim=True)  # (⋯, 1)
+    mu = x.mean(dim=-1, keepdim=True)  
     var = x.var(dim=-1, keepdim=True, unbiased=False)
-    inv_std = (var + eps).rsqrt()  # numerically stable inverse-σ
-    return (
-        (x - mu) * inv_std,
-        {"mu": mu, "inv_std": inv_std},
-    )
+    inv_std = (var + eps).rsqrt_()  # in-place rsqrt for efficiency
+    
+    # Fused normalize operation
+    x_norm = x.sub(mu).mul_(inv_std)  # sub creates new tensor, mul_ in-place
+    
+    return x_norm, {"mu": mu, "inv_std": inv_std}
+
+
+def fused_layer_norm_inplace_(x: Tensor, eps: float = 1e-5) -> Tensor:
+    """
+    Ultra-fast in-place layer normalization for training loops.
+    """
+    mu = x.mean(dim=-1, keepdim=True)
+    var = x.var(dim=-1, keepdim=True, unbiased=False) 
+    inv_std = (var + eps).rsqrt_()
+    
+    # In-place normalization 
+    x.sub_(mu).mul_(inv_std)
+    return x
 
 
 class DictLinearAE(nn.Module):
@@ -102,14 +111,28 @@ class DictLinearAE(nn.Module):
         raise ValueError(f"norm_type {nt!r} not in ln/gn/bn")
 
     def encode(self, x: torch.Tensor) -> torch.Tensor:
-        x -= self.decoder.bias
-        return self.norm(self.encoder(x))
+        # In-place bias subtraction to avoid copy
+        x_enc = x.clone()  # Clone to avoid modifying input
+        x_enc.sub_(self.decoder.bias)
+        return self.norm(self.encoder(x_enc))
 
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        x, stats = layer_normalise_(x)  # standardise
-        h = self.encode(x)
+        # Efficient single-pass forward with minimal allocations
+        mu = x.mean(dim=-1, keepdim=True)
+        var = x.var(dim=-1, keepdim=True, unbiased=False)
+        inv_std = (var + 1e-5).rsqrt_()  # in-place rsqrt for efficiency
+
+        # Create normalized version without modifying input
+        x_norm = (x - mu) * inv_std
+
+        # Fused encode: subtract decoder bias and encode in one operation
+        x_biased = x_norm - self.decoder.bias
+        h = self.norm(self.encoder(x_biased))
+
+        # Decode and denormalize efficiently
         x_hat = self.decoder(h)
-        x_hat.mul_(stats["inv_std"]).add_(stats["mu"])  # de-standardise
+        x_hat.mul_(inv_std).add_(mu)  # In-place denormalization
+
         return x_hat, h
 
 
@@ -209,7 +232,7 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
 
 
 class Logger:
-    "A thin, side-effect-free wrapper around wandb."
+    "A thin, side-effect-free wrapper around wandb with memory monitoring."
 
     def __init__(self, **kws):
         self._run = wandb.init(
@@ -222,6 +245,15 @@ class Logger:
     def logkv(self, k, v):
         self._buf[k] = float(v) if torch.is_tensor(v) else v
         return v
+    
+    def log_memory_stats(self):
+        """Log current GPU memory usage."""
+        if torch.cuda.is_available():
+            self._buf.update({
+                "gpu_memory_allocated_mb": torch.cuda.memory_allocated() / 1024**2,
+                "gpu_memory_reserved_mb": torch.cuda.memory_reserved() / 1024**2,
+                "gpu_memory_cached_mb": torch.cuda.memory_cached() / 1024**2,
+            })
 
     def dumpkvs(self):
         if self._buf:
@@ -231,30 +263,60 @@ class Logger:
 
 class LazyCPUData(Dataset):
     """
-    Lazy CPU-side view of delta_z.
-    No data lives on GPU until the DataLoader moves a batch.
-    We keep tensors on the CPU to avoid OOM errors.
+    Memory-optimized H5PY dataset with automatic resource management.
+    Uses per-worker file handles and pre-allocated tensor buffers.
     """
 
     def __init__(self, h5_path: str, key: str = "cfc_train"):
-        self.h5 = h5py.File(h5_path, "r")
-        obj = self.h5[key]
-        if not isinstance(obj, h5py.Dataset):
-            raise TypeError(
-                f"{key} is not an HDF5 dataset (found {type(obj)})"
+        self.h5_path = str(h5_path)
+        self.key = key
+        self._file_handle = None
+        self._len = None
+        self._rep_dim = None
+
+        # Get metadata without keeping file open
+        with h5py.File(self.h5_path, "r", libver="latest", swmr=True) as f:
+            if key not in f or not isinstance(f[key], h5py.Dataset):
+                raise TypeError(f"{key} is not an HDF5 dataset")
+            self._len = len(f[key])
+            self._rep_dim = f[key].shape[1]  # (N, rep_dim)
+
+        # Pre-allocate numpy buffer for zero-copy operations
+        self._buffer = np.empty((2, self._rep_dim), dtype=np.float32)
+        self._delta_buffer = np.empty(self._rep_dim, dtype=np.float32)
+
+    def _get_file_handle(self):
+        """Lazy per-worker file handle creation."""
+        if self._file_handle is None:
+            self._file_handle = h5py.File(
+                self.h5_path,
+                "r",
+                libver="latest",
+                swmr=True,  # Single-writer multiple-reader mode
+                rdcc_nbytes=1024 * 1024 * 16,  # 16MB cache per file
             )
-        self.ds: h5py.Dataset = obj
+        return self._file_handle
 
     def __len__(self):
-        return len(self.ds)
+        return self._len
 
     def __getitem__(self, idx):
-        cfc = self.ds[idx]  # shape (2, rep_dim)
-        delta_z = np.asarray(cfc[1] - cfc[0], dtype=np.float32)
-        return torch.from_numpy(delta_z)
+        ds = self._get_file_handle()[self.key]
+
+        # Read directly into pre-allocated buffer to avoid extra allocation
+        ds.read_direct(self._buffer, np.s_[idx])
+
+        # In-place difference using pre-allocated buffer
+        np.subtract(self._buffer[1], self._buffer[0], out=self._delta_buffer)
+
+        # Return tensor that shares memory with numpy buffer
+        return torch.from_numpy(
+            self._delta_buffer.copy()
+        )  # Copy to avoid data races
 
     def __del__(self):
-        self.h5.close()
+        if self._file_handle is not None:
+            self._file_handle.close()
 
 
 KEYS = ("batch", "lr", "oc", "seed", "norm")  # choose what matters
@@ -285,55 +347,73 @@ def train_epoch(
     dev,
 ) -> Tuple[float, float, float]:
     dict.train()
+
+    # Accumulators
     recon_sum = 0.0
     sparsity_sum = 0.0
     concept_counts = 0
-    for delta_z_cpu in dataloader:
-        delta_z = delta_z_cpu.to(dev, non_blocking=True)
-        delta_z, _ = layer_normalise_(delta_z)
-        optim.zero_grad()
-        # ---------------------------------------------------------------
-        # 1️⃣  Forward pass
-        # ---------------------------------------------------------------
-        lagrangian = form.composite_objective(ssae.closure, delta_z, cfg.loss)
-        # ---------------------------------------------------------------
-        # 2️⃣  Back-prop
-        # ---------------------------------------------------------------
-        form.custom_backward(lagrangian)  # custom backward
+    
+    # Persistent GPU tensor for efficient data transfer
+    gpu_tensor = None
+    batch_count = 0
+    
+    # Pre-allocate threshold mask for sparsity counting
+    threshold_mask = None
 
-        # ---------------------------------------------------------------
-        # 4️⃣  Optimiser step & scaler update
-        # ---------------------------------------------------------------
-        optim.step(ssae.closure, delta_z, cfg.loss)
-        # ---------------------------------------------------------------
-        # 5️⃣  Keep decoder columns unit normed
-        # ---------------------------------------------------------------
-        with torch.no_grad():
-            renorm_decoder_cols_(dict.decoder.weight)
-            project_decoder_grads_(dict.decoder.weight)
-        # ---------------------------------------------------------------
-        # 6️⃣  Log the loss and sparsity penalty
-        # ---------------------------------------------------------------
-        # Note: the loss is already scaled by the scaler, so no need to scale again
-        # and the sparsity penalty is not scaled, so we can log it directly
-        # Note: the lagrangian is a scalar, so we can log it directly
-        recon_loss, sparsity_penalty = ssae.get_loss_values()
-        recon_sum += recon_loss
-        sparsity_sum += sparsity_penalty
-
-        with torch.no_grad():  # cheap: only encoder
-            concept_indicators = dict.encode(delta_z)
-            concept_counts += (
-                (concept_indicators.abs() >= cfg.indicator_threshold)
-                .sum()
-                .item()
-            )
-        # ----------------------------------------------------------------
-        # 7️⃣  Housekeeping: clear the graph and empty the cache
-        # ----------------------------------------------------------------
-        del lagrangian  # empty the graph
-        del delta_z, concept_indicators  # clear unnecessary variables
-        torch.cuda.empty_cache()  # clear cache to avoid OOM
+    for batch_idx, delta_z_cpu in enumerate(dataloader):
+        with torch.cuda.device(dev):
+            # Efficient GPU transfer with tensor reuse
+            if gpu_tensor is None or gpu_tensor.shape != delta_z_cpu.shape:
+                gpu_tensor = torch.empty_like(
+                    delta_z_cpu, device=dev, dtype=torch.float32, 
+                    memory_format=torch.contiguous_format
+                )
+            
+            gpu_tensor.copy_(delta_z_cpu, non_blocking=True)
+            
+            # In-place normalization directly on GPU tensor
+            mu = gpu_tensor.mean(dim=-1, keepdim=True)
+            var = gpu_tensor.var(dim=-1, keepdim=True, unbiased=False)
+            inv_std = (var + 1e-5).rsqrt_()
+            gpu_tensor.sub_(mu).mul_(inv_std)
+            
+            # Zero gradients before forward pass
+            optim.zero_grad(set_to_none=True)
+            
+            # Forward + backward + step in single call
+            optim.step(ssae.closure, gpu_tensor, cfg.loss)
+            
+            # Post-step weight operations
+            with torch.no_grad():
+                renorm_decoder_cols_(dict.decoder.weight)
+                if dict.decoder.weight.grad is not None:
+                    project_decoder_grads_(dict.decoder.weight)
+            
+            # Extract metrics
+            recon_loss, sparsity_penalty = ssae.metrics()
+            recon_sum += recon_loss
+            sparsity_sum += sparsity_penalty
+            
+            # Efficient sparsity counting with reusable mask
+            with torch.no_grad():
+                h = dict.encode(gpu_tensor)
+                if threshold_mask is None or threshold_mask.shape != h.shape:
+                    threshold_mask = torch.empty_like(h, dtype=torch.bool)
+                
+                torch.abs(h, out=h)  # In-place abs
+                torch.ge(h, cfg.ind_th, out=threshold_mask)  # Reuse mask
+                concept_counts += threshold_mask.sum().item()
+            
+            batch_count += 1
+            
+            # Memory cleanup every 100 batches (less frequent, more efficient)
+            if batch_count % 100 == 0:
+                torch.cuda.empty_cache()
+    
+    # Final cleanup
+    del gpu_tensor, threshold_mask
+    torch.cuda.empty_cache()
+    
     return recon_sum, sparsity_sum, concept_counts
 
 
@@ -364,6 +444,11 @@ def main():
             "l0": l0 / ds,
         }.items():
             logger.logkv(k, v)
+        
+        # Log memory stats every 10 epochs
+        if ep % 10 == 0:
+            logger.log_memory_stats()
+        
         logger.dumpkvs()
         print(f"ep {ep:04d}  rec {rec:.4f}  spars {sp:.4f}")
 
@@ -433,15 +518,22 @@ def parse_cfg() -> Cfg:
 
 
 def make_dataloader(cfg) -> DataLoader:
+    # Optimize for memory efficiency over throughput
+    dataset = LazyCPUData(cfg.emb, key="cfc_train")
+
     train_loader = DataLoader(
-        LazyCPUData(cfg.emb, key="cfc_train"),
+        dataset,
         batch_size=int(cfg.batch),
         shuffle=True,
-        num_workers=2,  # num_workers=0,
-        prefetch_factor=2,
-        persistent_workers=True,
-        pin_memory=True,
+        num_workers=1,  # Reduced to minimize memory overhead
+        prefetch_factor=1,  # Minimal prefetch to reduce memory
+        persistent_workers=False,  # Let workers die to free memory
+        pin_memory=torch.cuda.is_available(),  # Only if GPU available
+        drop_last=True,  # Consistent batch sizes for memory pool
     )
+
+    # Store dataset reference for cleanup
+    train_loader._dataset_ref = dataset
     return train_loader
 
 
