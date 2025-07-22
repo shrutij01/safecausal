@@ -54,13 +54,13 @@ def layer_normalise_(
     """
     Memory-efficient layer normalization over the last dimension.
     """
-    mu = x.mean(dim=-1, keepdim=True)  
+    mu = x.mean(dim=-1, keepdim=True)
     var = x.var(dim=-1, keepdim=True, unbiased=False)
     inv_std = (var + eps).rsqrt_()  # in-place rsqrt for efficiency
-    
+
     # Fused normalize operation
     x_norm = x.sub(mu).mul_(inv_std)  # sub creates new tensor, mul_ in-place
-    
+
     return x_norm, {"mu": mu, "inv_std": inv_std}
 
 
@@ -70,10 +70,10 @@ def fused_layer_norm_inplace_(x: Tensor, eps: float = 1e-5) -> Tensor:
     Ultra-fast in-place layer normalization for training loops.
     """
     mu = x.mean(dim=-1, keepdim=True)
-    var = x.var(dim=-1, keepdim=True, unbiased=False) 
+    var = x.var(dim=-1, keepdim=True, unbiased=False)
     inv_std = (var + eps).rsqrt_()
-    
-    # In-place normalization 
+
+    # In-place normalization
     x.sub_(mu).mul_(inv_std)
     return x
 
@@ -206,7 +206,7 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         self.level = n_concepts
 
         self.epoch = 0
-        
+
         # Cache last forward pass results to avoid recomputation
         self._cached_h = None
 
@@ -237,7 +237,7 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         """(loss, ineq) as floats – call *after* the last closure."""
         state = self.last_cmp_state  # Cooper stores it here
         return float(state.loss), float(state.ineq_defect)
-    
+
     def get_cached_hidden(self) -> Tensor:
         """Get hidden states from last forward pass to avoid recomputation."""
         return self._cached_h
@@ -257,15 +257,20 @@ class Logger:
     def logkv(self, k, v):
         self._buf[k] = float(v) if torch.is_tensor(v) else v
         return v
-    
+
     def log_memory_stats(self):
         """Log current GPU memory usage."""
         if torch.cuda.is_available():
-            self._buf.update({
-                "gpu_memory_allocated_mb": torch.cuda.memory_allocated() / 1024**2,
-                "gpu_memory_reserved_mb": torch.cuda.memory_reserved() / 1024**2,
-                "gpu_memory_cached_mb": torch.cuda.memory_cached() / 1024**2,
-            })
+            self._buf.update(
+                {
+                    "gpu_memory_allocated_mb": torch.cuda.memory_allocated()
+                    / 1024**2,
+                    "gpu_memory_reserved_mb": torch.cuda.memory_reserved()
+                    / 1024**2,
+                    "gpu_memory_cached_mb": torch.cuda.memory_cached()
+                    / 1024**2,
+                }
+            )
 
     def dumpkvs(self):
         if self._buf:
@@ -294,6 +299,7 @@ class LazyCPUData(Dataset):
             self._rep_dim = f[key].shape[1]  # (N, rep_dim)
 
         # Pre-allocate numpy buffer for zero-copy operations
+        breakpoint()
         self._buffer = np.empty((2, self._rep_dim), dtype=np.float32)
         self._delta_buffer = np.empty(self._rep_dim, dtype=np.float32)
 
@@ -364,34 +370,42 @@ def train_epoch(
     recon_sum = 0.0
     sparsity_sum = 0.0
     concept_counts = 0
-    
+
     # Pre-allocated tensors to eliminate dynamic allocation
     gpu_tensor = None
     threshold_mask = None
     batch_count = 0
     renorm_counter = 0
-    
+
     # Get batch and hidden dimensions for pre-allocation
     sample_batch = next(iter(dataloader))
     batch_size, input_dim = sample_batch.shape
     hid_dim = cfg.hid
-    
+
     # Pre-allocate all working tensors on GPU
     if torch.cuda.is_available():
-        gpu_tensor = torch.empty((batch_size, input_dim), device=dev, dtype=torch.float32)
-        threshold_mask = torch.empty((batch_size, hid_dim), device=dev, dtype=torch.bool)
-    
+        gpu_tensor = torch.empty(
+            (batch_size, input_dim), device=dev, dtype=torch.float32
+        )
+        threshold_mask = torch.empty(
+            (batch_size, hid_dim), device=dev, dtype=torch.bool
+        )
+
     # Mixed precision scaler for 2x speedup
-    scaler = torch.cuda.amp.GradScaler() if cfg.use_amp and torch.cuda.is_available() else None
+    scaler = (
+        torch.cuda.amp.GradScaler()
+        if cfg.use_amp and torch.cuda.is_available()
+        else None
+    )
 
     for batch_idx, delta_z_cpu in enumerate(dataloader):
         with torch.cuda.device(dev):
             # Efficient GPU transfer with pre-allocated tensor
             gpu_tensor.copy_(delta_z_cpu, non_blocking=True)
-            
+
             # Zero gradients before forward pass
             optim.zero_grad(set_to_none=True)
-            
+
             # Mixed precision forward pass
             if scaler is not None:
                 with torch.cuda.amp.autocast():
@@ -399,40 +413,40 @@ def train_epoch(
                 # Note: Cooper handles its own scaling internally
             else:
                 optim.step(ssae.closure, gpu_tensor, cfg.loss)
-            
+
             # Post-step weight operations
             with torch.no_grad():
                 if dict.decoder.weight.grad is not None:
                     project_decoder_grads_(dict.decoder.weight)
-                
+
                 # Renormalize decoder columns at configured frequency
                 renorm_counter += 1
                 if renorm_counter % cfg.renorm_epochs == 0:
                     renorm_decoder_cols_(dict.decoder.weight)
-            
+
             # Extract metrics
             recon_loss, sparsity_penalty = ssae.metrics()
             recon_sum += recon_loss
             sparsity_sum += sparsity_penalty
-            
+
             # Efficient sparsity counting using cached hidden states
             with torch.no_grad():
                 h = ssae.get_cached_hidden()  # Reuse from forward pass
-                
+
                 # Use pre-allocated mask for sparsity counting
                 torch.ge(torch.abs(h), cfg.ind_th, out=threshold_mask)
                 concept_counts += threshold_mask.sum().item()
-            
+
             batch_count += 1
-            
+
             # Memory cleanup every 100 batches (less frequent, more efficient)
             if batch_count % 100 == 0:
                 torch.cuda.empty_cache()
-    
+
     # Final cleanup
     del gpu_tensor, threshold_mask
     torch.cuda.empty_cache()
-    
+
     return recon_sum, sparsity_sum, concept_counts
 
 
@@ -463,11 +477,11 @@ def main():
             "l0": l0 / ds,
         }.items():
             logger.logkv(k, v)
-        
+
         # Log memory stats every 10 epochs
         if ep % 10 == 0:
             logger.log_memory_stats()
-        
+
         logger.dumpkvs()
         print(f"ep {ep:04d}  rec {rec:.4f}  spars {sp:.4f}")
 
@@ -516,7 +530,7 @@ def parse_cfg() -> Cfg:
     add("--batch", type=int, default=32)
     add("--epochs", type=int, default=20_000)
     add("--lr", type=float, default=5e-4)
-    add("--oc", type=int, default=2)
+    add("--oc", type=int, default=10)
     add("--n-concepts", "-C", type=int, default=1)
     add("--warmup", type=int, default=2_000)
     add("--schedule", type=int, default=5_000)
