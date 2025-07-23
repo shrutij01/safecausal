@@ -508,14 +508,30 @@ def main():
     optim = make_optim(dict=dict, ssae=ssae, cfg=cfg)
 
     for ep in range(cfg.epochs):
-        rec, sp, l0 = train_epoch(dataloader, dict, ssae, optim, cfg, dev)
-        bs = cfg.batch
-        ds = dataloader.__len__()
-        for k, v in {
-            "recon": rec / bs,
-            "spars": sp / bs,
-            "l0": l0 / ds,
-        }.items():
+        ssae.epoch = ep  # Update epoch for sparsity scheduling
+        total_recon_loss, total_sparsity_defect, total_active_concepts = (
+            train_epoch(dataloader, dict, ssae, optim, cfg, dev)
+        )
+
+        # Calculate correct averages
+        num_batches = len(dataloader)
+        dataset_size: int = len(dataloader.dataset)
+
+        # Log epoch metrics with correct normalization
+        epoch_metrics = {
+            "epoch": ep,
+            "recon_loss": total_recon_loss
+            / num_batches,  # Average loss per batch
+            "sparsity_defect": total_sparsity_defect
+            / num_batches,  # Average constraint violation
+            "l0_sparsity": total_active_concepts
+            / (dataset_size * cfg.hid),  # Fraction of active neurons
+            "sparsity_target": ssae.level,  # Current scheduled sparsity target
+            "constraint_violation": total_sparsity_defect
+            / num_batches,  # Same as sparsity_defect but clearer name
+        }
+
+        for k, v in epoch_metrics.items():
             logger.logkv(k, v)
 
         # Log memory stats every 10 epochs
@@ -523,7 +539,12 @@ def main():
             logger.log_memory_stats()
 
         logger.dumpkvs()
-        print(f"ep {ep:04d}  rec {rec:.4f}  spars {sp:.4f}")
+        print(
+            f"ep {ep:04d}  recon_loss {epoch_metrics['recon_loss']:.4f}  "
+            f"sparsity_defect {epoch_metrics['sparsity_defect']:.4f}  "
+            f"target {epoch_metrics['sparsity_target']:.4f}  "
+            f"l0 {epoch_metrics['l0_sparsity']:.4f}"
+        )
 
     dump_run(cfg.emb.parent / "run_out", dict, cfg)
 
