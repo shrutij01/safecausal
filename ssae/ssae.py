@@ -649,5 +649,5 @@ def make_optim(dict: torch.nn.Module, ssae, cfg: Cfg):
 
 
 if __name__ == "__main__":
-    with dbg.debug_on_exception():
-        main()
+    # with dbg.debug_on_exception():
+    main()
