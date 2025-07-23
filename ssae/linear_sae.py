@@ -22,7 +22,7 @@ from box import Box
 import debug_tools as dbg
 
 
-def set_seeds(seed: int, deterministic: bool = True) -> None:
+def set_seeds(seed: int, deterministic: bool = False) -> None:
     """
     Initialise every RNG we care about.
 
@@ -45,6 +45,10 @@ def set_seeds(seed: int, deterministic: bool = True) -> None:
     torch.cuda.manual_seed_all(seed)
 
     if deterministic:
+        # reduces speed so only use when need bit-perfect reproducibility
+        import os
+
+        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
         torch.use_deterministic_algorithms(True)
         torch.backends.cudnn.benchmark = False
 
