@@ -229,12 +229,12 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
 
     def compute_cmp_state(
         self,
-        z: Tensor,
+        delta_z: Tensor,
         loss_type: str = "relative",
     ) -> cooper.CMPState:
         """Return CMPState used by Cooper’s optimiser."""
-        z_hat, h = self.model(z)
-        loss = self._LOSS[loss_type](z, z_hat)
+        delta_z_hat, h = self.model(delta_z)
+        loss = self._LOSS[loss_type](delta_z, delta_z_hat)
 
         # Cache hidden states for sparsity computation
         self._cached_h = h
@@ -428,7 +428,7 @@ def train_epoch(
             gpu_tensor.copy_(delta_z_cpu, non_blocking=True)
 
             # Zero gradients before forward pass
-            optim_kwargs = {"inputs": gpu_tensor, "loss": cfg.loss}
+            optim_kwargs = {"delta_z": gpu_tensor, "loss_type": cfg.loss}
 
             # Mixed precision forward pass
             if scaler is not None:
