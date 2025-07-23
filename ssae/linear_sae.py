@@ -187,6 +187,7 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
     def __init__(
         self,
         model: torch.nn.Module,
+        dev: str = "cpu",  # Device for the model
         *,
         batch: int,
         hid: int,
@@ -211,7 +212,7 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         # Cache last forward pass results to avoid recomputation
         self._cached_h = None
         multiplier = cooper.multipliers.DenseMultiplier(num_constraints=1).to(
-            model.device
+            dev
         )
 
         self.sparsity_constraint = cooper.Constraint(
@@ -485,7 +486,7 @@ def main():
         else torch.device("cpu")
     )
     dict = make_dict(cfg).to(dev)
-    ssae = make_ssae(dict, cfg)
+    ssae = make_ssae(dict, cfg, dev)
     optim = make_optim(dict=dict, ssae=ssae, cfg=cfg)
 
     for ep in range(cfg.epochs):
@@ -599,9 +600,10 @@ def make_dict(cfg: Cfg) -> torch.nn.Module:
     return DictLinearAE(cfg.extra.rep_dim, cfg.hid, cfg.norm)
 
 
-def make_ssae(model: torch.nn.Module, cfg: Cfg):
+def make_ssae(model: torch.nn.Module, cfg: Cfg, dev: str):
     return SSAE(
         model=model,
+        dev=dev,
         batch=cfg.batch,
         hid=cfg.hid,
         n_concepts=cfg.n_concepts,
