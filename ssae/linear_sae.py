@@ -412,7 +412,7 @@ def train_epoch(
             gpu_tensor.copy_(delta_z_cpu, non_blocking=True)
 
             # Zero gradients before forward pass
-            optim.zero_grad(set_to_none=True)
+            optim.zero_grad()
 
             # Mixed precision forward pass
             if scaler is not None:
