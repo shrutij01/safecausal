@@ -195,7 +195,7 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         schedule: int = 5_000,
         target: float = 0.10,
     ) -> None:
-        super().__init__(is_constrained=True)
+        super().__init__()
         self.model = model
         self.batch, self.hid = batch, hid
 
