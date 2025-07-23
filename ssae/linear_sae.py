@@ -3,6 +3,7 @@ import random
 from typing import Any, Dict, Tuple
 from types import SimpleNamespace
 from matplotlib.pyplot import box
+from traitlets import observe
 import hashlib, json, yaml
 from pathlib import Path
 from dataclasses import asdict, dataclass, field, fields
@@ -209,6 +210,15 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
 
         # Cache last forward pass results to avoid recomputation
         self._cached_h = None
+        multiplier = cooper.multipliers.DenseMultiplier(num_constraints=1).to(
+            model.device
+        )
+
+        self.sparsity_constraint = cooper.Constraint(
+            constraint_type=cooper.ConstraintType.INEQUALITY,
+            formulation_type=cooper.formulations.Lagrangian,
+            multiplier=multiplier,
+        )
 
     def _tick_schedule(self) -> None:
         if self.epoch < self._warm:
@@ -230,13 +240,19 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
 
         self._tick_schedule()
         ineq = h.abs().sum() / (self.batch * self.hid) - self.level
-        return cooper.CMPState(loss=loss, ineq_defect=ineq, eq_defect=None)
+        constraint_state = cooper.ConstraintState(violation=ineq)
+        observed_constraints = {self.sparsity_constraint: constraint_state}
+        return cooper.CMPState(
+            loss=loss, observed_constraints=observed_constraints
+        )
 
     # ──────────────────────────────────────────────────────────────
     def metrics(self) -> tuple[float, float]:
         """(loss, ineq) as floats – call *after* the last closure."""
         state = self.last_cmp_state  # Cooper stores it here
-        return float(state.loss), float(state.ineq_defect)
+        return float(state.loss), float(
+            state.observed_constraints[self.sparsity_constraint].violation
+        )
 
     def get_cached_hidden(self) -> Tensor:
         """Get hidden states from last forward pass to avoid recomputation."""
@@ -368,7 +384,6 @@ def train_epoch(
     dict,
     ssae,
     optim,
-    form,
     cfg,
     dev,
 ) -> Tuple[float, float, float]:
@@ -412,15 +427,15 @@ def train_epoch(
             gpu_tensor.copy_(delta_z_cpu, non_blocking=True)
 
             # Zero gradients before forward pass
-            optim.zero_grad()
+            optim_kwargs = {ssae.closure, gpu_tensor, cfg.loss}
 
             # Mixed precision forward pass
             if scaler is not None:
                 with torch.cuda.amp.autocast():
-                    optim.step(ssae.closure, gpu_tensor, cfg.loss)
+                    optim.roll(compute_cmp_state_kwargs=optim_kwargs)
                 # Note: Cooper handles its own scaling internally
             else:
-                optim.step(ssae.closure, gpu_tensor, cfg.loss)
+                optim.roll(compute_cmp_state_kwargs=optim_kwargs)
 
             # Post-step weight operations
             with torch.no_grad():
@@ -471,12 +486,10 @@ def main():
     )
     dict = make_dict(cfg).to(dev)
     ssae = make_ssae(dict, cfg)
-    optim, form = make_optim(dict=dict, ssae=ssae, cfg=cfg)
+    optim = make_optim(dict=dict, ssae=ssae, cfg=cfg)
 
     for ep in range(cfg.epochs):
-        rec, sp, l0 = train_epoch(
-            dataloader, dict, ssae, optim, form, cfg, dev
-        )
+        rec, sp, l0 = train_epoch(dataloader, dict, ssae, optim, cfg, dev)
         bs = cfg.batch
         ds = dataloader.__len__()
         for k, v in {
@@ -599,23 +612,20 @@ def make_ssae(model: torch.nn.Module, cfg: Cfg):
 
 
 def make_optim(dict: torch.nn.Module, ssae, cfg: Cfg):
-    primal_optimizer = cooper.optim.ExtraAdam(
-        list(dict.parameters()), lr=cfg.lr
-    )
+    primal_optimizer = cooper.optim.ExtraAdam(dict.parameters(), lr=cfg.lr)
     dual_lr = cfg.lr / 2  # dual_lr should be less than primal_lr
     # 0.5 is common from extra gradient method literature
-    dual_optimizer = cooper.optim.partial_optimizer(
-        cooper.optim.ExtraAdam, lr=dual_lr
-    )
+    # todo: how to select the dual optimizer?
+    dual_optimizer = cooper.optim.ExtraAdam(ssae.dual_parameters(), lr=dual_lr)
 
     # Setup the constrained optimizer using Cooper's Lagrangian formulation
-    formulation = cooper.LagrangianFormulation(ssae)
-    coop_optimizer = cooper.ConstrainedOptimizer(
-        formulation=formulation,
+    # todo: check if we need to use SimultaneousOptimizer
+    coop_optimizer = cooper.optim.SimultaneousOptimizer(
+        cmp=ssae,
         primal_optimizer=primal_optimizer,
         dual_optimizer=dual_optimizer,
     )
-    return coop_optimizer, formulation
+    return coop_optimizer
 
 
 if __name__ == "__main__":
