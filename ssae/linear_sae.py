@@ -212,7 +212,8 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         self.epoch = 0
 
         # Cache last forward pass results to avoid recomputation
-        self._cached_h = None
+        self._cached_h: torch.Tensor | None = None
+        self.last_cmp_state: cooper.CMPState | None = None
         multiplier = cooper.multipliers.DenseMultiplier(num_constraints=1).to(
             dev
         )
@@ -246,20 +247,30 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         ineq = h.abs().sum() / (self.batch * self.hid) - self.level
         constraint_state = cooper.ConstraintState(violation=ineq)
         observed_constraints = {self.sparsity_constraint: constraint_state}
-        return cooper.CMPState(
+        cmp_state = cooper.CMPState(
             loss=loss, observed_constraints=observed_constraints
         )
+        self.last_cmp_state = cmp_state  # Cache for metrics
+        return cmp_state
 
     # ──────────────────────────────────────────────────────────────
     def metrics(self) -> tuple[float, float]:
         """(loss, ineq) as floats – call *after* the last closure."""
-        state = self.last_cmp_state  # Cooper stores it here
+        if self.last_cmp_state is None:
+            raise RuntimeError(
+                "metrics() called before compute_cmp_state(). No cached state available."
+            )
+        state = self.last_cmp_state
         return float(state.loss), float(
             state.observed_constraints[self.sparsity_constraint].violation
         )
 
     def get_cached_hidden(self) -> Tensor:
         """Get hidden states from last forward pass to avoid recomputation."""
+        if self._cached_h is None:
+            raise RuntimeError(
+                "get_cached_hidden() called before compute_cmp_state()"
+            )
         return self._cached_h
 
 
