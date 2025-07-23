@@ -428,7 +428,7 @@ def train_epoch(
             gpu_tensor.copy_(delta_z_cpu, non_blocking=True)
 
             # Zero gradients before forward pass
-            optim_kwargs = {ssae.closure, gpu_tensor, cfg.loss}
+            optim_kwargs = {"inputs": gpu_tensor, "loss": cfg.loss}
 
             # Mixed precision forward pass
             if scaler is not None:
@@ -618,7 +618,9 @@ def make_optim(dict: torch.nn.Module, ssae, cfg: Cfg):
     dual_lr = cfg.lr / 2  # dual_lr should be less than primal_lr
     # 0.5 is common from extra gradient method literature
     # todo: how to select the dual optimizer?
-    dual_optimizer = cooper.optim.ExtraAdam(ssae.dual_parameters(), lr=dual_lr, maximize=True)
+    dual_optimizer = cooper.optim.ExtraAdam(
+        ssae.dual_parameters(), lr=dual_lr, maximize=True
+    )
 
     # Setup the constrained optimizer using Cooper's Lagrangian formulation
     # todo: check if we need to use SimultaneousOptimizer
