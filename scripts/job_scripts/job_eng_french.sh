@@ -1,54 +1,51 @@
 #!/bin/bash
 
-# Define hyperparameters
+# Define hyperparameters for refactored SSAE code
 embedding_files=(
     "/network/scratch/j/joshi.shruti/ssae/eng-french/L_32_M_llama3eng-french.h5"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_31_M_llama3eng-french.h5"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_21_M_llama3eng-french.h5"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_15_M_llama3eng-french.h5"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_13_M_llama3eng-french.h5"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_5_M_llama3eng-french.h5"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_3_M_llama3eng-french.h5"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_1_M_llama3eng-french.h5"
 )
+
 data_configs=(
     "/network/scratch/j/joshi.shruti/ssae/eng-french/L_32eng-french.yaml"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_31eng-french.yaml"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_21eng-french.yaml"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_15eng-french.yaml"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_13eng-french.yaml"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_5eng-french.yaml"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_3eng-french.yaml"
-    # "/network/scratch/j/joshi.shruti/ssae/eng-french/L_1eng-french.yaml"
 )
-overcompleteness_factors=(
-    "--overcompleteness-factor 1"
+
+# Updated parameter names to match refactored code
+overcompletenesses=(
+    "--oc 1"    # overcompleteness factor
 )
-scheduler_epochs=(
-    "--scheduler-epochs 1000"
+schedules=(
+    "--schedule 1000"   # scheduler-epochs
 )
-target_sparse_levels=(
-    "--target-sparse-level 0.1"
+targets=(
+    "--target 0.1"      # target-sparse-level
 )
 batch_sizes=(
-    "--batch-size 64"
+    "--batch 64"        # batch-sizeh
 )
 norm_types=(
-    "--norm-type ln"
+    "--norm ln"         # norm-type
 )
 loss_types=(
-    "--loss-type absolute"
+    "--loss absolute"   # loss-type
 )
-primal_lrs=(
-    "--primal-lr 0.0005"
+learning_rates=(
+    "--lr 0.0005"       # primal-lr
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2" "--seed 5" "--seed 7"
 )
 
+# New optimized parameters from refactored code
+renorm_epochs=(
+    "--renorm-epochs 50"    # renormalization frequency for the decoder columns
+)
+use_amp=(
+    "--use-amp"             # Enable mixed precision training
+)
+
 # Job settings
-job_name="test"
-output="job_output_%j.txt"  # %j will be replaced by the job ID
+job_name="ssae_optimized"
+output="job_output_%j.txt"
 error="job_error_%j.txt"
 time_limit="0:15:00"
 memory="32Gb"
@@ -65,38 +62,44 @@ for idx in "${!embedding_files[@]}"; do
     embedding_file="${embedding_files[$idx]}"
     data_config="${data_configs[$idx]}"
 
-    for target_sparse_level in "${target_sparse_levels[@]}"; do
-        for primal_lr in "${primal_lrs[@]}"; do
-            for overcompleteness_factor in "${overcompleteness_factors[@]}"; do
+    for target in "${targets[@]}"; do
+        for lr in "${learning_rates[@]}"; do
+            for oc in "${overcompletenesses[@]}"; do
                 for batch_size in "${batch_sizes[@]}"; do
                     for norm_type in "${norm_types[@]}"; do
                         for loss_type in "${loss_types[@]}"; do
-                            for scheduler_epoch in "${scheduler_epochs[@]}"; do
-                                for seed in "${seeds[@]}"; do
-                                    # Define a script name
-                                    script_name="generated_jobs/job_${counter}.sh"
+                            for schedule in "${schedules[@]}"; do
+                                for renorm_epoch in "${renorm_epochs[@]}"; do
+                                    for amp in "${use_amp[@]}"; do
+                                        for seed in "${seeds[@]}"; do
+                                            # Define a script name
+                                            script_name="generated_jobs/job_${counter}.sh"
 
-                                    # Create a batch script for each job
-                                    echo "#!/bin/bash" > "${script_name}"
-                                    echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
-                                    echo "#SBATCH --time=${time_limit}" >> "${script_name}"
-                                    echo "#SBATCH --mem=${memory}" >> "${script_name}"
-                                    echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
-                                    echo "" >> "${script_name}"
-                                    echo "module load python/3.10" >> "${script_name}"
-                                    echo "source /network/scratch/j/joshi.shruti/venvs/llm/bin/activate" >> "${script_name}"
-                                    echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/steeragents:/home/mila/j/joshi.shruti/causalrepl_space/cooper/:$PYTHONPATH\"" >> "${script_name}"
-                                    echo "cd /home/mila/j/joshi.shruti/causalrepl_space/steeragents/ssae" >> "${script_name}"
-                                    echo "python linear_sae.py --embeddings-file ${embedding_file} --data-config-file ${data_config} ${overcompleteness_factor} ${primal_lr} ${loss_type} ${norm_type} ${target_sparse_level} ${batch_size} ${scheduler_epoch} ${seed}" >> "${script_name}"
+                                            # Create a batch script for each job
+                                            echo "#!/bin/bash" > "${script_name}"
+                                            echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
+                                            echo "#SBATCH --time=${time_limit}" >> "${script_name}"
+                                            echo "#SBATCH --mem=${memory}" >> "${script_name}"
+                                            echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
+                                            echo "" >> "${script_name}"
+                                            echo "module load python/3.10" >> "${script_name}"
+                                            echo "source /network/scratch/j/joshi.shruti/venvs/llm/bin/activate" >> "${script_name}"
+                                            echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/steeragents:$PYTHONPATH\"" >> "${script_name}"
+                                            echo "cd /home/mila/j/joshi.shruti/causalrepl_space/steeragents/ssae" >> "${script_name}"
 
-                                    # Make the script executable
-                                    chmod +x "${script_name}"
+                                            # Updated command with new parameter names and optimizations
+                                            echo "python ssae.py ${embedding_file} ${data_config} ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${amp} ${seed}" >> "${script_name}"
 
-                                    # Submit the job
-                                    sbatch "${script_name}"
+                                            # Make the script executable
+                                            chmod +x "${script_name}"
 
-                                    # Increment counter
-                                    ((counter++))
+                                            # Submit the job
+                                            sbatch "${script_name}"
+
+                                            # Increment counter
+                                            ((counter++))
+                                        done
+                                    done
                                 done
                             done
                         done
@@ -106,4 +109,3 @@ for idx in "${!embedding_files[@]}"; do
         done
     done
 done
-
