@@ -187,7 +187,7 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
     def __init__(
         self,
         model: torch.nn.Module,
-        dev: str = "cpu",  # Device for the model
+        dev: torch.device,  # Device for the model
         *,
         batch: int,
         hid: int,
@@ -600,7 +600,7 @@ def make_dict(cfg: Cfg) -> torch.nn.Module:
     return DictLinearAE(cfg.extra.rep_dim, cfg.hid, cfg.norm)
 
 
-def make_ssae(model: torch.nn.Module, cfg: Cfg, dev: str):
+def make_ssae(model: torch.nn.Module, cfg: Cfg, dev: torch.device):
     return SSAE(
         model=model,
         dev=dev,
@@ -624,8 +624,8 @@ def make_optim(dict: torch.nn.Module, ssae, cfg: Cfg):
     # todo: check if we need to use SimultaneousOptimizer
     coop_optimizer = cooper.optim.SimultaneousOptimizer(
         cmp=ssae,
-        primal_optimizer=primal_optimizer,
-        dual_optimizer=dual_optimizer,
+        primal_optimizers=primal_optimizer,
+        dual_optimizers=dual_optimizer,
     )
     return coop_optimizer
 
