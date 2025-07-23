@@ -226,7 +226,7 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         t = (self.epoch - self._warm) / self._T
         self.level = self._lvl0 + min(1.0, t) * (self._lvl1 - self._lvl0)
 
-    def closure(
+    def compute_cmp_state(
         self,
         z: Tensor,
         loss_type: str = "relative",
