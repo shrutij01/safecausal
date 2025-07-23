@@ -428,15 +428,15 @@ def train_epoch(
             gpu_tensor.copy_(delta_z_cpu, non_blocking=True)
 
             # Zero gradients before forward pass
-            optim_kwargs = {"delta_z": gpu_tensor, "loss_type": cfg.loss}
+            compute_cmp_state_kwargs = {"delta_z": gpu_tensor, "loss_type": cfg.loss}
 
             # Mixed precision forward pass
             if scaler is not None:
                 with torch.cuda.amp.autocast():
-                    optim.roll(compute_cmp_state_kwargs=optim_kwargs)
+                    optim.roll(compute_cmp_state_kwargs=compute_cmp_state_kwargs)
                 # Note: Cooper handles its own scaling internally
             else:
-                optim.roll(compute_cmp_state_kwargs=optim_kwargs)
+                optim.roll(compute_cmp_state_kwargs=compute_cmp_state_kwargs)
 
             # Post-step weight operations
             with torch.no_grad():
