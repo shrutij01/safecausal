@@ -190,7 +190,6 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
 
     def __init__(
         self,
-        model: torch.nn.Module,
         dev: torch.device,  # Device for the model
         *,
         batch: int,
@@ -201,7 +200,6 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         target: float = 0.10,
     ) -> None:
         super().__init__()
-        self.model = model
         self.batch, self.hid = batch, hid
 
         # sparsity schedule
@@ -233,11 +231,12 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
 
     def compute_cmp_state(
         self,
+        model: nn.Module,
         delta_z: Tensor,
         loss_type: str = "relative",
     ) -> cooper.CMPState:
         """Return CMPState used by Cooper’s optimiser."""
-        delta_z_hat, h = self.model(delta_z)
+        delta_z_hat, h = model(delta_z)
         loss = self._LOSS[loss_type](delta_z, delta_z_hat)
 
         # Cache hidden states for sparsity computation
@@ -432,7 +431,11 @@ def train_epoch(
             gpu_tensor.copy_(delta_z_cpu, non_blocking=True)
 
             # Zero gradients before forward pass
-            optim_kwargs = {"delta_z": gpu_tensor, "loss_type": cfg.loss}
+            optim_kwargs = {
+                "model": dict,
+                "delta_z": gpu_tensor,
+                "loss_type": cfg.loss,
+            }
 
             # Mixed precision forward pass
             if scaler is not None:
@@ -627,8 +630,7 @@ def make_optim(dict: torch.nn.Module, ssae, cfg: Cfg):
     )
 
     # Setup the constrained optimizer using Cooper's Lagrangian formulation
-    # todo: check if we need to use SimultaneousOptimizer
-    coop_optimizer = cooper.optim.SimultaneousOptimizer(
+    coop_optimizer = cooper.optim.ExtrapolationConstrainedOptimizer(
         cmp=ssae,
         primal_optimizers=primal_optimizer,
         dual_optimizers=dual_optimizer,
