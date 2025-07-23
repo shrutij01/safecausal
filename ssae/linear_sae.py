@@ -583,7 +583,6 @@ def make_dataloader(cfg) -> DataLoader:
 
 
 def make_dict(cfg: Cfg) -> torch.nn.Module:
-    breakpoint()  # Debugging point to inspect cfg
     return DictLinearAE(cfg.extra.rep_dim, cfg.hid, cfg.norm)
 
 
