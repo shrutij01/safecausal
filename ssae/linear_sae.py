@@ -493,7 +493,7 @@ def main():
         else torch.device("cpu")
     )
     dict = make_dict(cfg).to(dev)
-    ssae = make_ssae(dict, cfg, dev)
+    ssae = make_ssae(cfg, dev)
     optim = make_optim(dict=dict, ssae=ssae, cfg=cfg)
 
     for ep in range(cfg.epochs):
@@ -607,9 +607,8 @@ def make_dict(cfg: Cfg) -> torch.nn.Module:
     return DictLinearAE(cfg.extra.rep_dim, cfg.hid, cfg.norm)
 
 
-def make_ssae(model: torch.nn.Module, cfg: Cfg, dev: torch.device):
+def make_ssae(cfg: Cfg, dev: torch.device):
     return SSAE(
-        model=model,
         dev=dev,
         batch=cfg.batch,
         hid=cfg.hid,
