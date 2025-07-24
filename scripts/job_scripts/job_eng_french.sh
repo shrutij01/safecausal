@@ -47,7 +47,7 @@ use_amp=(
 job_name="ssae_optimized"
 output="job_output_%j.txt"
 error="job_error_%j.txt"
-time_limit="0:15:00"
+time_limit="1:00:00"
 memory="32Gb"
 gpu_req="gpu:1"
 
