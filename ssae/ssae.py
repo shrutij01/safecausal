@@ -242,9 +242,10 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
 
         # Cache hidden states for sparsity computation
         self._cached_h = h
+        actual_batch_size = h.shape[0]
 
         self._tick_schedule()
-        ineq = h.abs().sum() / (self.batch * self.hid) - self.level
+        ineq = h.abs().sum() / (actual_batch_size * self.hid) - self.level
         constraint_state = cooper.ConstraintState(violation=ineq)
         observed_constraints = {self.sparsity_constraint: constraint_state}
         cmp_state = cooper.CMPState(
@@ -522,10 +523,8 @@ def main():
             "epoch": ep,
             "recon_loss": total_recon_loss
             / num_batches,  # Average loss per batch
-            "sparsity_defect": total_sparsity_defect
-            / num_batches,  # Average constraint violation
             "l0_sparsity": total_active_concepts
-            / (dataset_size * cfg.hid),  # Fraction of active neurons
+            / dataset_size,  # Number of active neurons
             "sparsity_target": ssae.level,  # Current scheduled sparsity target
             "constraint_violation": total_sparsity_defect
             / num_batches,  # Same as sparsity_defect but clearer name
@@ -541,7 +540,7 @@ def main():
         logger.dumpkvs()
         print(
             f"ep {ep:04d}  recon_loss {epoch_metrics['recon_loss']:.4f}  "
-            f"sparsity_defect {epoch_metrics['sparsity_defect']:.4f}  "
+            f"sparsity_defect {epoch_metrics['constraint_violation']:.4f}  "
             f"target {epoch_metrics['sparsity_target']:.4f}  "
             f"l0 {epoch_metrics['l0_sparsity']:.4f}"
         )
@@ -594,7 +593,7 @@ def parse_cfg() -> Cfg:
     add("--oc", type=int, default=10)
     add("--n-concepts", "-C", type=int, default=1)
     add("--warmup", type=int, default=2_000)
-    add("--schedule", type=int, default=5_000)
+    add("--schedule", type=int, default=1_000)
     add("--target", type=float, default=0.1)
     add("--norm", choices=["ln", "gn", "bn"], default="ln")
     add("--loss", default="relative", choices=["relative", "absolute"])

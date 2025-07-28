@@ -11,10 +11,10 @@ data_configs=(
 
 # Updated parameter names to match refactored code
 overcompletenesses=(
-    "--oc 1"    # overcompleteness factor
+    "--oc 10"    # overcompleteness factor
 )
 schedules=(
-    "--schedule 1000"   # scheduler-epochs
+    "--schedule 3000" "--schedule 5000"   # scheduler-epochs
 )
 targets=(
     "--target 0.1"      # target-sparse-level
@@ -26,7 +26,7 @@ norm_types=(
     "--norm ln"         # norm-type
 )
 loss_types=(
-    "--loss absolute"   # loss-type
+    "--loss absolute"   "--loss relative" # loss-type
 )
 learning_rates=(
     "--lr 0.0005"       # primal-lr
