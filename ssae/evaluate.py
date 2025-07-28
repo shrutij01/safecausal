@@ -1,9 +1,9 @@
 from json import decoder
 from re import L
-import ssae.data_utils as utils
-import ssae.metrics as metrics
+import data_utils as utils
+import metrics
 
-from ssae.linear_sae import LinearSAE
+from ssae import DictLinearAE
 
 import argparse
 import torch
@@ -161,12 +161,12 @@ def load_ssae(
     modeldir: str, dataconfig: Box
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Load a LinearSAE model and return the decoder weights as a numpy array.
+    Load a DictLinearAE model and return the decoder weights as a numpy array.
     """
     modelconfig = load_model_config(modeldir)
-    model = LinearSAE(
+    model = DictLinearAE(
         rep_dim=dataconfig.rep_dim,
-        encoder_dim=int(
+        hid=int(
             modelconfig.num_concepts * modelconfig.overcompleteness_factor
         ),
         norm_type=modelconfig.norm_type,
@@ -177,9 +177,9 @@ def load_ssae(
     model.eval()
     return (
         model.decoder.weight.data,
-        model.decoder_bias.data,
+        model.decoder.bias.data,
         model.encoder.weight.data,
-        model.encoder_bias.data,
+        model.encoder.bias.data,
     )
 
 
@@ -341,11 +341,11 @@ def compare_top_tokens_with_steering(
     steering_vector: torch.Tensor,
     layer_idx: int = 16,  # Middle layer for steering
     top_k: int = 10,
-    alpha: float = 1.0  # Steering strength
+    alpha: float = 1.0,  # Steering strength
 ) -> dict:
     """
     Compare top-k tokens from original vs steered embeddings.
-    
+
     Args:
         model: Llama3 model
         tokenizer: Corresponding tokenizer
@@ -354,16 +354,16 @@ def compare_top_tokens_with_steering(
         layer_idx: Layer to apply steering intervention
         top_k: Number of top tokens to return
         alpha: Steering strength multiplier
-    
+
     Returns:
         Dict with 'original' and 'steered' top-k token predictions
     """
     model_device = next(model.parameters()).device
-    
+
     # Tokenize input
     inputs = tokenizer(input_text, return_tensors="pt").to(model_device)
     input_ids = inputs["input_ids"]
-    
+
     def get_top_tokens(apply_steering: bool = False) -> list:
         with torch.no_grad():
             # Forward pass with optional steering
@@ -374,50 +374,51 @@ def compare_top_tokens_with_steering(
                         hidden_states = output[0]
                     else:
                         hidden_states = output
-                    
+
                     # Add steering vector to last token position
-                    hidden_states[:, -1, :] += alpha * steering_vector.to(model_device)
-                    
+                    hidden_states[:, -1, :] += alpha * steering_vector.to(
+                        model_device
+                    )
+
                     if isinstance(output, tuple):
                         return (hidden_states, *output[1:])
                     return hidden_states
-                
+
                 # Register hook on transformer layer
-                hook_handle = model.model.layers[layer_idx].register_forward_hook(steering_hook)
-            
+                hook_handle = model.model.layers[
+                    layer_idx
+                ].register_forward_hook(steering_hook)
+
             # Get model outputs
             outputs = model(**inputs)
             logits = outputs.logits[:, -1, :]  # Last token logits
-            
+
             if apply_steering:
                 hook_handle.remove()
-            
+
             # Get top-k probabilities
             probs = F.softmax(logits, dim=-1)
             top_probs, top_indices = torch.topk(probs, top_k, dim=-1)
-            
+
             # Convert to tokens and probabilities
             top_tokens = []
             for prob, idx in zip(top_probs[0], top_indices[0]):
-                token = tokenizer.decode([idx.item()], skip_special_tokens=True)
+                token = tokenizer.decode(
+                    [idx.item()], skip_special_tokens=True
+                )
                 top_tokens.append((token, prob.item()))
-                
+
             return top_tokens
-    
+
     # Get predictions for both conditions
     original_tops = get_top_tokens(apply_steering=False)
     steered_tops = get_top_tokens(apply_steering=True)
-    
-    return {
-        "original": original_tops,
-        "steered": steered_tops
-    }
+
+    return {"original": original_tops, "steered": steered_tops}
 
 
 def print_token_comparison(
-    results: dict,
-    input_text: str,
-    concept: str
+    results: dict, input_text: str, concept: str
 ) -> None:
     """Pretty print the token comparison results."""
     print(f"\n{'='*80}")
@@ -427,16 +428,22 @@ def print_token_comparison(
     print(f"{'Original':<30} {'Steered':<30}")
     print(f"{'Token (Prob)':<30} {'Token (Prob)':<30}")
     print(f"{'-'*60}")
-    
+
     max_len = max(len(results["original"]), len(results["steered"]))
-    
+
     for i in range(max_len):
-        orig = results["original"][i] if i < len(results["original"]) else ("", 0.0)
-        steer = results["steered"][i] if i < len(results["steered"]) else ("", 0.0)
-        
+        orig = (
+            results["original"][i]
+            if i < len(results["original"])
+            else ("", 0.0)
+        )
+        steer = (
+            results["steered"][i] if i < len(results["steered"]) else ("", 0.0)
+        )
+
         orig_str = f"{orig[0]} ({orig[1]:.3f})" if orig[0] else ""
         steer_str = f"{steer[0]} ({steer[1]:.3f})" if steer[0] else ""
-        
+
         print(f"{orig_str:<30} {steer_str:<30}")
     print(f"{'='*80}\n")
 
@@ -445,7 +452,7 @@ def evaluate_steering_on_prompts(
     steering_vector: torch.Tensor,
     concept: str,
     model_name: str = "meta-llama/Meta-Llama-3-8B",
-    test_prompts: list = None
+    test_prompts: list = None,
 ) -> None:
     """
     Evaluate steering vector on a set of test prompts.
@@ -456,20 +463,20 @@ def evaluate_steering_on_prompts(
             "I think the best programming language is",
             "The meaning of life is",
             "In my opinion, the most important thing is",
-            "The future of AI will be"
+            "The future of AI will be",
         ]
-    
+
     try:
         print(f"Loading model: {model_name}")
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype=torch.float16,
-            device_map="auto"
+            model_name, torch_dtype=torch.float16, device_map="auto"
         )
-        
-        print(f"Evaluating steering vector for concept '{concept}' on {len(test_prompts)} prompts...")
-        
+
+        print(
+            f"Evaluating steering vector for concept '{concept}' on {len(test_prompts)} prompts..."
+        )
+
         for prompt in test_prompts:
             results = compare_top_tokens_with_steering(
                 model=model,
@@ -477,14 +484,16 @@ def evaluate_steering_on_prompts(
                 input_text=prompt,
                 steering_vector=steering_vector,
                 top_k=5,
-                alpha=1.0
+                alpha=1.0,
             )
-            
+
             print_token_comparison(results, prompt, concept)
-            
+
     except Exception as e:
         print(f"Error loading model or running evaluation: {e}")
-        print("Skipping steering evaluation - make sure you have the model available")
+        print(
+            "Skipping steering evaluation - make sure you have the model available"
+        )
         return
 
 
@@ -535,14 +544,17 @@ def main(args):
                 "std_cos": std_cos,
                 "steering_vector": steering_vector,
             }
-            
+
             # Evaluate steering vector on test prompts
-            if steering_vector is not None and hasattr(args, 'evaluate_steering') and args.evaluate_steering:
+            if (
+                steering_vector is not None
+                and hasattr(args, "evaluate_steering")
+                and args.evaluate_steering
+            ):
                 evaluate_steering_on_prompts(
-                    steering_vector=steering_vector,
-                    concept=concept
+                    steering_vector=steering_vector, concept=concept
                 )
-            
+
             if args.ood_data:
                 dirname = os.path.dirname(os.path.abspath(args.ood_data))
                 ood_concept_id = utils.load_json(
@@ -608,14 +620,17 @@ def main(args):
                 "std_cos": std_cos,
                 "steering_vector": steering_vector,
             }
-            
+
             # Evaluate steering vector on test prompts
-            if steering_vector is not None and hasattr(args, 'evaluate_steering') and args.evaluate_steering:
+            if (
+                steering_vector is not None
+                and hasattr(args, "evaluate_steering")
+                and args.evaluate_steering
+            ):
                 evaluate_steering_on_prompts(
-                    steering_vector=steering_vector,
-                    concept=concept
+                    steering_vector=steering_vector, concept=concept
                 )
-            
+
             if args.ood_data:
                 dirname = os.path.dirname(os.path.abspath(args.ood_data))
                 ood_concept_id = utils.load_json(
@@ -664,9 +679,9 @@ if __name__ == "__main__":
         "--ood-data", help="Path to OOD data file using the same dataconfig."
     )
     parser.add_argument(
-        "--evaluate-steering", 
+        "--evaluate-steering",
         action="store_true",
-        help="Evaluate steering vectors on test prompts with Llama3 model"
+        help="Evaluate steering vectors on test prompts with Llama3 model",
     )
     args = parser.parse_args()
     main(args)
