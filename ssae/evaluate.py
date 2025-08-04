@@ -22,7 +22,7 @@ from collections import Counter, defaultdict
 
 import itertools
 import os
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import PreTrainedTokenizerFast, LlamaForCausalLM
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -335,13 +335,14 @@ def split_test_data_by_concept(tilde_z_test, z_test, concept_labels_test):
 
 
 def compare_top_tokens_with_steering(
-    model: AutoModelForCausalLM,
-    tokenizer: AutoTokenizer,
+    model: LlamaForCausalLM,
+    tokenizer: PreTrainedTokenizerFast,
     input_text: str,
     steering_vector: torch.Tensor,
-    layer_idx: int = 16,  # Middle layer for steering
+    layer_idx: int = 16,  # Middle layer for steering (changed from 31)
     top_k: int = 10,
-    alpha: float = 1.0,  # Steering strength
+    alpha: float = 5.0,  # Steering strength (increased from 1.0)
+    debug: bool = True,  # Enable debugging
 ) -> dict:
     """
     Compare top-k tokens from original vs steered embeddings.
@@ -354,31 +355,118 @@ def compare_top_tokens_with_steering(
         layer_idx: Layer to apply steering intervention
         top_k: Number of top tokens to return
         alpha: Steering strength multiplier
+        debug: Enable debug prints
 
     Returns:
         Dict with 'original' and 'steered' top-k token predictions
     """
     model_device = next(model.parameters()).device
 
+    if debug:
+        print(f"\n🔧 DEBUG: Starting steering comparison")
+        print(f"📝 Input text: '{input_text}'")
+        print(f"🎯 Layer index: {layer_idx}")
+        print(f"💪 Alpha (steering strength): {alpha}")
+        print(f"📊 Steering vector shape: {steering_vector.shape}")
+        print(f"📊 Steering vector norm: {steering_vector.norm():.4f}")
+        print(f"🖥️  Model device: {model_device}")
+
     # Tokenize input
     inputs = tokenizer(input_text, return_tensors="pt").to(model_device)
     input_ids = inputs["input_ids"]
 
+    if debug:
+        print(f"🔤 Tokenized input shape: {input_ids.shape}")
+        print(f"🔤 Tokens: {tokenizer.convert_ids_to_tokens(input_ids[0])}")
+        print(f"🔤 Last token: '{tokenizer.decode(input_ids[0, -1])}'")
+        print(f"🏗️  Model total layers: {len(model.model.layers)}")
+
     def get_top_tokens(apply_steering: bool = False) -> list:
+        if debug:
+            mode = "STEERED" if apply_steering else "ORIGINAL"
+            print(f"\n🚀 Running {mode} forward pass...")
+
         with torch.no_grad():
             # Forward pass with optional steering
             if apply_steering:
+                if debug:
+                    print(f"🪝 Setting up steering hook on layer {layer_idx}")
+
                 # Hook to add steering vector at specified layer
                 def steering_hook(module, input, output):
+                    if debug:
+                        print(f"🎯 HOOK TRIGGERED on layer {layer_idx}")
+
                     if isinstance(output, tuple):
                         hidden_states = output[0]
                     else:
                         hidden_states = output
 
+                    if debug:
+                        print(f"📏 Hidden states shape: {hidden_states.shape}")
+                        print(
+                            f"📏 Last token hidden state shape: {hidden_states[:, -1, :].shape}"
+                        )
+
                     # Add steering vector to last token position
-                    hidden_states[:, -1, :] += alpha * steering_vector.to(
-                        model_device
-                    )
+                    steering_vec = steering_vector.to(model_device)
+
+                    # Store original for comparison
+                    original_hidden = hidden_states[:, -1, :].clone()
+
+                    # Ensure dimension compatibility
+                    if steering_vec.shape[0] != hidden_states.shape[-1]:
+                        if debug:
+                            print(
+                                f"⚠️  Dimension mismatch: steering_vec {steering_vec.shape} vs hidden_states {hidden_states.shape}"
+                            )
+                        # Pad or truncate if needed
+                        if steering_vec.shape[0] < hidden_states.shape[-1]:
+                            padding = torch.zeros(
+                                hidden_states.shape[-1]
+                                - steering_vec.shape[0],
+                                device=model_device,
+                            )
+                            steering_vec = torch.cat([steering_vec, padding])
+                            if debug:
+                                print(
+                                    f"🔧 Padded steering vector to {steering_vec.shape}"
+                                )
+                        else:
+                            steering_vec = steering_vec[
+                                : hidden_states.shape[-1]
+                            ]
+                            if debug:
+                                print(
+                                    f"✂️  Truncated steering vector to {steering_vec.shape}"
+                                )
+
+                    # Apply steering
+                    hidden_states[:, -1, :] += alpha * steering_vec
+
+                    if debug:
+                        print(
+                            f"📊 Original hidden norm: {original_hidden.norm():.4f}"
+                        )
+                        print(
+                            f"📊 Steering vec norm: {steering_vec.norm():.4f}"
+                        )
+                        print(
+                            f"📊 Scaled steering norm: {(alpha * steering_vec).norm():.4f}"
+                        )
+                        print(
+                            f"📊 Modified hidden norm: {hidden_states[:, -1, :].norm():.4f}"
+                        )
+
+                        # Check if steering actually changed the hidden states
+                        diff = (
+                            hidden_states[:, -1, :] - original_hidden
+                        ).norm()
+                        print(f"📊 Actual change magnitude: {diff:.4f}")
+                        if diff < 1e-6:
+                            print(
+                                "⚠️  WARNING: Very small change detected - steering might not be effective!"
+                            )
 
                     if isinstance(output, tuple):
                         return (hidden_states, *output[1:])
@@ -388,17 +476,34 @@ def compare_top_tokens_with_steering(
                 hook_handle = model.model.layers[
                     layer_idx
                 ].register_forward_hook(steering_hook)
+                if debug:
+                    print(f"✅ Hook registered on layer {layer_idx}")
 
             # Get model outputs
+            if debug:
+                print(f"🔮 Running forward pass...")
             outputs = model(**inputs)
             logits = outputs.logits[:, -1, :]  # Last token logits
 
+            if debug:
+                print(f"📊 Output logits shape: {logits.shape}")
+                print(
+                    f"📊 Logits range: [{logits.min():.3f}, {logits.max():.3f}]"
+                )
+
             if apply_steering:
                 hook_handle.remove()
+                if debug:
+                    print(f"🗑️  Hook removed")
 
             # Get top-k probabilities
             probs = F.softmax(logits, dim=-1)
             top_probs, top_indices = torch.topk(probs, top_k, dim=-1)
+
+            if debug:
+                print(
+                    f"🏆 Top {top_k} probabilities: {top_probs[0][:3].tolist()}"
+                )  # Show first 3
 
             # Convert to tokens and probabilities
             top_tokens = []
@@ -408,11 +513,39 @@ def compare_top_tokens_with_steering(
                 )
                 top_tokens.append((token, prob.item()))
 
+            if debug:
+                print(f"🎯 Top 3 tokens for {mode}: {top_tokens[:3]}")
+
             return top_tokens
 
     # Get predictions for both conditions
     original_tops = get_top_tokens(apply_steering=False)
     steered_tops = get_top_tokens(apply_steering=True)
+
+    if debug:
+        print(f"\n🔍 FINAL COMPARISON:")
+        print(f"📈 Original top-3: {original_tops[:3]}")
+        print(f"🎯 Steered top-3: {steered_tops[:3]}")
+
+        # Check if any tokens changed
+        orig_tokens = [token for token, _ in original_tops[:5]]
+        steer_tokens = [token for token, _ in steered_tops[:5]]
+
+        if orig_tokens == steer_tokens:
+            print(
+                "⚠️  WARNING: No change in top tokens - steering may not be working!"
+            )
+        else:
+            different_tokens = sum(
+                1
+                for i in range(min(len(orig_tokens), len(steer_tokens)))
+                if orig_tokens[i] != steer_tokens[i]
+            )
+            print(
+                f"✅ Success: {different_tokens}/{min(len(orig_tokens), len(steer_tokens))} top tokens changed"
+            )
+
+        print(f"{'='*60}")
 
     return {"original": original_tops, "steered": steered_tops}
 
@@ -483,8 +616,10 @@ def evaluate_steering_on_prompts(
                 tokenizer=tokenizer,
                 input_text=prompt,
                 steering_vector=steering_vector,
+                layer_idx=16,  # Use middle layer
                 top_k=5,
-                alpha=1.0,
+                alpha=5.0,  # Increased steering strength
+                debug=True,  # Enable debug output
             )
 
             print_token_comparison(results, prompt, concept)
