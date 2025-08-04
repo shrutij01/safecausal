@@ -592,11 +592,21 @@ def evaluate_steering_on_prompts(
     """
     if test_prompts is None:
         test_prompts = [
-            "The capital of France is",
-            "I think the best programming language is",
-            "The meaning of life is",
-            "In my opinion, the most important thing is",
-            "The future of AI will be",
+            "Long live the",
+            "The lion is the",
+            "In the hierarchy of medieval society, the highest rank was the",
+            "Arthur was a legendary",
+            "He was known as the warrior",
+            "In a monarchy, the ruler is usually a",
+            "He sat on the throne, the",
+            "A sovereign ruler in a monarchy is often a",
+            "His domain was vast, for he was a",
+            "The lion, in many cultures, is considered the",
+            "He wore a crown, signifying he was the",
+            "A male sovereign who reigns over a kingdom is a",
+            "Every kingdom has its ruler, typically a",
+            "The prince matured and eventually became the",
+            "In the deck of cards, alongside the queen is the",
         ]
 
     try:
