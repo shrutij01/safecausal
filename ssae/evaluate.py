@@ -438,14 +438,6 @@ def compare_top_tokens_with_steering_batch(
         ipdb.set_trace()
 
         if debug:
-            original_norm = (
-                (hidden_states[:, -1, :] - alpha * steering_vec)
-                .norm(dim=-1)
-                .mean()
-            )
-            steered_norm = hidden_states[:, -1, :].norm(dim=-1).mean()
-            print(f"📊 Average original hidden norm: {original_norm:.4f}")
-            print(f"📊 Average steered hidden norm: {steered_norm:.4f}")
             print(
                 f"📊 Steering magnitude: {(alpha * steering_vec).norm():.4f}"
             )
