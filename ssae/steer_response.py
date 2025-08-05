@@ -7,26 +7,17 @@ def main():
     llm = LanguageModel("meta-llama/Meta-Llama-3.1-8B", device_map="auto")
     print(llm)
 
-    # with llm.trace("The Eiffel Tower is in the city of", remote=True):
-    #     llm.model.layers[7].output[0][:] = 4
-    #     output = llm.output.save()
+    with llm.trace("The Eiffel Tower is in the city of"):
+        llm.model.layers[7].output[0][:] = 4
+        output = llm.output.save()
 
-    # output_logits = output["logits"]
-    # print("Model Output Logits: ", output_logits[0])
+    output_logits = output["logits"]
+    print("Model Output Logits: ", output_logits[0])
 
-    # # decode the final model output from output logits
-    # max_probs, tokens = output_logits[0].max(dim=-1)
-    # word = [llm.tokenizer.decode(tokens.cpu()[-1])]
-    # print("Model Output: ", word[0])
-
-    model = LanguageModel("meta-llama/Meta-Llama-3.1-8B", device_map="auto")
-    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B")
-
-    inputs = tokenizer("The universe is", return_tensors="pt")
-
-    with model.trace(inputs) as tracer:
-        output = model.output.save()
-    print("Model Output: ", output)
+    # decode the final model output from output logits
+    max_probs, tokens = output_logits[0].max(dim=-1)
+    word = [llm.tokenizer.decode(tokens.cpu()[-1])]
+    print("Model Output: ", word[0])
 
 
 if __name__ == "__main__":
