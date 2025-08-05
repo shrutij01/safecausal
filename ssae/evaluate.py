@@ -429,6 +429,8 @@ def compare_top_tokens_with_steering_batch(
 
         # Get the hidden states - shape will be [batch_size, seq_len, hidden_dim]
         hidden_states = layer_output[0]
+        # llm.model.layers[7].output[0][:]
+        breakpoint()
 
         # Ensure steering vector has correct dimensions
         if steering_vec.shape[0] != hidden_states.shape[-1]:
