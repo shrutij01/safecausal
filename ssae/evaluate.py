@@ -368,6 +368,9 @@ def compare_top_tokens_with_steering_batch(
     llm = LanguageModel(model_name, device_map="auto")
     model_device = next(llm.model.parameters()).device
     steering_vec = steering_vector.to(model_device)
+    import ipdb
+
+    ipdb.set_trace()
 
     if debug:
         print(f"🖥️  Model device: {model_device}")
