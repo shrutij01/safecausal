@@ -433,15 +433,6 @@ def compare_top_tokens_with_steering_batch(
         # Get the hidden states - shape will be [batch_size, seq_len, hidden_dim]
         hidden_states = layer_output[0]
 
-        if debug:
-            print(f"📍 Hidden states device: {hidden_states.device}")
-            print(f"📍 Hidden states shape: {hidden_states.shape}")
-            print(f"📍 Last token shape: {hidden_states[:, -1, :].shape}")
-
-        # Move steering vector to the same device as hidden states (actual GPU device)
-        # actual_device = hidden_states.device
-        # steering_vec = steering_vector.to(actual_device)
-
         # Apply steering to last token position for all sequences in batch
         # hidden_states[:, -1, :] has shape [batch_size, hidden_dim]
         # steering_vec has shape [hidden_dim]
@@ -450,30 +441,9 @@ def compare_top_tokens_with_steering_batch(
         hidden_states[:, -1, :] = (
             hidden_states[:, -1, :] + alpha * steering_vector
         )
+        import ipdb
 
-        if debug:
-            steered_last_hidden = hidden_states[:, -1, :]
-            change_magnitude = (
-                (steered_last_hidden - original_last_hidden)
-                .norm(dim=-1)
-                .mean()
-            )
-            # print(
-            #     f"📊 Original hidden norm: {original_last_hidden.norm(dim=-1).mean():.4f}"
-            # )
-            # print(
-            #     f"📊 Steered hidden norm: {steered_last_hidden.norm(dim=-1).mean():.4f}"
-            # )
-            # print(
-            #     f"📊 Steering magnitude: {(alpha * steering_vector).norm():.4f}"
-            # )
-            # print(f"📊 Actual change magnitude: {change_magnitude:.4f}")
-
-            # if change_magnitude < 1e-6:
-            #     print(
-            #         "⚠️  WARNING: Very small change detected - steering might not be effective!"
-            #     )
-
+        ipdb.set_trace()
         # Save steered outputs
         steered_outputs = llm.output.save()
 
