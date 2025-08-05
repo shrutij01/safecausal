@@ -430,9 +430,7 @@ def compare_top_tokens_with_steering_batch(
             steering_tensor = torch.from_numpy(steering_cpu).to(
                 hidden_states.device
             )
-            hidden_states[-1, :] += (
-                alpha * steering_tensor
-            )  # Last token position
+            hidden_states[:] += alpha * steering_tensor  # Last token position
 
             # Save steered output
             steered_output = llm.output.save()
