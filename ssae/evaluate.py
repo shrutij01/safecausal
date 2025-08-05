@@ -437,7 +437,7 @@ def compare_top_tokens_with_steering_batch(
         import ipdb
 
         ipdb.set_trace()
-        hidden_states[:] = hidden_states[:] + alpha * steering_vector
+        hidden_states[:] = hidden_states[:] + alpha * steering_cpu
         import ipdb
 
         ipdb.set_trace()
