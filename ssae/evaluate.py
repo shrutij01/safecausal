@@ -434,7 +434,8 @@ def compare_top_tokens_with_steering_batch(
         import ipdb
 
         ipdb.set_trace()
-        hidden_states[:, -1] += alpha * steering_cpu
+        steering_vector = torch.from_numpy(steering_cpu).to(device)
+        hidden_states[:, -1] += alpha * steering_vector
         # Save steered outputs
         steered_outputs = llm.output.save()
 
