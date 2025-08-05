@@ -458,21 +458,21 @@ def compare_top_tokens_with_steering_batch(
                 .norm(dim=-1)
                 .mean()
             )
-            print(
-                f"📊 Original hidden norm: {original_last_hidden.norm(dim=-1).mean():.4f}"
-            )
-            print(
-                f"📊 Steered hidden norm: {steered_last_hidden.norm(dim=-1).mean():.4f}"
-            )
-            print(
-                f"📊 Steering magnitude: {(alpha * steering_vector).norm():.4f}"
-            )
-            print(f"📊 Actual change magnitude: {change_magnitude:.4f}")
+            # print(
+            #     f"📊 Original hidden norm: {original_last_hidden.norm(dim=-1).mean():.4f}"
+            # )
+            # print(
+            #     f"📊 Steered hidden norm: {steered_last_hidden.norm(dim=-1).mean():.4f}"
+            # )
+            # print(
+            #     f"📊 Steering magnitude: {(alpha * steering_vector).norm():.4f}"
+            # )
+            # print(f"📊 Actual change magnitude: {change_magnitude:.4f}")
 
-            if change_magnitude < 1e-6:
-                print(
-                    "⚠️  WARNING: Very small change detected - steering might not be effective!"
-                )
+            # if change_magnitude < 1e-6:
+            #     print(
+            #         "⚠️  WARNING: Very small change detected - steering might not be effective!"
+            #     )
 
         # Save steered outputs
         steered_outputs = llm.output.save()
