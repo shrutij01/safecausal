@@ -410,45 +410,38 @@ def compare_top_tokens_with_steering_batch(
             f"📈 Original top tokens: {original_top_tokens[:3]}..."
         )  # Show first 3
 
-    # Process batch - get steered outputs
+    # Process inputs sequentially for steered outputs
+    # TODO: Investigate if nnsight can handle batched steering interventions properly
+    # Currently using sequential processing because batched trace returns 2D tensors
     if debug:
         print(
-            f"\n🚀 Running STEERED forward pass for batch of {len(input_texts)}..."
+            f"\n🚀 Running STEERED forward pass sequentially for {len(input_texts)} inputs..."
         )
     steering_cpu = steering_vector.detach().float().cpu().numpy()
 
-    with llm.trace(input_texts):
-        # Apply steering to specified layer's output for last token of each sequence
-        layer_output = llm.model.layers[layer_idx].output
-
-        if debug:
-            print(f"🎯 Applying steering to layer {layer_idx}")
-
-        # Get the hidden states - shape will be [batch_size, seq_len, hidden_dim]
-        hidden_states = layer_output[0]
-
-        # Apply steering to last token position for all sequences in batch
-        # hidden_states[:, -1, :] has shape [batch_size, hidden_dim]
-        # steering_vec has shape [hidden_dim]
-        # Broadcasting will add steering_vec to each sequence's last token
-        import ipdb
-
-        ipdb.set_trace()
-        steering_vector = torch.from_numpy(steering_cpu).to(device)
-        hidden_states[:, -1] += alpha * steering_vector
-        # Save steered outputs
-        steered_outputs = llm.output.save()
-
-    # Extract steered logits and decode top tokens
-    steered_logits = steered_outputs[
-        "logits"
-    ]  # [batch_size, seq_len, vocab_size]
-    steered_last_logits = steered_logits[:, -1, :]  # [batch_size, vocab_size]
-
-    # Get top token for each input in batch
     steered_top_tokens = []
-    for i, logits in enumerate(steered_last_logits):
-        probs = F.softmax(logits, dim=-1)
+    for i, input_text in enumerate(input_texts):
+        with llm.trace(input_text):
+            # Apply steering to specified layer's output for last token
+            layer_output = llm.model.layers[layer_idx].output
+            hidden_states = layer_output[0]  # [seq_len, hidden_dim]
+
+            # Convert steering vector to proper device and apply to last token
+            steering_tensor = torch.from_numpy(steering_cpu).to(
+                hidden_states.device
+            )
+            hidden_states[-1, :] += (
+                alpha * steering_tensor
+            )  # Last token position
+
+            # Save steered output
+            steered_output = llm.output.save()
+
+        # Extract steered logits and decode top token
+        steered_logits = steered_output["logits"]  # [1, seq_len, vocab_size]
+        steered_last_logits = steered_logits[0, -1, :]  # [vocab_size]
+
+        probs = F.softmax(steered_last_logits, dim=-1)
         top_prob, top_idx = torch.topk(probs, 1)
         token = llm.tokenizer.decode(
             [top_idx.item()], skip_special_tokens=True
