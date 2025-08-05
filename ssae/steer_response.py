@@ -19,13 +19,13 @@ def main():
     # word = [llm.tokenizer.decode(tokens.cpu()[-1])]
     # print("Model Output: ", word[0])
 
-    model = LanguageModel("meta-llama/Llama-2-7b-hf", device_map="auto")
-    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+    model = LanguageModel("meta-llama/Meta-Llama-3.1-8B", device_map="auto")
+    tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B")
 
     inputs = tokenizer("The universe is", return_tensors="pt")
 
-    with model.trace() as tracer:
-        output = model(**inputs)
+    with model.trace(inputs) as tracer:
+        output = model.output.save()
     print("Model Output: ", output)
 
 
