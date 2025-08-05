@@ -23,10 +23,11 @@ from collections import Counter, defaultdict
 import itertools
 import os
 from transformers import PreTrainedTokenizerFast, LlamaForCausalLM
-from nnsight import LanguageModel
+from nnsight import CONFIG, LanguageModel
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+CONFIG.API.APIKEY = "224de021-0457-4848-b96d-487af632c352"
 
 
 def svd_flip(u, v):
