@@ -19,6 +19,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import yaml
 from box import Box
 from collections import Counter, defaultdict
+import debug_tools as dbg
 
 import itertools
 import os
@@ -794,4 +795,5 @@ if __name__ == "__main__":
         help="Evaluate steering vectors on test prompts with Llama3 model",
     )
     args = parser.parse_args()
-    main(args)
+    with dbg.debug_on_exception():
+        main(args)
