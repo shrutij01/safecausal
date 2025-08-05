@@ -439,15 +439,8 @@ def compare_top_tokens_with_steering_batch(
             print(f"📍 Last token shape: {hidden_states[:, -1, :].shape}")
 
         # Move steering vector to the same device as hidden states (actual GPU device)
-        actual_device = hidden_states.device
-        steering_vec = steering_vector.to(actual_device)
-
-        if debug:
-            print(
-                f"🔧 Moved steering vector to actual device: {actual_device}"
-            )
-            print(f"📍 Steering vec device: {steering_vec.device}")
-            print(f"📊 Steering vec norm: {steering_vec.norm():.4f}")
+        # actual_device = hidden_states.device
+        # steering_vec = steering_vector.to(actual_device)
 
         # Apply steering to last token position for all sequences in batch
         # hidden_states[:, -1, :] has shape [batch_size, hidden_dim]
@@ -455,7 +448,7 @@ def compare_top_tokens_with_steering_batch(
         # Broadcasting will add steering_vec to each sequence's last token
         original_last_hidden = hidden_states[:, -1, :].clone()
         hidden_states[:, -1, :] = (
-            hidden_states[:, -1, :] + alpha * steering_vec
+            hidden_states[:, -1, :] + alpha * steering_vector
         )
 
         if debug:
@@ -472,7 +465,7 @@ def compare_top_tokens_with_steering_batch(
                 f"📊 Steered hidden norm: {steered_last_hidden.norm(dim=-1).mean():.4f}"
             )
             print(
-                f"📊 Steering magnitude: {(alpha * steering_vec).norm():.4f}"
+                f"📊 Steering magnitude: {(alpha * steering_vector).norm():.4f}"
             )
             print(f"📊 Actual change magnitude: {change_magnitude:.4f}")
 
