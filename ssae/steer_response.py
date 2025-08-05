@@ -5,10 +5,9 @@ from transformers import AutoTokenizer
 
 def main():
     llm = LanguageModel("meta-llama/Meta-Llama-3.1-8B", device_map="auto")
-    print(llm)
 
-    with llm.trace("The Eiffel Tower is in the city of"):
-        llm.model.layers[7].output[0][:] = 4
+    with llm.trace("The ruler of a kingdom is called a"):
+        # llm.model.layers[31].output[0][:] = 4
         output = llm.output.save()
 
     output_logits = output["logits"]
