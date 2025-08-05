@@ -437,9 +437,8 @@ def compare_top_tokens_with_steering_batch(
         # hidden_states[:, -1, :] has shape [batch_size, hidden_dim]
         # steering_vec has shape [hidden_dim]
         # Broadcasting will add steering_vec to each sequence's last token
-        original_last_hidden = hidden_states[:, -1, :].clone()
-        hidden_states[:, -1, :] = (
-            hidden_states[:, -1, :] + alpha * steering_vector
+        hidden_states[:] = (
+            hidden_states[:] + alpha * steering_vector
         )
         import ipdb
 
