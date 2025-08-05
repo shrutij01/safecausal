@@ -367,14 +367,17 @@ def compare_top_tokens_with_steering_batch(
     # Load model with nnsight
     llm = LanguageModel(model_name, device_map="auto")
     model_device = next(llm.model.parameters()).device
-    steering_vec = steering_vector.to(model_device)
-    import ipdb
-
-    ipdb.set_trace()
 
     if debug:
         print(f"🖥️  Model device: {model_device}")
         print(f"🏗️  Model layers: {len(llm.model.layers)}")
+        print(f"📍 Original steering vector device: {steering_vector.device}")
+        print(f"📍 Steering vector has values: {not steering_vector.is_meta}")
+
+        # Keep steering vector on original device - don't move to meta device
+        print(
+            f"🔧 Keeping steering vector on original device: {steering_vector.device}"
+        )
 
     # Store results for both conditions
     results = {"original": [], "steered": []}
@@ -426,24 +429,58 @@ def compare_top_tokens_with_steering_batch(
 
         if debug:
             print(f"🎯 Applying steering to layer {layer_idx}")
+
         # Get the hidden states - shape will be [batch_size, seq_len, hidden_dim]
         hidden_states = layer_output[0]
+
+        if debug:
+            print(f"📍 Hidden states device: {hidden_states.device}")
+            print(f"📍 Hidden states shape: {hidden_states.shape}")
+            print(f"📍 Last token shape: {hidden_states[:, -1, :].shape}")
+
+        # Move steering vector to the same device as hidden states (actual GPU device)
+        actual_device = hidden_states.device
+        steering_vec = steering_vector.to(actual_device)
+
+        if debug:
+            print(
+                f"🔧 Moved steering vector to actual device: {actual_device}"
+            )
+            print(f"📍 Steering vec device: {steering_vec.device}")
+            print(f"📍 Steering vec has values: {not steering_vec.is_meta}")
+            print(f"📊 Steering vec norm: {steering_vec.norm():.4f}")
 
         # Apply steering to last token position for all sequences in batch
         # hidden_states[:, -1, :] has shape [batch_size, hidden_dim]
         # steering_vec has shape [hidden_dim]
         # Broadcasting will add steering_vec to each sequence's last token
+        original_last_hidden = hidden_states[:, -1, :].clone()
         hidden_states[:, -1, :] = (
             hidden_states[:, -1, :] + alpha * steering_vec
         )
-        import ipdb
-
-        ipdb.set_trace()
 
         if debug:
+            steered_last_hidden = hidden_states[:, -1, :]
+            change_magnitude = (
+                (steered_last_hidden - original_last_hidden)
+                .norm(dim=-1)
+                .mean()
+            )
+            print(
+                f"📊 Original hidden norm: {original_last_hidden.norm(dim=-1).mean():.4f}"
+            )
+            print(
+                f"📊 Steered hidden norm: {steered_last_hidden.norm(dim=-1).mean():.4f}"
+            )
             print(
                 f"📊 Steering magnitude: {(alpha * steering_vec).norm():.4f}"
             )
+            print(f"📊 Actual change magnitude: {change_magnitude:.4f}")
+
+            if change_magnitude < 1e-6:
+                print(
+                    "⚠️  WARNING: Very small change detected - steering might not be effective!"
+                )
 
         # Save steered outputs
         steered_outputs = llm.output.save()
