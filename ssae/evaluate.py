@@ -422,15 +422,16 @@ def compare_top_tokens_with_steering_batch(
     steered_top_tokens = []
     for i, input_text in enumerate(input_texts):
         with llm.trace(input_text):
-            # Apply steering to specified layer's output for last token
-            layer_output = llm.model.layers[layer_idx].output
-            hidden_states = layer_output[0]  # [seq_len, hidden_dim]
+            # Apply steering to all layers from layer_idx onwards
+            for layer_num in range(layer_idx, len(llm.model.layers)):
+                layer_output = llm.model.layers[layer_num].output
+                hidden_states = layer_output[0]  # [seq_len, hidden_dim]
 
-            # Convert steering vector to proper device and apply to last token
-            steering_tensor = torch.from_numpy(steering_cpu).to(
-                hidden_states.device
-            )
-            hidden_states[:] += alpha * steering_tensor  # Last token position
+                # Convert steering vector to proper device and apply to last token
+                steering_tensor = torch.from_numpy(steering_cpu).to(
+                    hidden_states.device
+                )
+                hidden_states[-1, :] += alpha * steering_tensor  # Last token position
 
             # Save steered output
             steered_output = llm.output.save()
@@ -619,7 +620,7 @@ def main(args):
                 and args.evaluate_steering
             ):
                 evaluate_steering_on_prompts(
-                    steering_vector=steering_vector, 
+                    steering_vector=steering_vector,
                     concept=concept,
                     layer_idx=getattr(args, "steering_layer", 16),
                     alpha=getattr(args, "steering_alpha", 5.0)
@@ -761,7 +762,7 @@ if __name__ == "__main__":
         "-sl",
         type=int,
         default=16,
-        help="Layer index to apply steering intervention (default: 16)",
+        help="Starting layer index to apply steering intervention (applies to this layer and all following layers, default: 16)",
     )
     parser.add_argument(
         "--steering-alpha",
