@@ -415,7 +415,7 @@ def compare_top_tokens_with_steering_batch(
         print(
             f"\n🚀 Running STEERED forward pass for batch of {len(input_texts)}..."
         )
-    steering_cpu = steering_vector.detach().cpu().numpy()
+    steering_cpu = steering_vector.detach().float().cpu().numpy()
     import ipdb
 
     ipdb.set_trace()
