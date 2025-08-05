@@ -431,6 +431,9 @@ def compare_top_tokens_with_steering_batch(
         # hidden_states[:, -1, :] has shape [batch_size, hidden_dim]
         # steering_vec has shape [hidden_dim]
         # Broadcasting will add steering_vec to each sequence's last token
+        import ipdb
+
+        ipdb.set_trace()
         hidden_states[:, -1, :] += alpha * steering_cpu
         # Save steered outputs
         steered_outputs = llm.output.save()
