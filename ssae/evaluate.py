@@ -145,9 +145,6 @@ def get_concept_detection_logits(
         concept_logits * torch.log(concept_logits + eps), dim=1
     )
     mean_over_max_logits = concept_logits.max(dim=1).values.mean(dim=0)
-    import ipdb
-
-    ipdb.set_trace()
     print("mean_over_max_logits", mean_over_max_logits)
     print("entropy", entropy.max(), entropy.min(), entropy.mean())
     return (mean_over_max_logits, entropy)
@@ -426,11 +423,10 @@ def compare_top_tokens_with_steering_batch(
 
         if debug:
             print(f"🎯 Applying steering to layer {layer_idx}")
-
+        breakpoint()
         # Get the hidden states - shape will be [batch_size, seq_len, hidden_dim]
         hidden_states = layer_output[0]
         # llm.model.layers[7].output[0][:]
-        breakpoint()
 
         # Ensure steering vector has correct dimensions
         if steering_vec.shape[0] != hidden_states.shape[-1]:
