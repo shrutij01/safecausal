@@ -511,6 +511,7 @@ def evaluate_steering_on_prompts(
     concept: str,
     model_name: str = "meta-llama/Meta-Llama-3.1-8B",
     test_prompts: list = None,
+    layer_idx: int = 16,
 ) -> None:
     """
     Evaluate steering vector on a set of test prompts using vectorized batch processing.
@@ -545,7 +546,7 @@ def evaluate_steering_on_prompts(
             model_name=model_name,
             input_texts=test_prompts,
             steering_vector=steering_vector,
-            layer_idx=16,  # Use middle layer
+            layer_idx=layer_idx,  # Use specified layer
             alpha=5.0,  # Steering strength
             debug=True,  # Enable debug output
         )
@@ -617,7 +618,9 @@ def main(args):
                 and args.evaluate_steering
             ):
                 evaluate_steering_on_prompts(
-                    steering_vector=steering_vector, concept=concept
+                    steering_vector=steering_vector, 
+                    concept=concept,
+                    layer_idx=getattr(args, "steering_layer", 16)
                 )
 
             if args.ood_data:
@@ -693,7 +696,9 @@ def main(args):
                 and args.evaluate_steering
             ):
                 evaluate_steering_on_prompts(
-                    steering_vector=steering_vector, concept=concept
+                    steering_vector=steering_vector, 
+                    concept=concept,
+                    layer_idx=getattr(args, "steering_layer", 16)
                 )
 
             if args.ood_data:
@@ -747,6 +752,13 @@ if __name__ == "__main__":
         "--evaluate-steering",
         action="store_true",
         help="Evaluate steering vectors on test prompts with Llama3 model",
+    )
+    parser.add_argument(
+        "--steering-layer",
+        "-sl",
+        type=int,
+        default=16,
+        help="Layer index to apply steering intervention (default: 16)",
     )
     args = parser.parse_args()
     with dbg.debug_on_exception():
