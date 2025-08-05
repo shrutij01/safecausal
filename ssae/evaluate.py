@@ -416,9 +416,6 @@ def compare_top_tokens_with_steering_batch(
             f"\n🚀 Running STEERED forward pass for batch of {len(input_texts)}..."
         )
     steering_cpu = steering_vector.detach().float().cpu().numpy()
-    import ipdb
-
-    ipdb.set_trace()
 
     with llm.trace(input_texts):
         # Apply steering to specified layer's output for last token of each sequence
@@ -434,13 +431,7 @@ def compare_top_tokens_with_steering_batch(
         # hidden_states[:, -1, :] has shape [batch_size, hidden_dim]
         # steering_vec has shape [hidden_dim]
         # Broadcasting will add steering_vec to each sequence's last token
-        import ipdb
-
-        ipdb.set_trace()
-        hidden_states[:] = hidden_states[:] + alpha * steering_cpu
-        import ipdb
-
-        ipdb.set_trace()
+        hidden_states[:, -1, :] += alpha * steering_cpu
         # Save steered outputs
         steered_outputs = llm.output.save()
 
