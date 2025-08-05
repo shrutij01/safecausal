@@ -338,7 +338,7 @@ def compare_top_tokens_with_steering_batch(
     model_name: str,
     input_texts: list[str],
     steering_vector: torch.Tensor,
-    layer_idx: int = 16,
+    layer_idx: int = 31,
     alpha: float = 5.0,
     debug: bool = True,
 ) -> dict:
@@ -367,17 +367,13 @@ def compare_top_tokens_with_steering_batch(
     # Load model with nnsight
     llm = LanguageModel(model_name, device_map="auto")
     model_device = next(llm.model.parameters()).device
+    import ipdb
+
+    ipdb.set_trace()
 
     if debug:
         print(f"🖥️  Model device: {model_device}")
         print(f"🏗️  Model layers: {len(llm.model.layers)}")
-        print(f"📍 Original steering vector device: {steering_vector.device}")
-        print(f"📍 Steering vector has values: {not steering_vector.is_meta}")
-
-        # Keep steering vector on original device - don't move to meta device
-        print(
-            f"🔧 Keeping steering vector on original device: {steering_vector.device}"
-        )
 
     # Store results for both conditions
     results = {"original": [], "steered": []}
@@ -437,9 +433,10 @@ def compare_top_tokens_with_steering_batch(
         # hidden_states[:, -1, :] has shape [batch_size, hidden_dim]
         # steering_vec has shape [hidden_dim]
         # Broadcasting will add steering_vec to each sequence's last token
-        hidden_states[:] = (
-            hidden_states[:] + alpha * steering_vector
-        )
+        import ipdb
+
+        ipdb.set_trace()
+        hidden_states[:] = hidden_states[:] + alpha * steering_vector
         import ipdb
 
         ipdb.set_trace()
