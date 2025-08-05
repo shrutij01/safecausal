@@ -434,7 +434,7 @@ def compare_top_tokens_with_steering_batch(
         import ipdb
 
         ipdb.set_trace()
-        hidden_states[:, -1, :] += alpha * steering_cpu
+        hidden_states[:, -1] += alpha * steering_cpu
         # Save steered outputs
         steered_outputs = llm.output.save()
 
