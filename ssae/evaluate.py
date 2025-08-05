@@ -423,34 +423,8 @@ def compare_top_tokens_with_steering_batch(
 
         if debug:
             print(f"🎯 Applying steering to layer {layer_idx}")
-        import ipdb
-
-        ipdb.set_trace()
         # Get the hidden states - shape will be [batch_size, seq_len, hidden_dim]
         hidden_states = layer_output[0]
-        # llm.model.layers[7].output[0][:]
-
-        # Ensure steering vector has correct dimensions
-        if steering_vec.shape[0] != hidden_states.shape[-1]:
-            if debug:
-                print(
-                    f"⚠️  Dimension mismatch: steering_vec {steering_vec.shape} vs hidden_states {hidden_states.shape}"
-                )
-            # Pad or truncate if needed
-            if steering_vec.shape[0] < hidden_states.shape[-1]:
-                padding = torch.zeros(
-                    hidden_states.shape[-1] - steering_vec.shape[0],
-                    device=model_device,
-                )
-                steering_vec = torch.cat([steering_vec, padding])
-                if debug:
-                    print(f"🔧 Padded steering vector to {steering_vec.shape}")
-            else:
-                steering_vec = steering_vec[: hidden_states.shape[-1]]
-                if debug:
-                    print(
-                        f"✂️  Truncated steering vector to {steering_vec.shape}"
-                    )
 
         # Apply steering to last token position for all sequences in batch
         # hidden_states[:, -1, :] has shape [batch_size, hidden_dim]
@@ -459,6 +433,9 @@ def compare_top_tokens_with_steering_batch(
         hidden_states[:, -1, :] = (
             hidden_states[:, -1, :] + alpha * steering_vec
         )
+        import ipdb
+
+        ipdb.set_trace()
 
         if debug:
             original_norm = (
