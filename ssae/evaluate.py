@@ -418,6 +418,7 @@ def compare_top_tokens_with_steering_batch(
         print(
             f"\n🚀 Running STEERED forward pass for batch of {len(input_texts)}..."
         )
+    steering_cpu = steering_vector.cpu().clone()
 
     with llm.trace(input_texts):
         # Apply steering to specified layer's output for last token of each sequence
