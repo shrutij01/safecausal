@@ -447,7 +447,6 @@ def compare_top_tokens_with_steering_batch(
                 f"🔧 Moved steering vector to actual device: {actual_device}"
             )
             print(f"📍 Steering vec device: {steering_vec.device}")
-            print(f"📍 Steering vec has values: {not steering_vec.is_meta}")
             print(f"📊 Steering vec norm: {steering_vec.norm():.4f}")
 
         # Apply steering to last token position for all sequences in batch
