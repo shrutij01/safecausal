@@ -423,7 +423,9 @@ def compare_top_tokens_with_steering_batch(
 
         if debug:
             print(f"🎯 Applying steering to layer {layer_idx}")
-        breakpoint()
+        import ipdb
+
+        ipdb.set_trace()
         # Get the hidden states - shape will be [batch_size, seq_len, hidden_dim]
         hidden_states = layer_output[0]
         # llm.model.layers[7].output[0][:]
