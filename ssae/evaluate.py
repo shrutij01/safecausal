@@ -367,9 +367,6 @@ def compare_top_tokens_with_steering_batch(
     # Load model with nnsight
     llm = LanguageModel(model_name, device_map="auto")
     model_device = next(llm.model.parameters()).device
-    import ipdb
-
-    ipdb.set_trace()
 
     if debug:
         print(f"🖥️  Model device: {model_device}")
@@ -419,6 +416,9 @@ def compare_top_tokens_with_steering_batch(
             f"\n🚀 Running STEERED forward pass for batch of {len(input_texts)}..."
         )
     steering_cpu = steering_vector.detach().cpu().numpy()
+    import ipdb
+
+    ipdb.set_trace()
 
     with llm.trace(input_texts):
         # Apply steering to specified layer's output for last token of each sequence
