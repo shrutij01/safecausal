@@ -377,7 +377,7 @@ class LazyCPUData(Dataset):
             self._file_handle.close()
 
 
-KEYS = ("renorm-epochs", "oc", "seed")  # choose what matters
+KEYS = ("schedule", "oc", "seed")  # choose what matters
 
 
 def _hash_cfg(cfg) -> str:
