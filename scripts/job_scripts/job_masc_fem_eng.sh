@@ -72,8 +72,9 @@ for idx in "${!embedding_files[@]}"; do
                                     echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
                                     echo "" >> "${script_name}"
                                     echo "module load python/3.10" >> "${script_name}"
-                                    echo "source /network/scratch/j/joshi.shruti/venvs/myenv/bin/activate" >> "${script_name}"
-                                    echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/psp:/home/mila/j/joshi.shruti/causalrepl_space/cooper/:$PYTHONPATH\"" >> "${script_name}"
+                                    echo " module load cuda/12.6.0/cudnn" >> "${script_name}"
+                                    echo "source /home/mila/j/joshi.shruti/venvs/agents/bin/activate" >> "${script_name}"
+                                    echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/steeragents:$PYTHONPATH\"" >> "${script_name}"
                                     echo "cd /home/mila/j/joshi.shruti/causalrepl_space/steeragents/ssae" >> "${script_name}"
                                     echo "python ssae.py ${embedding_file} ${data_config} ${batch_size} ${learning_rate} ${overcompleteness_factor} ${n_concept} ${schedule_epoch} ${target} ${norm_type} ${seed}" >> "${script_name}"
 
