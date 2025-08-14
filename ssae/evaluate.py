@@ -23,7 +23,6 @@ import debug_tools as dbg
 
 import itertools
 import os
-from transformers import PreTrainedTokenizerFast, LlamaForCausalLM
 from nnsight import CONFIG, LanguageModel
 
 
@@ -365,7 +364,10 @@ def compare_top_tokens_with_steering_batch(
         print(f"📊 Steering vector norm: {steering_vector.norm():.4f}")
 
     # Load model with nnsight
-    llm = LanguageModel(model_name, device_map="auto")
+    llm = LanguageModel(model_name, device_map="auto", remote=True)
+    import ipdb
+
+    ipdb.set_trace()
     model_device = next(llm.model.parameters()).device
 
     if debug:
