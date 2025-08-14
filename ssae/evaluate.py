@@ -431,7 +431,9 @@ def compare_top_tokens_with_steering_batch(
                 steering_tensor = torch.from_numpy(steering_cpu).to(
                     hidden_states.device
                 )
-                hidden_states[-1, :] += alpha * steering_tensor  # Last token position
+                hidden_states[-1, :] += (
+                    alpha * steering_tensor
+                )  # Last token position
 
             # Save steered output
             steered_output = llm.output.save()
@@ -510,13 +512,13 @@ def print_batch_token_comparison(
 def evaluate_steering_on_prompts(
     steering_vector: torch.Tensor,
     concept: str,
-    model_name: str = "meta-llama/Meta-Llama-3.1-8B",
+    model_name: str = "meta-llama/Meta-Llama-3.1-8B-Instruct",
     test_prompts: list = None,
     layer_idx: int = 16,
     alpha: float = 5.0,
 ) -> None:
     """
-    Evaluate steering vector on a set of test prompts using vectorized batch processing.
+    Evaluate steering vector on a set of test prompts.
     """
     if test_prompts is None:
         test_prompts = [
@@ -623,7 +625,7 @@ def main(args):
                     steering_vector=steering_vector,
                     concept=concept,
                     layer_idx=getattr(args, "steering_layer", 16),
-                    alpha=getattr(args, "steering_alpha", 5.0)
+                    alpha=getattr(args, "steering_alpha", 5.0),
                 )
 
             if args.ood_data:
@@ -699,10 +701,10 @@ def main(args):
                 and args.evaluate_steering
             ):
                 evaluate_steering_on_prompts(
-                    steering_vector=steering_vector, 
+                    steering_vector=steering_vector,
                     concept=concept,
                     layer_idx=getattr(args, "steering_layer", 16),
-                    alpha=getattr(args, "steering_alpha", 5.0)
+                    alpha=getattr(args, "steering_alpha", 5.0),
                 )
 
             if args.ood_data:
