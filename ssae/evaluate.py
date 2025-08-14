@@ -423,17 +423,17 @@ def compare_top_tokens_with_steering_batch(
     for i, input_text in enumerate(input_texts):
         with llm.trace(input_text):
             # Apply steering to all layers from layer_idx onwards
-            for layer_num in range(layer_idx, len(llm.model.layers)):
-                layer_output = llm.model.layers[layer_num].output
-                hidden_states = layer_output[0]  # [seq_len, hidden_dim]
 
-                # Convert steering vector to proper device and apply to last token
-                steering_tensor = torch.from_numpy(steering_cpu).to(
-                    hidden_states.device
-                )
-                hidden_states[-1, :] += (
-                    alpha * steering_tensor
-                )  # Last token position
+            layer_output = llm.model.layers[layer_idx].output
+            hidden_states = layer_output[0]  # [seq_len, hidden_dim]
+
+            # Convert steering vector to proper device and apply to last token
+            steering_tensor = torch.from_numpy(steering_cpu).to(
+                hidden_states.device
+            )
+            hidden_states[-1, :] += (
+                alpha * steering_tensor
+            )  # Last token position
 
             # Save steered output
             steered_output = llm.output.save()
