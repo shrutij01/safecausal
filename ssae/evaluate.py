@@ -1,4 +1,3 @@
-from json import decoder
 from re import L
 import data_utils as utils
 import metrics
@@ -357,9 +356,6 @@ def compare_top_tokens_with_steering_batch(
     """
     # Load model with nnsight
     llm = LanguageModel(model_name, device_map="auto")
-    import ipdb
-
-    ipdb.set_trace()
 
     # Store results for both conditions
     results = {"original": [], "steered": []}
@@ -445,11 +441,13 @@ def print_batch_token_comparison(
     results: dict, input_texts: list[str], concept: str
 ) -> None:
     """Pretty print the batch token comparison results in a two-column format."""
-    print(f"\n{'='*120}")
+    print(f"\n{'='*155}")
     print(f"BATCH STEERING COMPARISON FOR CONCEPT: {concept}")
-    print(f"{'='*120}")
-    print(f"{'Input Text':<50} {'Original → Steered':<30} {'Changed':<10} {'Prob Delta':<15}")
-    print(f"{'-'*120}")
+    print(f"{'='*155}")
+    print(
+        f"{'Input Text':<50} {'Original → Steered':<30} {'Changed':<10} {'Orig Prob':<12} {'Steer Prob':<13} {'Prob Delta':<15}"
+    )
+    print(f"{'-'*155}")
 
     original_tokens = results["original"]
     steered_tokens = results["steered"]
@@ -463,6 +461,10 @@ def print_batch_token_comparison(
         orig_token, orig_prob = original_tokens[i]
         steer_token, steer_prob = steered_tokens[i]
 
+        # Format probabilities
+        orig_prob_str = f"{orig_prob:.4f}"
+        steer_prob_str = f"{steer_prob:.4f}"
+        
         # Calculate probability delta (steered - original)
         prob_delta = steer_prob - orig_prob
         prob_delta_str = f"{prob_delta:+.4f}"
@@ -471,7 +473,9 @@ def print_batch_token_comparison(
         comparison = f"{orig_token} → {steer_token}"
         changed = "✓" if orig_token != steer_token else "✗"
 
-        print(f"{display_text:<50} {comparison:<30} {changed:<10} {prob_delta_str:<15}")
+        print(
+            f"{display_text:<50} {comparison:<30} {changed:<10} {orig_prob_str:<12} {steer_prob_str:<13} {prob_delta_str:<15}"
+        )
 
     # Summary statistics
     changed_count = sum(
@@ -479,11 +483,11 @@ def print_batch_token_comparison(
         for orig, steer in zip(original_tokens, steered_tokens)
         if orig[0] != steer[0]
     )
-    print(f"{'-'*120}")
+    print(f"{'-'*155}")
     print(
         f"SUMMARY: {changed_count}/{len(input_texts)} predictions changed ({changed_count/len(input_texts)*100:.1f}%)"
     )
-    print(f"{'='*120}\n")
+    print(f"{'='*155}\n")
 
 
 def evaluate_steering_on_prompts(
