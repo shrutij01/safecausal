@@ -228,6 +228,9 @@ def get_max_cos_and_steering_vector_for_concept(
     Returns:
         mean and std of max cosine similarities over decoder directions
     """
+    import ipdb
+
+    ipdb.set_trace()
     z = F.normalize(z, dim=1)  # [B, D]
     z_tilde = F.normalize(z_tilde, dim=1)  # [B, D]
     # decoder = F.normalize(
@@ -335,6 +338,7 @@ def split_test_data_by_concept(tilde_z_test, z_test, concept_labels_test):
             tilde_z_test[indices_tensor],
             z_test[indices_tensor],
         )
+    import ipdb; ipdb.set_trace()
 
     return split_tensors
 
