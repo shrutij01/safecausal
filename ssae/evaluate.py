@@ -356,7 +356,7 @@ def compare_top_tokens_with_steering_batch(
         Dict with batch results: {'original': [tokens_per_input], 'steered': [tokens_per_input]}
     """
     # Load model with nnsight
-    llm = LanguageModel(model_name, device_map="auto", remote=True)
+    llm = LanguageModel(model_name, device_map="auto")
     import ipdb
 
     ipdb.set_trace()
@@ -364,7 +364,7 @@ def compare_top_tokens_with_steering_batch(
     # Store results for both conditions
     results = {"original": [], "steered": []}
 
-    with llm.trace(input_texts):
+    with llm.trace(input_texts, remote=True):
         # Save original outputs
         original_outputs = llm.output.save()
 
@@ -395,7 +395,7 @@ def compare_top_tokens_with_steering_batch(
 
     steered_top_tokens = []
     for i, input_text in enumerate(input_texts):
-        with llm.trace(input_text):
+        with llm.trace(input_text, remote=True):
             # Apply steering to all layers from layer_idx onwards
 
             layer_output = llm.model.layers[layer_idx].output
