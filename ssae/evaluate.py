@@ -445,11 +445,11 @@ def print_batch_token_comparison(
     results: dict, input_texts: list[str], concept: str
 ) -> None:
     """Pretty print the batch token comparison results in a two-column format."""
-    print(f"\n{'='*100}")
+    print(f"\n{'='*120}")
     print(f"BATCH STEERING COMPARISON FOR CONCEPT: {concept}")
-    print(f"{'='*100}")
-    print(f"{'Input Text':<50} {'Original → Steered':<30} {'Changed':<10}")
-    print(f"{'-'*100}")
+    print(f"{'='*120}")
+    print(f"{'Input Text':<50} {'Original → Steered':<30} {'Changed':<10} {'Prob Delta':<15}")
+    print(f"{'-'*120}")
 
     original_tokens = results["original"]
     steered_tokens = results["steered"]
@@ -463,11 +463,15 @@ def print_batch_token_comparison(
         orig_token, orig_prob = original_tokens[i]
         steer_token, steer_prob = steered_tokens[i]
 
+        # Calculate probability delta (steered - original)
+        prob_delta = steer_prob - orig_prob
+        prob_delta_str = f"{prob_delta:+.4f}"
+
         # Format token comparison
         comparison = f"{orig_token} → {steer_token}"
         changed = "✓" if orig_token != steer_token else "✗"
 
-        print(f"{display_text:<50} {comparison:<30} {changed:<10}")
+        print(f"{display_text:<50} {comparison:<30} {changed:<10} {prob_delta_str:<15}")
 
     # Summary statistics
     changed_count = sum(
@@ -475,11 +479,11 @@ def print_batch_token_comparison(
         for orig, steer in zip(original_tokens, steered_tokens)
         if orig[0] != steer[0]
     )
-    print(f"{'-'*100}")
+    print(f"{'-'*120}")
     print(
         f"SUMMARY: {changed_count}/{len(input_texts)} predictions changed ({changed_count/len(input_texts)*100:.1f}%)"
     )
-    print(f"{'='*100}\n")
+    print(f"{'='*120}\n")
 
 
 def evaluate_steering_on_prompts(
