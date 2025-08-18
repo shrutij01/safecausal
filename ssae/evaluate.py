@@ -355,33 +355,14 @@ def compare_top_tokens_with_steering_batch(
     Returns:
         Dict with batch results: {'original': [tokens_per_input], 'steered': [tokens_per_input]}
     """
-    if debug:
-        print(f"\n🔧 DEBUG: Starting vectorized steering comparison")
-        print(f"📝 Input batch size: {len(input_texts)}")
-        print(f"🎯 Layer index: {layer_idx}")
-        print(f"💪 Alpha (steering strength): {alpha}")
-        print(f"📊 Steering vector shape: {steering_vector.shape}")
-        print(f"📊 Steering vector norm: {steering_vector.norm():.4f}")
-
     # Load model with nnsight
     llm = LanguageModel(model_name, device_map="auto", remote=True)
     import ipdb
 
     ipdb.set_trace()
-    model_device = next(llm.model.parameters()).device
-
-    if debug:
-        print(f"🖥️  Model device: {model_device}")
-        print(f"🏗️  Model layers: {len(llm.model.layers)}")
 
     # Store results for both conditions
     results = {"original": [], "steered": []}
-
-    # Process batch - get original outputs first
-    if debug:
-        print(
-            f"\n🚀 Running ORIGINAL forward pass for batch of {len(input_texts)}..."
-        )
 
     with llm.trace(input_texts):
         # Save original outputs
@@ -406,19 +387,10 @@ def compare_top_tokens_with_steering_batch(
         original_top_tokens.append((token, top_prob.item()))
 
     results["original"] = original_top_tokens
-
-    if debug:
-        print(
-            f"📈 Original top tokens: {original_top_tokens[:3]}..."
-        )  # Show first 3
-
     # Process inputs sequentially for steered outputs
     # TODO: Investigate if nnsight can handle batched steering interventions properly
     # Currently using sequential processing because batched trace returns 2D tensors
-    if debug:
-        print(
-            f"\n🚀 Running STEERED forward pass sequentially for {len(input_texts)} inputs..."
-        )
+
     steering_cpu = steering_vector.detach().float().cpu().numpy()
 
     steered_top_tokens = []
@@ -433,9 +405,8 @@ def compare_top_tokens_with_steering_batch(
             steering_tensor = torch.from_numpy(steering_cpu).to(
                 hidden_states.device
             )
-            hidden_states[-1, :] += (
-                alpha * steering_tensor
-            )  # Last token position
+            # hidden_states[-1, :] += alpha * steering_tensor
+            hidden_states[-1, :] *= alpha
 
             # Save steered output
             steered_output = llm.output.save()
@@ -574,7 +545,6 @@ def main(args):
         datafile=args.datafile,
     )
     z_test = utils.tensorify(z_test, device)
-    print(z_test.shape)
     tilde_z_test = utils.tensorify(tilde_z_test, device)
     with open(args.dataconfig, "r") as file:
         dataconfig = Box(yaml.safe_load(file))
@@ -614,8 +584,30 @@ def main(args):
             concept_metrics[concept] = {
                 "mean_cos": mean_cos,
                 "std_cos": std_cos,
-                "steering_vector": steering_vector,
             }
+            if (
+                steering_vector is not None
+                and hasattr(args, "store_steering")
+                and args.store_steering
+            ):
+                steering_dir_name = "steering_vector_" + str(args.modeltype)
+                output_dir = (
+                    f"{os.path.dirname(args.datafile)}/{steering_dir_name}"
+                )
+                os.makedirs(output_dir, exist_ok=True)
+
+                # Save the steering vector
+                torch.save(
+                    steering_vector,
+                    os.path.join(
+                        output_dir,
+                        f"steering_vector_concept_{concept}_llamascope.pt",
+                    ),
+                )
+
+                print(
+                    f"Saved steering vector for concept {concept} to {output_dir}"
+                )
 
             # Evaluate steering vector on test prompts
             if (
@@ -695,6 +687,25 @@ def main(args):
                 "std_cos": std_cos,
                 "steering_vector": steering_vector,
             }
+            if (
+                steering_vector is not None
+                and hasattr(args, "store_steering")
+                and args.store_steering
+            ):
+                steering_dir_name = "steering_vector_" + str(args.modeltype)
+                output_dir = (
+                    f"{os.path.dirname(args.datafile)}/{steering_dir_name}"
+                )
+                os.makedirs(output_dir, exist_ok=True)
+
+                # Save the steering vector
+                torch.save(
+                    steering_vector,
+                    os.path.join(
+                        output_dir,
+                        f"steering_vector_concept_{concept}_llamascope.pt",
+                    ),
+                )
 
             # Evaluate steering vector on test prompts
             if (
@@ -755,6 +766,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--ood-data", help="Path to OOD data file using the same dataconfig."
+    )
+    parser.add_argument(
+        "--store-steering",
+        action="store_true",
+        help="Store steering vectors extracted from the model.",
     )
     parser.add_argument(
         "--evaluate-steering",
