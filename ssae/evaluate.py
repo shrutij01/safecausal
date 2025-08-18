@@ -327,7 +327,14 @@ def split_test_data_by_concept(tilde_z_test, z_test, concept_labels_test):
     for label in unique_labels:
         mask = concept_labels_test == label
         indices = np.where(mask)[0]
-        split_tensors[label] = (tilde_z_test[indices], z_test[indices])
+        # Convert numpy indices to torch tensor on same device as input tensors
+        indices_tensor = torch.tensor(
+            indices, device=tilde_z_test.device, dtype=torch.long
+        )
+        split_tensors[label] = (
+            tilde_z_test[indices_tensor],
+            z_test[indices_tensor],
+        )
 
     return split_tensors
 
