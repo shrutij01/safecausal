@@ -364,7 +364,7 @@ def compare_top_tokens_with_steering_batch(
     # Store results for both conditions
     results = {"original": [], "steered": []}
 
-    with llm.trace(input_texts, remote=True):
+    with llm.trace(input_texts):
         # Save original outputs
         original_outputs = llm.output.save()
 
@@ -395,7 +395,7 @@ def compare_top_tokens_with_steering_batch(
 
     steered_top_tokens = []
     for i, input_text in enumerate(input_texts):
-        with llm.trace(input_text, remote=True):
+        with llm.trace(input_text):
             # Apply steering to all layers from layer_idx onwards
 
             layer_output = llm.model.layers[layer_idx].output
