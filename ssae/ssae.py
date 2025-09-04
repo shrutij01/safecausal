@@ -53,36 +53,6 @@ def set_seeds(seed: int, deterministic: bool = False) -> None:
         torch.backends.cudnn.benchmark = False
 
 
-def layer_normalise_(
-    x: Tensor, *, eps: float = 1e-5
-) -> Tuple[Tensor, Dict[str, Tensor]]:
-    """
-    Memory-efficient layer normalization over the last dimension.
-    """
-    mu = x.mean(dim=-1, keepdim=True)
-    var = x.var(dim=-1, keepdim=True, unbiased=False)
-    inv_std = (var + eps).rsqrt_()  # in-place rsqrt for efficiency
-
-    # Fused normalize operation
-    x_norm = x.sub(mu).mul_(inv_std)  # sub creates new tensor, mul_ in-place
-
-    return x_norm, {"mu": mu, "inv_std": inv_std}
-
-
-@torch.jit.script
-def fused_layer_norm_inplace_(x: Tensor, eps: float = 1e-5) -> Tensor:
-    """
-    Ultra-fast in-place layer normalization for training loops.
-    """
-    mu = x.mean(dim=-1, keepdim=True)
-    var = x.var(dim=-1, keepdim=True, unbiased=False)
-    inv_std = (var + eps).rsqrt_()
-
-    # In-place normalization
-    x.sub_(mu).mul_(inv_std)
-    return x
-
-
 class DictLinearAE(nn.Module):
     """
     Implements:
@@ -101,7 +71,8 @@ class DictLinearAE(nn.Module):
     ) -> None:
         super(DictLinearAE, self).__init__()
         self.encoder = nn.Linear(rep_dim, hid, bias=True)
-        self.norm = dict(
+        self.input_norm = nn.LayerNorm(rep_dim)
+        self.enc_norm = dict(
             ln=nn.LayerNorm(hid),
             gn=nn.GroupNorm(1, hid),
             bn=nn.BatchNorm1d(hid),
@@ -116,30 +87,17 @@ class DictLinearAE(nn.Module):
     def _bad_norm(nt):
         raise ValueError(f"norm_type {nt!r} not in ln/gn/bn")
 
-    def encode(self, x: torch.Tensor) -> torch.Tensor:
-        # In-place bias subtraction to avoid copy
-        x_enc = x.clone()  # Clone to avoid modifying input
-        x_enc.sub_(self.decoder.bias)
-        return self.norm(self.encoder(x_enc))
-
     def forward(self, x: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        # Efficient single-pass forward with minimal allocations
-        mu = x.mean(dim=-1, keepdim=True)
-        var = x.var(dim=-1, keepdim=True, unbiased=False)
-        inv_std = (var + 1e-5).rsqrt_()  # in-place rsqrt for efficiency
-
-        # Create normalized version without modifying input
-        x_norm = (x - mu) * inv_std
-
-        # Fused encode: subtract decoder bias and encode in one operation
+        x_norm = self.input_norm(x)
+        # trainable layernorm at the input
         x_biased = x_norm - self.decoder.bias
-        h = self.norm(self.encoder(x_biased))
+        h = self.enc_norm(self.encoder(x_biased))
 
         # Decode and denormalize efficiently
         x_hat = self.decoder(h)
-        x_hat.mul_(inv_std).add_(mu)  # In-place denormalization
-
         return x_hat, h
+
+    # remove denormalisation at the output
 
 
 # ----------------------------------------------------------------------
@@ -310,71 +268,21 @@ class Logger:
             self._buf = {}
 
 
-class LazyCPUData(Dataset):
-    """
-    Memory-optimized H5PY dataset with automatic resource management.
-    Uses per-worker file handles and pre-allocated tensor buffers.
-    """
-
+class SimpleCPUData(Dataset):
     def __init__(self, h5_path: str, key: str = "cfc_train"):
-        self.h5_path = str(h5_path)
-        self.key = key
-        self._file_handle = None
-        self._len = None
-        self._rep_dim = None
-
-        # Get metadata without keeping file open
-        with h5py.File(self.h5_path, "r", libver="latest", swmr=True) as f:
-            if key not in f or not isinstance(f[key], h5py.Dataset):
-                raise TypeError(f"{key} is not an HDF5 dataset")
-            dataset_shape = f[key].shape
-            if len(dataset_shape) == 3:
-                self._rep_dim = dataset_shape[2]  # (N, T, rep_dim)
-            elif len(dataset_shape) == 2:
-                self._rep_dim = dataset_shape[1]  # (N, rep_dim)
-            else:
-                raise ValueError(
-                    f"Unexpected shape {dataset_shape} for dataset {key}"
-                )
-            self._len = len(f[key])
-
-        # Pre-allocate numpy buffer for zero-copy operations
-        # expects two samples to take diff between
-        self._buffer = np.empty((2, self._rep_dim), dtype=np.float32)
-        self._delta_buffer = np.empty(self._rep_dim, dtype=np.float32)
-
-    def _get_file_handle(self):
-        """Lazy per-worker file handle creation."""
-        if self._file_handle is None:
-            self._file_handle = h5py.File(
-                self.h5_path,
-                "r",
-                libver="latest",
-                swmr=True,  # Single-writer multiple-reader mode
-                rdcc_nbytes=1024 * 1024 * 16,  # 16MB cache per file
-            )
-        return self._file_handle
+        with h5py.File(h5_path, "r") as f:
+            self.data = f[key][:]  # Load entire dataset into RAM
 
     def __len__(self):
-        return self._len
+        return (
+            len(self.data) - 1 if len(self.data.shape) == 2 else len(self.data)
+        )
 
     def __getitem__(self, idx):
-        ds = self._get_file_handle()[self.key]
-
-        # Read directly into pre-allocated buffer to avoid extra allocation
-        ds.read_direct(self._buffer, np.s_[idx])
-
-        # In-place difference using pre-allocated buffer
-        np.subtract(self._buffer[1], self._buffer[0], out=self._delta_buffer)
-
-        # Return tensor that shares memory with numpy buffer
-        return torch.from_numpy(
-            self._delta_buffer.copy()
-        )  # Copy to avoid data races
-
-    def __del__(self):
-        if self._file_handle is not None:
-            self._file_handle.close()
+        if len(self.data.shape) == 3:  # (N, 2, rep_dim)
+            return torch.from_numpy(self.data[idx, 1] - self.data[idx, 0])
+        else:  # (N, rep_dim)
+            return torch.from_numpy(self.data[idx + 1] - self.data[idx])
 
 
 KEYS = ("schedule", "oc", "seed")  # choose what matters
@@ -616,7 +524,7 @@ def parse_cfg() -> Cfg:
 
 def make_dataloader(cfg) -> DataLoader:
     # Optimize for memory efficiency over throughput
-    dataset = LazyCPUData(cfg.emb, key="cfc_train")
+    dataset = SimpleCPUData(cfg.emb, key="cfc_train")
 
     train_loader = DataLoader(
         dataset,

@@ -40,7 +40,22 @@ def load_dataset(
     num_samples,
     split=0.9,
 ):
-    if dataset_name == "truthful-qa":
+    if dataset_name == "labeled-sentences":
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        datapath = os.path.join(
+            script_dir, "..", "data", "labeled_sentences.jsonl"
+        )
+        if not os.path.exists(datapath):
+            raise FileNotFoundError()
+        labeled_paired_sentences = load_jsonl(datapath)
+        cfc_tuples = [
+            [d["original"]["sentence"], d["modified"]["sentence"]]
+            for d in labeled_paired_sentences
+        ]
+        split_index = int(len(cfc_tuples) * split)
+        cfc_train_tuples = cfc_tuples[:split_index]
+        cfc_test_tuples = cfc_tuples[split_index:]
+    elif dataset_name == "truthful-qa":
         hf_dataset_name = "truthfulqa/truthful_qa"
         dataset_params = {
             "split": "validation",

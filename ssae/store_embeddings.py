@@ -120,6 +120,8 @@ def main(args):
         "corr-binary",
     ]:
         num_concepts = 2
+    elif args.dataset in ["labeled-sentences"]:
+        num_concepts = 2
     elif args.dataset == "categorical":
         num_concepts = 135
     elif args.dataset in ["safearena", "wildjailbreak"]:  # fixme
@@ -159,6 +161,7 @@ if __name__ == "__main__":
             "categorical",
             "safearena",
             "wildjailbreak",
+            "labeled-sentences",
         ],
         default="eng-french",
     )
