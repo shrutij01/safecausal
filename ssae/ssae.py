@@ -289,7 +289,12 @@ KEYS = ("schedule", "oc", "seed")  # choose what matters
 
 
 def _hash_cfg(cfg) -> str:
-    blob = json.dumps(asdict(cfg), sort_keys=True).encode()
+    cfg_dict = asdict(cfg)
+    # Convert Path objects to strings for JSON serialization
+    for k, v in cfg_dict.items():
+        if isinstance(v, Path):
+            cfg_dict[k] = str(v)
+    blob = json.dumps(cfg_dict, sort_keys=True).encode()
     return hashlib.sha1(blob).hexdigest()[:6]  # short & stable
 
 
