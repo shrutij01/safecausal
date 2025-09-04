@@ -26,10 +26,10 @@ norm_types=(
     "--norm ln"         # norm-type
 )
 loss_types=(
-    "--loss absolute"   "--loss relative" # loss-type
+    "--loss relative" # loss-type "--loss absolute"
 )
 learning_rates=(
-    "--lr 0.0005"       # primal-lr
+    "--lr 0.0005"  "--lr 0.0007"      # primal-lr
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2" "--seed 5" "--seed 7"

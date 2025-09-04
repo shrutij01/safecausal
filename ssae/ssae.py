@@ -501,7 +501,7 @@ def parse_cfg() -> Cfg:
     add("emb", type=Path)
     add("data_cfg", type=Path)
     add("--batch", type=int, default=32)
-    add("--epochs", type=int, default=9_000)
+    add("--epochs", type=int, default=15_000)
     add("--lr", type=float, default=5e-4)
     add("--oc", type=int, default=10)
     add("--n-concepts", "-C", type=int, default=1)
