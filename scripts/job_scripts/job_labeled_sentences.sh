@@ -10,8 +10,8 @@ data_configs=(
 )
 
 # Updated parameter names to match refactored code
-overcompletenesses=(
-    "--oc 10"    # overcompleteness factor
+encoding_dims=(
+    "--oc 4096"    # overcompleteness factor
 )
 schedules=(
     "--schedule 3000" "--schedule 5000"   # scheduler-epochs
@@ -20,7 +20,7 @@ targets=(
     "--target 0.1"      # target-sparse-level
 )
 batch_sizes=(
-    "--batch 64"        # batch-sizeh
+    "--batch 64"        # batch-size
 )
 norm_types=(
     "--norm ln"         # norm-type
@@ -47,7 +47,7 @@ use_amp=(
 job_name="ssae_optimized"
 output="job_output_%j.txt"
 error="job_error_%j.txt"
-time_limit="1:00:00"
+time_limit="1:30:00"
 memory="32Gb"
 gpu_req="gpu:1"
 
@@ -64,7 +64,7 @@ for idx in "${!embedding_files[@]}"; do
 
     for target in "${targets[@]}"; do
         for lr in "${learning_rates[@]}"; do
-            for oc in "${overcompletenesses[@]}"; do
+            for dim in "${encoding_dims[@]}"; do
                 for batch_size in "${batch_sizes[@]}"; do
                     for norm_type in "${norm_types[@]}"; do
                         for loss_type in "${loss_types[@]}"; do

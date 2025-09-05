@@ -492,7 +492,7 @@ class Cfg:
 
     @property
     def hid(self) -> int:  # encoder dim
-        return self.oc * self.n_concepts
+        return self.oc  # changed to rm dependence on n_concepts
 
 
 def parse_cfg() -> Cfg:
