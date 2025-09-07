@@ -64,7 +64,7 @@ for idx in "${!embedding_files[@]}"; do
 
     for target in "${targets[@]}"; do
         for lr in "${learning_rates[@]}"; do
-            for dim in "${encoding_dims[@]}"; do
+            for oc in "${encoding_dims[@]}"; do
                 for batch_size in "${batch_sizes[@]}"; do
                     for norm_type in "${norm_types[@]}"; do
                         for loss_type in "${loss_types[@]}"; do
