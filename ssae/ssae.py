@@ -306,7 +306,16 @@ def dump_run(root: Path, model: torch.nn.Module, cfg) -> Path:
     run.mkdir(parents=True, exist_ok=False)
 
     torch.save(model.state_dict(), run / "weights.pth")
-    (run / "cfg.yaml").write_text(yaml.safe_dump(asdict(cfg), sort_keys=False))
+    
+    # Convert config to YAML-serializable format
+    cfg_dict = asdict(cfg)
+    for k, v in cfg_dict.items():
+        if isinstance(v, Path):
+            cfg_dict[k] = str(v)
+        elif isinstance(v, SimpleNamespace):
+            cfg_dict[k] = vars(v)
+    
+    (run / "cfg.yaml").write_text(yaml.safe_dump(cfg_dict, sort_keys=False))
     return run
 
 
