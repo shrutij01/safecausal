@@ -17,7 +17,7 @@ schedules=(
     "--schedule 3000" "--schedule 5000"   # scheduler-epochs
 )
 targets=(
-    "--target 0.1"      # target-sparse-level
+    "--target 0.1" "--target 0.05" "--target 0.005" "--target 0.0005"   # target-sparse-level
 )
 batch_sizes=(
     "--batch 64"        # batch-size
@@ -47,7 +47,7 @@ use_amp=(
 job_name="ssae_optimized"
 output="job_output_%j.txt"
 error="job_error_%j.txt"
-time_limit="1:30:00"
+time_limit="3:00:00"
 memory="32Gb"
 gpu_req="gpu:1"
 
