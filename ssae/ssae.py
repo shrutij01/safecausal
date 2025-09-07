@@ -19,7 +19,7 @@ import wandb
 import cooper
 from box import Box
 
-import debug_tools as dbg
+# import debug_tools as dbg  # Commented out to fix sys.excepthook error
 
 
 def set_seeds(seed: int, deterministic: bool = False) -> None:
