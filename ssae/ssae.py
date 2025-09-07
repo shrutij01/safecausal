@@ -294,6 +294,7 @@ def _hash_cfg(cfg) -> str:
     for k, v in cfg_dict.items():
         if isinstance(v, Path):
             cfg_dict[k] = str(v)
+    import ipdb; ipdb.set_trace()
     blob = json.dumps(cfg_dict, sort_keys=True).encode()
     return hashlib.sha1(blob).hexdigest()[:6]  # short & stable
 
