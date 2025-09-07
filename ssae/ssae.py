@@ -301,12 +301,15 @@ def _hash_cfg(cfg) -> str:
 
 
 def dump_run(root: Path, model: torch.nn.Module, cfg) -> Path:
+    from datetime import datetime
     tag = "_".join(f"{k}{getattr(cfg, k)}" for k in KEYS)
+    now = datetime.now()
+    time_id = f"{now.strftime('%m%d')}{now.strftime('%H%M')}"  # MMDDHHMM format
     run = root / f"{tag}_{_hash_cfg(cfg)}"
-    run.mkdir(parents=True, exist_ok=False)
+    run.mkdir(parents=True, exist_ok=True)  # Allow multiple runs with same config
 
-    torch.save(model.state_dict(), run / "weights.pth")
-    
+    torch.save(model.state_dict(), run / f"weights_{time_id}.pth")
+
     # Convert config to YAML-serializable format
     cfg_dict = asdict(cfg)
     for k, v in cfg_dict.items():
@@ -314,7 +317,7 @@ def dump_run(root: Path, model: torch.nn.Module, cfg) -> Path:
             cfg_dict[k] = str(v)
         elif isinstance(v, SimpleNamespace):
             cfg_dict[k] = vars(v)
-    
+
     (run / "cfg.yaml").write_text(yaml.safe_dump(cfg_dict, sort_keys=False))
     return run
 
