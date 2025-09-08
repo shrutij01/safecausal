@@ -14,7 +14,7 @@ encoding_dims=(
     "--oc 4096"    # overcompleteness factor
 )
 schedules=(
-    "--schedule 3000" "--schedule 5000"   # scheduler-epochs
+    "--schedule 3000" # "--schedule 5000"   # scheduler-epochs
 )
 targets=(
     "--target 0.1" # "--target 0.05" "--target 0.005" "--target 0.0005"   # target-sparse-level
@@ -29,7 +29,7 @@ loss_types=(
     "--loss relative" # loss-type "--loss absolute"
 )
 learning_rates=(
-    "--lr 0.0005"  "--lr 0.0007"      # primal-lr
+    "--lr 0.0005" #  "--lr 0.0007"      # primal-lr
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2" "--seed 5" "--seed 7"
@@ -78,10 +78,10 @@ for idx in "${!embedding_files[@]}"; do
                                             # Create a batch script for each job
                                             echo "#!/bin/bash" > "${script_name}"
                                             echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
+                                            echo "#SBATCH --error=logs/job_%j.err" >> "${script_name}"
                                             echo "#SBATCH --time=${time_limit}" >> "${script_name}"
                                             echo "#SBATCH --mem=${memory}" >> "${script_name}"
                                             echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
-                                            echo "" >> "${script_name}"
                                             echo "module load python/3.10" >> "${script_name}"
                                             echo "module load cuda/12.6.0/cudnn" >> "${script_name}"
                                             echo "source /home/mila/j/joshi.shruti/venvs/agents/bin/activate" >> "${script_name}"
