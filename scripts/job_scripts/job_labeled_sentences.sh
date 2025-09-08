@@ -53,6 +53,7 @@ gpu_req="gpu:1"
 
 # Directory to store generated job scripts
 mkdir -p generated_jobs
+mkdir -p logs
 
 # Counter for unique job names
 counter=0
