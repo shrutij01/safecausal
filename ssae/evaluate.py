@@ -181,23 +181,6 @@ def load_ssae(
     )
 
 
-def check_model_config_consistency(model_configs: list[Box]) -> None:
-    """
-    Check that all model configs share the same critical values.
-    """
-    ref = model_configs[0]
-    for i, cfg in enumerate(model_configs[1:], start=1):
-        assert (
-            cfg.overcompleteness_factor == ref.overcompleteness_factor
-        ), f"Model {i+1} has a different overcompleteness_factor: {cfg.overcompleteness_factor} != {ref.overcompleteness_factor}"
-        assert (
-            cfg.primal_lr == ref.primal_lr
-        ), f"Model {i+1} has a different primal_lr: {cfg.primal_lr} != {ref.primal_lr}"
-        assert (
-            cfg.norm_type == ref.norm_type
-        ), f"Model {i+1} has a different norm_type: {cfg.norm_type} != {ref.norm_type}"
-
-
 def compute_all_pairwise_mccs(
     weight_matrices: list[torch.Tensor],
 ) -> list[float]:
@@ -428,8 +411,6 @@ def main(args):
                 "You must provide at least two model directories."
             )
         print(f"Loading model configs from {len(modeldirs)} directories...")
-        model_configs = [load_model_config(modeldir) for modeldir in modeldirs]
-        check_model_config_consistency(model_configs)
         print("Loading decoder weight matrices...")
         decoder_weight_matrices = [
             load_ssae(modeldir, dataconfig)[0] for modeldir in modeldirs
