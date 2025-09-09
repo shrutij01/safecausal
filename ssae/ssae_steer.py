@@ -8,7 +8,7 @@ from re import L
 import data_utils as utils
 import os
 
-from ssae import DictAE
+from ssae import DictLinearAE
 
 import argparse
 import torch
@@ -194,10 +194,10 @@ def load_ssae(
     modeldir: str, dataconfig: Box
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Load a DictAE model and return the decoder weights as a numpy array.
+    Load a DictLinearAE model and return the decoder weights as a numpy array.
     """
     modelconfig = load_model_config(modeldir)
-    model = DictAE(
+    model = DictLinearAE(
         rep_dim=dataconfig.rep_dim,
         hid=int(
             modelconfig.num_concepts * modelconfig.overcompleteness_factor
