@@ -135,12 +135,8 @@ def load_ssae(
     # Load with detailed error handling
     try:
         state_dict = torch.load(weight_path, map_location="cpu")
-        print("✅ torch.load() successful")
-        print(f"Keys: {list(state_dict.keys())}")
-
         # Check each tensor
         for key, tensor in state_dict.items():
-            print(f"{key}: {tensor.shape}, {tensor.dtype}")
             if torch.isnan(tensor).any():
                 raise ValueError(f"❌ NaN detected in {key}")
             if torch.isinf(tensor).any():

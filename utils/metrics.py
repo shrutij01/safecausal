@@ -166,7 +166,7 @@ def auction_linear_assignment(x, eps=None, reduce="sum"):
         price[:, J] += gamma_iJ
         # unassign any row that was assigned to object j at the beginning of the iteration
         # for each j \in J
-        mask = (assignment.view(-1, 1) == J.view(1, -1)).sum(dim=1).byte()
+        mask = (assignment.view(-1, 1) == J.view(1, -1)).sum(dim=1).bool()
         assignment.masked_fill_(mask, -1)
         # assign j to i_j for each j \in J
         assignment[iJ] = J
