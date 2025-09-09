@@ -396,22 +396,22 @@ def main(args):
             encoder_bias_vectors = [
                 load_ssae(modeldir, dataconfig)[3] for modeldir in modeldirs
             ]
-        import ipdb
+        # import ipdb
 
-        ipdb.set_trace()
-        print("Computing pairwise MCCs...")
-        mccs = compute_all_pairwise_mccs(decoder_weight_matrices)
+        # ipdb.set_trace()
+        # print("Computing pairwise MCCs...")
+        # mccs = compute_all_pairwise_mccs(decoder_weight_matrices)
 
-        mean_mcc = np.mean(mccs)
-        std_mcc = np.std(mccs)
+        # mean_mcc = np.mean(mccs)
+        # std_mcc = np.std(mccs)
 
-        print("\nPairwise MCCs:")
-        for i, (a, b) in enumerate(
-            itertools.combinations(range(len(modeldirs)), 2)
-        ):
-            print(f"Model {a+1} vs Model {b+1}: MCC = {mccs[i]:.4f}")
-        print(f"\nMean MCC: {mean_mcc:.4f}")
-        print(f"Std  MCC: {std_mcc:.4f}")
+        # print("\nPairwise MCCs:")
+        # for i, (a, b) in enumerate(
+        #     itertools.combinations(range(len(modeldirs)), 2)
+        # ):
+        #     print(f"Model {a+1} vs Model {b+1}: MCC = {mccs[i]:.4f}")
+        # print(f"\nMean MCC: {mean_mcc:.4f}")
+        # print(f"Std  MCC: {std_mcc:.4f}")
         import ipdb
 
         ipdb.set_trace()
