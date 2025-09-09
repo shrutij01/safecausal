@@ -6,7 +6,7 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import debug_tools as dbg
+import utils.debug_tools as dbg
 import numpy as np
 from safetensors.torch import load_file
 from huggingface_hub import hf_hub_download
