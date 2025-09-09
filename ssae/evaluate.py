@@ -434,6 +434,9 @@ def main(args):
             encoder_bias_vectors = [
                 load_ssae(modeldir, dataconfig)[3] for modeldir in modeldirs
             ]
+        import ipdb
+
+        ipdb.set_trace()
         print("Computing pairwise MCCs...")
         mccs = compute_all_pairwise_mccs(decoder_weight_matrices)
 
