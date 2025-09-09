@@ -5,8 +5,9 @@ import torch
 import torch.nn.functional as F
 import yaml
 from re import L
-import data_utils as utils
+import utils.data_utils as utils
 import os
+import numpy as np
 
 from ssae import DictLinearAE
 
@@ -18,6 +19,8 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 import yaml
 from box import Box
 import json
+import utils.metrics as metrics
+import itertools
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -214,6 +217,23 @@ def load_ssae(
     )
 
 
+def compute_all_pairwise_mccs(
+    weight_matrices: list[torch.Tensor],
+) -> list[float]:
+    """
+    Compute mean correlation coefficients (MCCs) between all model pairs.
+    """
+    mccs = []
+    for i, j in itertools.combinations(range(len(weight_matrices)), 2):
+        mcc = metrics.mean_corr_coef(
+            utils.numpify(weight_matrices[i]),
+            utils.numpify(weight_matrices[j]),
+            method="pearson",
+        )
+        mccs.append(mcc)
+    return mccs
+
+
 def main(args, generate_configs):
     tilde_z_test, z_test = utils.load_test_data(
         datafile=args.datafile,
@@ -230,6 +250,21 @@ def main(args, generate_configs):
     decoder_bias_vectors = [
         load_ssae(modeldir, dataconfig)[1] for modeldir in modeldirs
     ]
+    mccs = compute_all_pairwise_mccs(decoder_weight_matrices)
+
+    mean_mcc = np.mean(mccs)
+    std_mcc = np.std(mccs)
+
+    print("\nPairwise MCCs:")
+    for i, (a, b) in enumerate(
+        itertools.combinations(range(len(modeldirs)), 2)
+    ):
+        print(f"Model {a+1} vs Model {b+1}: MCC = {mccs[i]:.4f}")
+    print(f"\nMean MCC: {mean_mcc:.4f}")
+    print(f"Std  MCC: {std_mcc:.4f}")
+    import ipdb
+
+    ipdb.set_trace()
     mean_cos, std_cos, steering_vector = (
         get_max_cos_and_steering_vector_for_concept(
             z_test,

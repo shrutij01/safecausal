@@ -302,11 +302,16 @@ def _hash_cfg(cfg) -> str:
 
 def dump_run(root: Path, model: torch.nn.Module, cfg) -> Path:
     from datetime import datetime
+
     tag = "_".join(f"{k}{getattr(cfg, k)}" for k in KEYS)
     now = datetime.now()
-    time_id = f"{now.strftime('%m%d')}{now.strftime('%H%M')}"  # MMDDHHMM format
+    time_id = (
+        f"{now.strftime('%m%d')}{now.strftime('%H%M')}"  # MMDDHHMM format
+    )
     run = root / f"{tag}_{_hash_cfg(cfg)}"
-    run.mkdir(parents=True, exist_ok=True)  # Allow multiple runs with same config
+    run.mkdir(
+        parents=True, exist_ok=True
+    )  # Allow multiple runs with same config
 
     torch.save(model.state_dict(), run / f"weights_{time_id}.pth")
 

@@ -1,6 +1,6 @@
 import numpy as np
 
-import ssae.data_utils as data_utils
+import utils.data_utils as data_utils
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.manifold import TSNE

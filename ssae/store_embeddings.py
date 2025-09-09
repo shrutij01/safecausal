@@ -8,7 +8,7 @@ import h5py
 import os
 import yaml
 
-import ssae.data_utils as utils
+import utils.data_utils as utils
 
 ACCESS_TOKEN = "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"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
