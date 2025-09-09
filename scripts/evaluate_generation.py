@@ -173,8 +173,9 @@ def main(args, generate_configs):
         token=ACCESS_TOKEN,
         low_cpu_mem_usage=True,
         device_map="auto",
-        # attn_implementation="flash_attention_2",
-        # torch_dtype=torch.bfloat16,  # check compatibility
+        cache_dir="./model_cache",
+        attn_implementation="flash_attention_2",
+        torch_dtype=torch.bfloat16,  # check compatibility
     ).to(device)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
