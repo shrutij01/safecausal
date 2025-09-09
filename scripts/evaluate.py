@@ -6,7 +6,7 @@ import argparse
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+import debug_tools as dbg
 import numpy as np
 from safetensors.torch import load_file
 from huggingface_hub import hf_hub_download
@@ -16,7 +16,6 @@ from sklearn.metrics.pairwise import cosine_similarity
 import yaml
 from box import Box
 from collections import Counter, defaultdict
-import utils.debug_tools as dbg
 from baselines.pca import pca_transform
 
 import itertools
@@ -387,9 +386,6 @@ def main(args):
             raise ValueError(
                 "You must provide at least two model directories."
             )
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
         # the below weights and biases are on CPU
         with torch.no_grad():
             decoder_weight_matrices = [
@@ -548,4 +544,5 @@ if __name__ == "__main__":
         help="Select test prompt set based on concept type (default: default)",
     )
     args = parser.parse_args()
-    main(args)
+    with dbg.debug_on_exception():
+        main(args)
