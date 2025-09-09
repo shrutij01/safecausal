@@ -171,7 +171,7 @@ def load_ssae(
         norm_type=modelconfig.norm,
     )
     model.load_state_dict(
-        torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
+        torch.load(os.path.join(modeldir, "weights.pth"))
     )
     model.eval()
     return (
