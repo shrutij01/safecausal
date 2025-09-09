@@ -34,9 +34,6 @@ def load_llamascope_checkpoint():
 
 def load_ssae_models(modeldirs):
     """Load SSAE models from multiple directories."""
-    if len(modeldirs) < 2:
-        raise ValueError("You must provide at least two model directories.")
-
     decoder_weight_matrices = []
     decoder_bias_vectors = []
     encoder_weight_matrices = []
