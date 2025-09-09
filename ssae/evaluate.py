@@ -164,10 +164,8 @@ def load_ssae(
     modelconfig = load_model_config(modeldir)
     model = DictLinearAE(
         rep_dim=dataconfig.rep_dim,
-        hid=int(
-            modelconfig.num_concepts * modelconfig.overcompleteness_factor
-        ),
-        norm_type=modelconfig.norm_type,
+        hid=int(modelconfig.oc),
+        norm_type=modelconfig.norm,
     ).to(device)
     model.load_state_dict(
         torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
