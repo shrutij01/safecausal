@@ -155,22 +155,13 @@ def load_model_config(modeldir: str) -> Box:
     return config
 
 
-def load_ssae(modeldir: str, dataconfig: Box):
-
-    # -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+def load_ssae(
+    modeldir: str, dataconfig: Box
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Load a DictLinearAE model and return the decoder weights as a numpy array.
     """
-    modelconfig = load_model_config(modeldir)
-    model = DictLinearAE(
-        rep_dim=dataconfig.rep_dim,
-        hid=int(modelconfig.oc),
-        norm_type=modelconfig.norm,
-    )
     weight_path = os.path.join(modeldir, "weights.pth")
-
-    print(f"Loading from: {weight_path}")
-    print(f"File size: {os.path.getsize(weight_path) / (1024**2):.2f} MB")
 
     # Load with detailed error handling
     try:
@@ -182,23 +173,19 @@ def load_ssae(modeldir: str, dataconfig: Box):
         for key, tensor in state_dict.items():
             print(f"{key}: {tensor.shape}, {tensor.dtype}")
             if torch.isnan(tensor).any():
-                print(f"❌ NaN detected in {key}")
+                raise ValueError(f"❌ NaN detected in {key}")
             if torch.isinf(tensor).any():
-                print(f"❌ Inf detected in {key}")
+                raise ValueError(f"❌ Inf detected in {key}")
             if tensor.numel() == 0:
-                print(f"❌ Empty tensor in {key}")
-
+                raise ValueError(f"❌ Empty tensor in {key}")
+        return (
+            state_dict["decoder.weight"].clone(),
+            state_dict["decoder.bias"].clone(),
+            state_dict["encoder.weight"].clone(),
+            state_dict["encoder.bias"].clone(),
+        )
     except Exception as e:
-        print(f"❌ Error during torch.load(): {e}")
-        return None
-    # model.load_state_dict(torch.load(os.path.join(modeldir, "weights.pth")))
-    # model.eval()
-    # return (
-    #     model.decoder.weight.data,
-    #     model.decoder.bias.data,
-    #     model.encoder.weight.data,
-    #     model.encoder.bias.data,
-    # )
+        raise ValueError(f"❌ Error during torch.load(): {e}")
 
 
 def compute_all_pairwise_mccs(
@@ -430,21 +417,23 @@ def main(args):
             raise ValueError(
                 "You must provide at least two model directories."
             )
-        print(f"Loading model configs from {len(modeldirs)} directories...")
-        print("Loading decoder weight matrices...")
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
         # the below weights and biases are on CPU
-        decoder_weight_matrices = [
-            load_ssae(modeldir, dataconfig)[0] for modeldir in modeldirs
-        ]
-        decoder_bias_vectors = [
-            load_ssae(modeldir, dataconfig)[1] for modeldir in modeldirs
-        ]
-        encoder_weight_matrices = [
-            load_ssae(modeldir, dataconfig)[2] for modeldir in modeldirs
-        ]
-        encoder_bias_vectors = [
-            load_ssae(modeldir, dataconfig)[3] for modeldir in modeldirs
-        ]
+        with torch.no_grad():
+            decoder_weight_matrices = [
+                load_ssae(modeldir, dataconfig)[0] for modeldir in modeldirs
+            ]
+            decoder_bias_vectors = [
+                load_ssae(modeldir, dataconfig)[1] for modeldir in modeldirs
+            ]
+            encoder_weight_matrices = [
+                load_ssae(modeldir, dataconfig)[2] for modeldir in modeldirs
+            ]
+            encoder_bias_vectors = [
+                load_ssae(modeldir, dataconfig)[3] for modeldir in modeldirs
+            ]
         print("Computing pairwise MCCs...")
         mccs = compute_all_pairwise_mccs(decoder_weight_matrices)
 
