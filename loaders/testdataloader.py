@@ -10,7 +10,6 @@ import yaml
 from box import Box
 
 
-
 class TestDataLoader:
     """Load data safely with validation."""
 
@@ -48,6 +47,7 @@ class TestDataLoader:
 
             # Convert to tensors on target device
             import utils.data_utils as utils
+
             tilde_z_tensor = utils.tensorify(tilde_z_raw, self.device)
             z_tensor = utils.tensorify(z_raw, self.device)
 
@@ -62,7 +62,12 @@ class TestDataLoader:
 
             # Validate compatibility
             if len(z_tensor) != len(labels):
-                return None, config, labels, "Data/label length mismatch"
+                return (
+                    None,
+                    config,
+                    labels,
+                    f"Data/label length mismatch {len(z_tensor)} vs {len(labels)}",
+                )
 
             return (tilde_z_tensor, z_tensor), config, labels, "Success"
 
@@ -90,7 +95,6 @@ class TestDataLoader:
             return utils.load_test_data(datafile=datafile)
         except Exception:
             return None
-
 
     def _load_labels(self, datafile: str) -> Optional[List]:
         """Load concept labels."""
@@ -135,7 +139,6 @@ class TestDataLoader:
 
                 z_subset = z[indices_tensor]
                 tilde_z_subset = tilde_z[indices_tensor]
-
 
                 split_data[label] = (tilde_z_subset, z_subset)
 
