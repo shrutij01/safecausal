@@ -162,6 +162,9 @@ def load_ssae(
     Load a DictLinearAE model and return the decoder weights as a numpy array.
     """
     modelconfig = load_model_config(modeldir)
+    import ipdb
+
+    ipdb.set_trace()
     model = DictLinearAE(
         rep_dim=dataconfig.rep_dim,
         hid=int(modelconfig.oc),
