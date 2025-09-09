@@ -166,10 +166,10 @@ def main(args, generate_configs):
         )
     )
     tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
-        args.model_id, token=ACCESS_TOKEN
+        args.llm, token=ACCESS_TOKEN
     )
     model = transformers.LlamaForCausalLM.from_pretrained(
-        args.model_id,
+        args.llm,
         token=ACCESS_TOKEN,
         low_cpu_mem_usage=True,
         device_map="auto",
