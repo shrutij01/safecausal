@@ -155,31 +155,50 @@ def load_model_config(modeldir: str) -> Box:
     return config
 
 
-def load_ssae(
-    modeldir: str, dataconfig: Box
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+def load_ssae(modeldir: str, dataconfig: Box):
+
+    # -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Load a DictLinearAE model and return the decoder weights as a numpy array.
     """
     modelconfig = load_model_config(modeldir)
-    import ipdb
-
-    ipdb.set_trace()
     model = DictLinearAE(
         rep_dim=dataconfig.rep_dim,
         hid=int(modelconfig.oc),
         norm_type=modelconfig.norm,
     )
-    model.load_state_dict(
-        torch.load(os.path.join(modeldir, "weights.pth"))
-    )
-    model.eval()
-    return (
-        model.decoder.weight.data,
-        model.decoder.bias.data,
-        model.encoder.weight.data,
-        model.encoder.bias.data,
-    )
+    weight_path = os.path.join(modeldir, "weights.pth")
+
+    print(f"Loading from: {weight_path}")
+    print(f"File size: {os.path.getsize(weight_path) / (1024**2):.2f} MB")
+
+    # Load with detailed error handling
+    try:
+        state_dict = torch.load(weight_path, map_location="cpu")
+        print("✅ torch.load() successful")
+        print(f"Keys: {list(state_dict.keys())}")
+
+        # Check each tensor
+        for key, tensor in state_dict.items():
+            print(f"{key}: {tensor.shape}, {tensor.dtype}")
+            if torch.isnan(tensor).any():
+                print(f"❌ NaN detected in {key}")
+            if torch.isinf(tensor).any():
+                print(f"❌ Inf detected in {key}")
+            if tensor.numel() == 0:
+                print(f"❌ Empty tensor in {key}")
+
+    except Exception as e:
+        print(f"❌ Error during torch.load(): {e}")
+        return None
+    # model.load_state_dict(torch.load(os.path.join(modeldir, "weights.pth")))
+    # model.eval()
+    # return (
+    #     model.decoder.weight.data,
+    #     model.decoder.bias.data,
+    #     model.encoder.weight.data,
+    #     model.encoder.bias.data,
+    # )
 
 
 def compute_all_pairwise_mccs(
