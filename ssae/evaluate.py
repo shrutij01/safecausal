@@ -169,7 +169,7 @@ def load_ssae(
         rep_dim=dataconfig.rep_dim,
         hid=int(modelconfig.oc),
         norm_type=modelconfig.norm,
-    ).to(device)
+    )
     model.load_state_dict(
         torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
     )
@@ -191,8 +191,8 @@ def compute_all_pairwise_mccs(
     mccs = []
     for i, j in itertools.combinations(range(len(weight_matrices)), 2):
         mcc = metrics.mean_corr_coef(
-            utils.numpify(weight_matrices[i]),
-            utils.numpify(weight_matrices[j]),
+            weight_matrices[i],
+            weight_matrices[j],
             method="pearson",
         )
         mccs.append(mcc)
@@ -413,6 +413,7 @@ def main(args):
             )
         print(f"Loading model configs from {len(modeldirs)} directories...")
         print("Loading decoder weight matrices...")
+        # the below weights and biases are on CPU
         decoder_weight_matrices = [
             load_ssae(modeldir, dataconfig)[0] for modeldir in modeldirs
         ]
@@ -438,6 +439,9 @@ def main(args):
             print(f"Model {a+1} vs Model {b+1}: MCC = {mccs[i]:.4f}")
         print(f"\nMean MCC: {mean_mcc:.4f}")
         print(f"Std  MCC: {std_mcc:.4f}")
+        import ipdb
+
+        ipdb.set_trace()
         concept_metrics = {}
         for concept, concept_test_set in concept_test_sets.items():
             tilde_z_test, z_test = concept_test_set
