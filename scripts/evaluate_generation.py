@@ -1,26 +1,17 @@
 from typing import List
-import argparse
-from collections import Counter
-import torch
-import torch.nn.functional as F
-import yaml
-from re import L
-import utils.data_utils as utils
+import sys
 import os
-import numpy as np
 
-from ssae import DictLinearAE
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse
 import torch
 import torch.nn.functional as F
 from transformers import AutoModelForCausalLM, AutoTokenizer
-
-import yaml
 from box import Box
 import json
-import utils.metrics as metrics
-import itertools
+
+from loaders import TestDataLoader, load_ssae_models
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -123,155 +114,46 @@ def generate(
     return generated_text
 
 
-def get_most_frequent_index(indices):
-    if indices is None:
-        print("The list is empty.")
-        return None
-
-    indices_list = [int(i.item()) for i in indices]
-    counter = Counter(indices_list)
-    most_frequent_index, count = counter.most_common(1)[0]
-    print(
-        f"The most common index is {most_frequent_index} with count {count} / {len(indices_list)}."
-    )
-    return most_frequent_index
-
-
-def get_max_cos_and_steering_vector_for_concept(
-    z: torch.Tensor,
-    z_tilde: torch.Tensor,
-    decoder_weight: torch.Tensor,
-    decoder_bias: torch.Tensor,
-):
-    """
-    z: [B, D] tensor of original vectors
-    decoder_weight: [V, D] decoder weight matrix (rows = token embeddings)
-
-    Returns:
-        mean and std of max cosine similarities over decoder directions
-    """
-    z = F.normalize(z, dim=1)  # [B, D]
-    z_tilde = F.normalize(z_tilde, dim=1)  # [B, D]
-    # decoder = F.normalize(
-    #     decoder_weight, dim=1
-    # )  # [V, D] — columns as directions
-    decoder = decoder_weight.to(z.device)
-    decoder_bias = F.normalize(decoder_bias, dim=0)
-    decoder_bias = decoder_bias.to(z.device)
-    B, D = z.shape
-    V = decoder.shape[0]
-
-    # z: [B, D], decoder: [D, V]
-    z_tilde_hat = (
-        z.unsqueeze(2)
-        + decoder.unsqueeze(0)
-        + (decoder_bias.unsqueeze(0)).unsqueeze(2)
-    )  # [B, D, V]
-    z_tilde_hat = F.normalize(
-        z_tilde_hat, dim=1
-    )  # normalize shifted vectors: [B, D, V]
-
-    z_tilde = z_tilde.unsqueeze(2)  # [B, D, 1]
-    cosines = torch.bmm(z_tilde.transpose(1, 2), z_tilde_hat).squeeze(
-        1
-    )  # [B, V]
-    max_cosines = cosines.max(dim=1).values  # [B]
-    indices = cosines.argmax(dim=1)  # [B]
-    most_frequent_index = get_most_frequent_index(indices=indices)
-    steering_vector = (
-        decoder[:, most_frequent_index]
-        if most_frequent_index is not None
-        else None
-    )
-    return max_cosines.mean().item(), max_cosines.std().item(), steering_vector
-
-
-def load_model_config(modeldir: str) -> Box:
-    config_path = os.path.join(modeldir, "model_config.yaml")
-    with open(config_path, "r") as f:
-        config = Box(yaml.safe_load(f))
-    return config
-
-
-def load_ssae(
-    modeldir: str, dataconfig: Box
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Load a DictLinearAE model and return the decoder weights as a numpy array.
-    """
-    modelconfig = load_model_config(modeldir)
-    model = DictLinearAE(
-        rep_dim=dataconfig.rep_dim,
-        hid=int(
-            modelconfig.num_concepts * modelconfig.overcompleteness_factor
-        ),
-        norm_type=modelconfig.norm_type,
-    ).to(device)
-    model.load_state_dict(
-        torch.load(os.path.join(modeldir, "sparse_dict_model.pth"))
-    )
-    model.eval()
-    return (
-        model.decoder.weight.data,
-        model.decoder_bias,
-    )
-
-
-def compute_all_pairwise_mccs(
-    weight_matrices: list[torch.Tensor],
-) -> list[float]:
-    """
-    Compute mean correlation coefficients (MCCs) between all model pairs.
-    """
-    mccs = []
-    for i, j in itertools.combinations(range(len(weight_matrices)), 2):
-        mcc = metrics.mean_corr_coef(
-            utils.numpify(weight_matrices[i]),
-            utils.numpify(weight_matrices[j]),
-            method="pearson",
-        )
-        mccs.append(mcc)
-    return mccs
-
-
 def main(args, generate_configs):
-    tilde_z_test, z_test = utils.load_test_data(
-        datafile=args.datafile,
+    loader = TestDataLoader(device=device, verbose=args.verbose)
+    tensors, dataconfig, test_labels, status = loader.load_test_data(
+        args.datafile, args.dataconfig
     )
-    z_test = utils.tensorify(z_test, device)
-    tilde_z_test = utils.tensorify(tilde_z_test, device)
-    with open(args.dataconfig, "r") as file:
-        dataconfig = Box(yaml.safe_load(file))
-    modeldirs = args.modeldirs
-    print("Loading decoder weight matrices...")
-    decoder_weight_matrices = [
-        load_ssae(modeldir, dataconfig)[0] for modeldir in modeldirs
-    ]
-    decoder_bias_vectors = [
-        load_ssae(modeldir, dataconfig)[1] for modeldir in modeldirs
-    ]
-    mccs = compute_all_pairwise_mccs(decoder_weight_matrices)
 
-    mean_mcc = np.mean(mccs)
-    std_mcc = np.std(mccs)
+    if tensors is None:
+        print(f"Failed to load test data: {status}")
+        return
 
-    print("\nPairwise MCCs:")
-    for i, (a, b) in enumerate(
-        itertools.combinations(range(len(modeldirs)), 2)
-    ):
-        print(f"Model {a+1} vs Model {b+1}: MCC = {mccs[i]:.4f}")
-    print(f"\nMean MCC: {mean_mcc:.4f}")
-    print(f"Std  MCC: {std_mcc:.4f}")
-    import ipdb
+    tilde_z_test, z_test = tensors
+    print(f"Data loaded successfully: {status}")
 
-    ipdb.set_trace()
-    mean_cos, std_cos, steering_vector = (
-        get_max_cos_and_steering_vector_for_concept(
-            z_test,
-            tilde_z_test,
-            decoder_weight_matrices[0],
-            decoder_bias_vectors[0],
-        )
+    # Split data by concept to get steering vector
+    concept_test_sets = loader.split_by_label(
+        tilde_z=tilde_z_test, z=z_test, labels=test_labels
+    )
+
+    if concept_test_sets is None:
+        print("Failed to split data by concepts")
+        return
+
+    # Load SSAE model (only need one for steering vector)
+    decoder_weight_matrices, decoder_bias_vectors, _, _ = load_ssae_models(
+        [args.modeldir]
+    )
+    decoder_weight = decoder_weight_matrices[0]
+    decoder_bias = decoder_bias_vectors[0]
+
+    # Get steering vector from first concept (you may want to specify which concept)
+    first_concept = list(concept_test_sets.keys())[0]
+    concept_tilde_z, concept_z = concept_test_sets[first_concept]
+
+    # Import the cosine similarity function from evaluate_cosinesim
+    from scripts.evaluate_cosinesim import (
+        get_max_cos_and_steering_vector_for_concept,
+    )
+
+    _, _, steering_vector = get_max_cos_and_steering_vector_for_concept(
+        concept_z, concept_tilde_z, decoder_weight, decoder_bias
     )
     interv_configs = []
     interv_configs.append(
@@ -352,16 +234,16 @@ if __name__ == "__main__":
     parser.add_argument("datafile")
     parser.add_argument("dataconfig")
     parser.add_argument(
-        "--modeltype", default="ssae", choices=["llamascope", "ssae"]
-    )
-    parser.add_argument(
         "--llm", default="meta-llama/Meta-Llama-3.1-8B-Instruct", type=str
     )
     parser.add_argument(
-        "--modeldirs",
-        nargs="+",
+        "--modeldir",
         type=str,
-        help="List of model directories to compare.",
+        required=True,
+        help="SSAE model directory for steering vector extraction.",
+    )
+    parser.add_argument(
+        "--verbose", action="store_true", help="Enable verbose output"
     )
     parser.add_argument(
         "--steering-layer",
@@ -386,19 +268,19 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     generate_configs = [
-        {
-            "type": "base",
-            "output_filename": "base_generation.json",
-        },
-        {
-            "type": "ssae",
-            "output_filename": "ssae_generation.json",
-            "steering_configs": [
-                {
-                    "feature_key": "feminine",
-                    "feature_value": "positive",
-                },
-            ],
-        },
+        Box(
+            {
+                "type": "base",
+                "max_length": args.max_length,
+                "output_filename": "base_generation.json",
+            }
+        ),
+        Box(
+            {
+                "type": "ssae",
+                "max_length": args.max_length,
+                "output_filename": "ssae_generation.json",
+            }
+        ),
     ]
     main(args, generate_configs)
