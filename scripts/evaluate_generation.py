@@ -7,13 +7,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import argparse
 import torch
 import torch.nn.functional as F
-from transformers import AutoModelForCausalLM, AutoTokenizer
+import transformers
 from box import Box
 import json
 
 from loaders import TestDataLoader, load_ssae_models
 
-
+ACCESS_TOKEN = "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"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -165,8 +165,17 @@ def main(args, generate_configs):
             }
         )
     )
-    llm = AutoModelForCausalLM.from_pretrained(args.llm).to(device)
-    tokenizer = AutoTokenizer.from_pretrained(args.llm)
+    tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
+        args.model_id, token=ACCESS_TOKEN
+    )
+    model = transformers.LlamaForCausalLM.from_pretrained(
+        args.model_id,
+        token=ACCESS_TOKEN,
+        low_cpu_mem_usage=True,
+        device_map="auto",
+        # attn_implementation="flash_attention_2",
+        # torch_dtype=torch.bfloat16,  # check compatibility
+    ).to(device)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
     prompts = [
