@@ -192,7 +192,7 @@ def load_model_config(modeldir: str) -> Box:
 
 def load_ssae(
     modeldir: str, dataconfig: Box
-) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
     Load a DictLinearAE model and return the decoder weights as a numpy array.
     """
@@ -210,9 +210,7 @@ def load_ssae(
     model.eval()
     return (
         model.decoder.weight.data,
-        model.decoder.bias.data,
-        model.encoder.weight.data,
-        model.encoder.bias.data,
+        model.decoder_bias,
     )
 
 
