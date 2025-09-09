@@ -149,7 +149,7 @@ def get_concept_detection_logits(
 
 
 def load_model_config(modeldir: str) -> Box:
-    config_path = os.path.join(modeldir, "model_config.yaml")
+    config_path = os.path.join(modeldir, "cfg.yaml")
     with open(config_path, "r") as f:
         config = Box(yaml.safe_load(f))
     return config
@@ -410,20 +410,6 @@ def main(args):
                     f"Saved steering vector for concept {concept} to {output_dir}"
                 )
 
-            # Evaluate steering vector on test prompts
-            if (
-                steering_vector is not None
-                and hasattr(args, "evaluate_steering")
-                and args.evaluate_steering
-            ):
-                evaluate_steering_on_prompts(
-                    steering_vector=steering_vector,
-                    concept=concept,
-                    layer_idx=getattr(args, "steering_layer", 16),
-                    alpha=getattr(args, "steering_alpha", 5.0),
-                    prompt_type=getattr(args, "test_prompts", "default"),
-                )
-
             if args.ood_data:
                 dirname = os.path.dirname(os.path.abspath(args.ood_data))
                 ood_concept_id = utils.load_json(
@@ -507,20 +493,6 @@ def main(args):
                         output_dir,
                         f"steering_vector_concept_{concept}_llamascope.pt",
                     ),
-                )
-
-            # Evaluate steering vector on test prompts
-            if (
-                steering_vector is not None
-                and hasattr(args, "evaluate_steering")
-                and args.evaluate_steering
-            ):
-                evaluate_steering_on_prompts(
-                    steering_vector=steering_vector,
-                    concept=concept,
-                    layer_idx=getattr(args, "steering_layer", 16),
-                    alpha=getattr(args, "steering_alpha", 5.0),
-                    prompt_type=getattr(args, "test_prompts", "default"),
                 )
 
             if args.ood_data:
