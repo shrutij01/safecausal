@@ -65,7 +65,9 @@ class TestDataLoader:
                 print(
                     f"Data/label length mismatch {len(z_tensor)} vs {len(labels)}"
                 )
-                labels = labels[: len(z_tensor)]
+                labels = labels[-len(z_tensor) :]
+                # to handle when labels are for entire dataset
+                # fixme: better handling
 
             return (tilde_z_tensor, z_tensor), config, labels, "Success"
 

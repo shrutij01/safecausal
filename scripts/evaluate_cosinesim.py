@@ -115,7 +115,7 @@ def main(args):
     # Load test data
     loader = TestDataLoader(device=device, verbose=args.verbose)
     tensors, dataconfig, test_labels, status = loader.load_test_data(
-        args.datafile, args.dataconfig
+        args.data, args.dataconfigpath
     )
 
     if tensors is None:
@@ -215,11 +215,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Evaluate cosine similarities"
     )
+    parser.add_argument("data", required=True, help="Path to test data file")
     parser.add_argument(
-        "--datafile", required=True, help="Path to test data file"
-    )
-    parser.add_argument(
-        "--dataconfig", required=True, help="Path to data configuration YAML"
+        "dataconfigpath", required=True, help="Path to data configuration YAML"
     )
     parser.add_argument(
         "--method",
