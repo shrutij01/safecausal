@@ -4,6 +4,7 @@ Evaluate Mean Correlation Coefficients (MCCs) between SSAE model pairs.
 
 import sys
 import os
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse
@@ -77,11 +78,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Evaluate MCCs between SSAE models"
     )
+    parser.add_argument("data", required=True, help="Path to test data file")
     parser.add_argument(
-        "--datafile", required=True, help="Path to test data file"
-    )
-    parser.add_argument(
-        "--dataconfigpath",
+        "dataconfigpath",
         required=True,
         help="Path to data configuration YAML",
     )
