@@ -215,9 +215,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Evaluate cosine similarities"
     )
-    parser.add_argument("data", required=True, help="Path to test data file")
+    parser.add_argument("data", help="Path to test data file")
     parser.add_argument(
-        "dataconfigpath", required=True, help="Path to data configuration YAML"
+        "dataconfigpath", help="Path to data configuration YAML"
     )
     parser.add_argument(
         "--method",
