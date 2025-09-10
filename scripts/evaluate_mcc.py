@@ -34,7 +34,7 @@ def main(args):
     # Load data
     loader = TestDataLoader(verbose=args.verbose)
     tensors, _, _, status = loader.load_test_data(
-        args.datafile, args.dataconfigpath
+        args.data, args.dataconfigpath
     )
 
     if tensors is None:
