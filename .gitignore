@@ -11,3 +11,8 @@ questions.txt
 script.txt
 *job_error*
 *job_output*
+**/model_cache/
+**/logs/
+**/generated_jobs/
+**/wandb/
+**/pythia-70m-deduped/
