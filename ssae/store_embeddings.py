@@ -24,16 +24,20 @@ def extract_embeddings(
     layer,
     pooling_method="last_token",
 ):
+    print(f"Processing {len(contexts)} context pairs ({len(contexts)*2} total texts)...")
+
     # Flatten all texts into a single list for vectorized processing
     all_texts = []
-    for context in contexts:
+    for context in tqdm(contexts, desc="Flattening contexts"):
         all_texts.extend([context[0], context[1]])
 
+    print(f"Tokenizing {len(all_texts)} texts...")
     # Single tokenization call for all texts
     tokens = tokenizer(
         all_texts, return_tensors="pt", padding=True, truncation=True
     ).to(device)
 
+    print(f"Running forward pass through model (layer {layer}, {pooling_method} pooling)...")
     # Single forward pass for all texts
     with torch.no_grad():
         outputs = model(**tokens, output_hidden_states=True)
@@ -56,9 +60,10 @@ def extract_embeddings(
         else:
             raise ValueError(f"Unknown pooling method: {pooling_method}")
 
+    print(f"Reshaping {len(pooled_embeddings)} embeddings back to {len(contexts)} pairs...")
     # Reshape back to pairs
     embeddings = []
-    for i in range(0, len(pooled_embeddings), 2):
+    for i in tqdm(range(0, len(pooled_embeddings), 2), desc="Pairing embeddings"):
         embeddings.append([pooled_embeddings[i], pooled_embeddings[i + 1]])
 
     return embeddings
@@ -140,6 +145,7 @@ def main(args):
         tokenizer.padding_side = "left"
     else:
         raise NotImplementedError
+    print(f"Extracting embeddings from {len(cfc_train_tuples)} training samples...")
     cfc_train_embeddings = extract_embeddings(
         cfc_train_tuples,
         model,
@@ -147,13 +153,18 @@ def main(args):
         args.layer,
         args.pooling_method,
     )
-    cfc_test_embeddings = extract_embeddings(
-        cfc_test_tuples,
-        model,
-        tokenizer,
-        args.layer,
-        args.pooling_method,
-    )
+
+    if len(cfc_test_tuples) > 0:
+        print(f"Extracting embeddings from {len(cfc_test_tuples)} test samples...")
+        cfc_test_embeddings = extract_embeddings(
+            cfc_test_tuples,
+            model,
+            tokenizer,
+            args.layer,
+            args.pooling_method,
+        )
+    else:
+        cfc_test_embeddings = []
     directory_location = "/network/scratch/j/joshi.shruti/ssae/"
     directory_name = os.path.join(directory_location, str(args.dataset))
     if not os.path.exists(directory_name):
