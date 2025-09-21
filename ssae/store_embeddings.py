@@ -67,12 +67,8 @@ def extract_embeddings(
     print(
         f"Reshaping {len(pooled_embeddings)} embeddings back to {len(contexts)} pairs..."
     )
-    # Reshape back to pairs
-    embeddings = []
-    for i in tqdm(
-        range(0, len(pooled_embeddings), 2), desc="Pairing embeddings"
-    ):
-        embeddings.append([pooled_embeddings[i], pooled_embeddings[i + 1]])
+    # Efficient tensor reshaping - no loops needed
+    embeddings = pooled_embeddings.view(-1, 2, pooled_embeddings.shape[-1])
 
     return embeddings
 
@@ -120,10 +116,9 @@ def main(args):
             args.model_id,
             token=ACCESS_TOKEN,
             low_cpu_mem_usage=True,
-            device_map="auto",
             # attn_implementation="flash_attention_2",
             # torch_dtype=torch.bfloat16,  # check compatibility
-        )
+        ).to(device)
         tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
             args.model_id, token=ACCESS_TOKEN
         )
@@ -134,7 +129,7 @@ def main(args):
             "EleutherAI/pythia-70m-deduped",
             revision="step3000",
             cache_dir="./pythia-70m-deduped/step3000",
-        )
+        ).to(device)
 
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-70m-deduped",
@@ -147,9 +142,10 @@ def main(args):
         model = transformers.GemmaForCausalLM.from_pretrained(
             args.model_id,
             low_cpu_mem_usage=True,
-            device_map="auto",
-        )
+        ).to(device)
         tokenizer = transformers.GemmaTokenizer.from_pretrained(args.model_id)
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
     else:
         raise NotImplementedError
