@@ -24,7 +24,9 @@ def extract_embeddings(
     layer,
     pooling_method="last_token",
 ):
-    print(f"Processing {len(contexts)} context pairs ({len(contexts)*2} total texts)...")
+    print(
+        f"Processing {len(contexts)} context pairs ({len(contexts)*2} total texts)..."
+    )
 
     # Flatten all texts into a single list for vectorized processing
     all_texts = []
@@ -37,7 +39,9 @@ def extract_embeddings(
         all_texts, return_tensors="pt", padding=True, truncation=True
     ).to(device)
 
-    print(f"Running forward pass through model (layer {layer}, {pooling_method} pooling)...")
+    print(
+        f"Running forward pass through model (layer {layer}, {pooling_method} pooling)..."
+    )
     # Single forward pass for all texts
     with torch.no_grad():
         outputs = model(**tokens, output_hidden_states=True)
@@ -53,17 +57,21 @@ def extract_embeddings(
             batch_size = hidden_states.size(0)
             pooled_embeddings = hidden_states[
                 torch.arange(batch_size), seq_lengths
-            ].cpu()
+            ].to(device)
         elif pooling_method == "sum":
             # Sum pooling across sequence dimension
-            pooled_embeddings = masked_hidden_states.sum(dim=1).cpu()
+            pooled_embeddings = masked_hidden_states.sum(dim=1).to(device)
         else:
             raise ValueError(f"Unknown pooling method: {pooling_method}")
 
-    print(f"Reshaping {len(pooled_embeddings)} embeddings back to {len(contexts)} pairs...")
+    print(
+        f"Reshaping {len(pooled_embeddings)} embeddings back to {len(contexts)} pairs..."
+    )
     # Reshape back to pairs
     embeddings = []
-    for i in tqdm(range(0, len(pooled_embeddings), 2), desc="Pairing embeddings"):
+    for i in tqdm(
+        range(0, len(pooled_embeddings), 2), desc="Pairing embeddings"
+    ):
         embeddings.append([pooled_embeddings[i], pooled_embeddings[i + 1]])
 
     return embeddings
@@ -145,7 +153,9 @@ def main(args):
         tokenizer.padding_side = "left"
     else:
         raise NotImplementedError
-    print(f"Extracting embeddings from {len(cfc_train_tuples)} training samples...")
+    print(
+        f"Extracting embeddings from {len(cfc_train_tuples)} training samples..."
+    )
     cfc_train_embeddings = extract_embeddings(
         cfc_train_tuples,
         model,
@@ -155,7 +165,9 @@ def main(args):
     )
 
     if len(cfc_test_tuples) > 0:
-        print(f"Extracting embeddings from {len(cfc_test_tuples)} test samples...")
+        print(
+            f"Extracting embeddings from {len(cfc_test_tuples)} test samples..."
+        )
         cfc_test_embeddings = extract_embeddings(
             cfc_test_tuples,
             model,
