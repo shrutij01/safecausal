@@ -23,52 +23,72 @@ def extract_embeddings(
     tokenizer,
     layer,
     pooling_method="last_token",
+    batch_size=128,
 ):
     print(
-        f"Processing {len(contexts)} context pairs ({len(contexts)*2} total texts)..."
+        f"Processing {len(contexts)} context pairs ({len(contexts)*2} total texts) in batches of {batch_size}..."
     )
 
-    # Flatten all texts into a single list for vectorized processing
-    all_texts = []
-    for context in tqdm(contexts, desc="Flattening contexts"):
-        all_texts.extend([context[0], context[1]])
+    all_embeddings = []
+    num_batches = (len(contexts) + batch_size - 1) // batch_size
 
-    print(f"Tokenizing {len(all_texts)} texts...")
-    # Single tokenization call for all texts
-    tokens = tokenizer(
-        all_texts, return_tensors="pt", padding=True, truncation=True
-    ).to(device)
+    for batch_idx in tqdm(range(num_batches), desc="Processing batches"):
+        start_idx = batch_idx * batch_size
+        end_idx = min(start_idx + batch_size, len(contexts))
+        batch_contexts = contexts[start_idx:end_idx]
 
-    print(
-        f"Running forward pass through model (layer {layer}, {pooling_method} pooling)..."
-    )
-    # Single forward pass for all texts
-    with torch.no_grad():
-        outputs = model(**tokens, output_hidden_states=True)
-        hidden_states = outputs["hidden_states"][layer]
+        # Flatten batch texts
+        batch_texts = []
+        for context in batch_contexts:
+            batch_texts.extend([context[0], context[1]])
 
-        # Apply attention mask to remove padding tokens
-        attn_mask = tokens["attention_mask"]
-        masked_hidden_states = hidden_states * attn_mask.unsqueeze(-1)
+        # Tokenize batch
+        tokens = tokenizer(
+            batch_texts, return_tensors="pt", padding=True, truncation=True
+        ).to(device)
 
-        if pooling_method == "last_token":
-            # Get last token embeddings using attention mask
-            seq_lengths = attn_mask.sum(dim=1) - 1
-            batch_size = hidden_states.size(0)
-            pooled_embeddings = hidden_states[
-                torch.arange(batch_size), seq_lengths
-            ].to(device)
-        elif pooling_method == "sum":
-            # Sum pooling across sequence dimension
-            pooled_embeddings = masked_hidden_states.sum(dim=1).to(device)
-        else:
-            raise ValueError(f"Unknown pooling method: {pooling_method}")
+        # Forward pass for batch
+        with torch.no_grad():
+            outputs = model(**tokens, output_hidden_states=True)
+            hidden_states = outputs["hidden_states"][layer]
 
-    print(
-        f"Reshaping {len(pooled_embeddings)} embeddings back to {len(contexts)} pairs..."
-    )
-    # Efficient tensor reshaping - no loops needed
-    embeddings = pooled_embeddings.view(-1, 2, pooled_embeddings.shape[-1])
+            # Apply attention mask to remove padding tokens
+            attn_mask = tokens["attention_mask"]
+            masked_hidden_states = hidden_states * attn_mask.unsqueeze(-1)
+
+            if pooling_method == "last_token":
+                # Get last token embeddings using attention mask
+                seq_lengths = attn_mask.sum(dim=1) - 1
+                batch_size_actual = hidden_states.size(0)
+                pooled_embeddings = hidden_states[
+                    torch.arange(batch_size_actual, device=device), seq_lengths
+                ]
+            elif pooling_method == "sum":
+                # Sum pooling across sequence dimension
+                pooled_embeddings = masked_hidden_states.sum(dim=1)
+            else:
+                raise ValueError(f"Unknown pooling method: {pooling_method}")
+
+            # Reshape to pairs and move to CPU to save GPU memory
+            batch_embeddings = pooled_embeddings.view(
+                -1, 2, pooled_embeddings.shape[-1]
+            ).cpu()
+            all_embeddings.append(batch_embeddings)
+
+        # Clear GPU cache after each batch
+        del (
+            tokens,
+            outputs,
+            hidden_states,
+            attn_mask,
+            masked_hidden_states,
+            pooled_embeddings,
+        )
+        torch.cuda.empty_cache()
+
+    # Concatenate all batch results
+    print(f"Concatenating {len(all_embeddings)} batches...")
+    embeddings = torch.cat(all_embeddings, dim=0)
 
     return embeddings
 
@@ -158,6 +178,7 @@ def main(args):
         tokenizer,
         args.layer,
         args.pooling_method,
+        args.batch_size,
     )
 
     if len(cfc_test_tuples) > 0:
@@ -170,6 +191,7 @@ def main(args):
             tokenizer,
             args.layer,
             args.pooling_method,
+            args.batch_size,
         )
     else:
         cfc_test_embeddings = []
@@ -287,6 +309,12 @@ if __name__ == "__main__":
         choices=["last_token", "sum"],
         default="last_token",
         help="Pooling method for sequence embeddings: 'last_token' or 'sum'",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=128,
+        help="Batch size for processing contexts (default: 128, optimized for A100-class GPUs)",
     )
     # Llama-3 has 32 layers, CAA paper showed most effective steering around the
     # 13th layer for Llama-2 with 33 layers
