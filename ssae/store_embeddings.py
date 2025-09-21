@@ -91,9 +91,7 @@ def store_embeddings(
 
 def main(args):
     if args.dataset == "labeled-sentences":
-        cfc_train_tuples, cfc_train_labels = utils.load_labeled_sentences(
-            num_samples=args.num_samples
-        )
+        cfc_train_tuples, cfc_train_labels = utils.load_labeled_sentences()
         cfc_test_tuples = []  # No test split for labeled-sentences
         cfc_test_labels = []
     else:

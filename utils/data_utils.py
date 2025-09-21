@@ -35,7 +35,7 @@ def load_jsonl(filepath: str):
         return [json.loads(line) for line in f if line.strip()]
 
 
-def load_labeled_sentences(num_samples):
+def load_labeled_sentences():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     datapath = os.path.join(
         script_dir,
@@ -49,12 +49,6 @@ def load_labeled_sentences(num_samples):
 
     # Load all labeled sentences
     labeled_sentences = load_jsonl(datapath)
-
-    # Limit to num_samples if specified
-    if num_samples and num_samples < len(labeled_sentences):
-        labeled_sentences = labeled_sentences[:num_samples]
-
-    import random
 
     cfc_tuples = []
     all_labels = []
