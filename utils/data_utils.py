@@ -35,27 +35,96 @@ def load_jsonl(filepath: str):
         return [json.loads(line) for line in f if line.strip()]
 
 
+def load_labeled_sentences(num_samples):
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    datapath = os.path.join(
+        script_dir,
+        "..",
+        "data",
+        "labeled-sentences",
+        "labeled_sentences_large_deduped_train.jsonl",
+    )
+    if not os.path.exists(datapath):
+        raise FileNotFoundError()
+
+    # Load all labeled sentences
+    labeled_sentences = load_jsonl(datapath)
+
+    # Limit to num_samples if specified
+    if num_samples and num_samples < len(labeled_sentences):
+        labeled_sentences = labeled_sentences[:num_samples]
+
+    import random
+
+    cfc_tuples = []
+    all_labels = []
+
+    values_ordered = [
+        "tense-present",
+        "tense-past",
+        "voice-active",
+        "voice-passive",
+        "domain-science",
+        "domain-fantasy",
+        "domain-news",
+        "domain-other",
+        "reading-level-high",
+        "reading-level-low",
+        "sentiment-positive",
+        "sentiment-neutral",
+        "sentiment-negative",
+    ]
+
+    # Create binary labels for each sentence
+    sentences_with_binary_labels = []
+    for data in labeled_sentences:
+        sentence = data["sentence"]
+        binary_labels = {}
+
+        # Initialize all binary labels to False
+        for value in values_ordered:
+            binary_labels[value] = False
+
+        # Set binary labels based on attributes
+        for key, val in data.items():
+            if key == "sentence":
+                continue
+            if key == "reading_level":
+                binary_labels["reading-level-high"] = val > 11.5
+                binary_labels["reading-level-low"] = val <= 11.5
+            else:
+                kv = f"{key}-{val}"
+                if kv in binary_labels:
+                    binary_labels[kv] = True
+
+        sentences_with_binary_labels.append((sentence, binary_labels))
+
+    # Create random pairs
+    for i in range(len(sentences_with_binary_labels)):
+        for j in range(i + 1, min(i + 3, len(sentences_with_binary_labels))):
+            sent1, labels1 = sentences_with_binary_labels[i]
+            sent2, labels2 = sentences_with_binary_labels[j]
+
+            cfc_tuples.append([sent1, sent2])
+
+            # Create labels indicating differences between the pair
+            pair_labels = {}
+            for key in values_ordered:
+                pair_labels[key] = (
+                    labels1[key] != labels2[key]
+                )  # True if different
+            all_labels.append(pair_labels)
+
+    return cfc_tuples, all_labels
+
+
 def load_dataset(
     dataset_name,
     num_samples,
     split=0.9,
+    return_labels=False,
 ):
-    if dataset_name == "labeled-sentences":
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        datapath = os.path.join(
-            script_dir, "..", "data", "labeled_sentences.jsonl"
-        )
-        if not os.path.exists(datapath):
-            raise FileNotFoundError()
-        labeled_paired_sentences = load_jsonl(datapath)
-        cfc_tuples = [
-            [d["original"]["sentence"], d["modified"]["sentence"]]
-            for d in labeled_paired_sentences
-        ]
-        split_index = int(len(cfc_tuples) * split)
-        cfc_train_tuples = cfc_tuples[:split_index]
-        cfc_test_tuples = cfc_tuples[split_index:]
-    elif dataset_name == "truthful-qa":
+    if dataset_name == "truthful-qa":
         hf_dataset_name = "truthfulqa/truthful_qa"
         dataset_params = {
             "split": "validation",
@@ -92,6 +161,10 @@ def load_dataset(
         cfc_train_tuples = cfc_tuples[:split_index]
         cfc_test_tuples = cfc_tuples[split_index:]
         concept_labels_test = None
+        cfc_train_labels = None
+        cfc_test_labels = None
+        cfc_train_labels = None
+        cfc_test_labels = None
     elif dataset_name == "sycophancy" or dataset_name == "refusal":
         script_dir = os.path.dirname(os.path.abspath(__file__))
         sycopath = os.path.join(
@@ -121,6 +194,8 @@ def load_dataset(
         cfc_train_tuples = cfc_tuples[:split_index]
         cfc_test_tuples = cfc_tuples[split_index:]
         concept_labels_test = None
+        cfc_train_labels = None
+        cfc_test_labels = None
     elif dataset_name == "safearena":
         script_dir = os.path.dirname(os.path.abspath(__file__))
         safepath = os.path.join(script_dir, "..", "data", "safe.json")
@@ -140,6 +215,8 @@ def load_dataset(
         cfc_train_tuples = cfc_tuples[:split_index]
         cfc_test_tuples = cfc_tuples[split_index:]
         concept_labels_test = None
+        cfc_train_labels = None
+        cfc_test_labels = None
     elif dataset_name == "wildjailbreak":
         paired_file_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
@@ -183,6 +260,8 @@ def load_dataset(
         cfc_train_tuples = cfc_tuples[:split_index]
         cfc_test_tuples = cfc_tuples[split_index:]
         concept_labels_test = None
+        cfc_train_labels = None
+        cfc_test_labels = None
 
     elif dataset_name in [
         "eng-french",
@@ -198,6 +277,8 @@ def load_dataset(
                 dataset_name, split_index, num_samples
             )
         )
+        cfc_train_labels = None
+        cfc_test_labels = None
     else:
         raise NotImplementedError
     if concept_labels_test is not None:
