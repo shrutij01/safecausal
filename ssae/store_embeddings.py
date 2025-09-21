@@ -146,14 +146,14 @@ def main(args):
         cfc_train_tuples,
         model,
         tokenizer,
-        args.llm_layer,
+        args.layer,
         args.pooling_method,
     )
     cfc_test_embeddings = extract_embeddings(
         cfc_test_tuples,
         model,
         tokenizer,
-        args.llm_layer,
+        args.layer,
         args.pooling_method,
     )
     directory_location = "/network/scratch/j/joshi.shruti/ssae/"
@@ -170,11 +170,13 @@ def main(args):
         raise NotImplementedError
     embeddings_path = os.path.join(
         directory_name,
-        "L_"
-        + str(args.llm_layer)
-        + "_M_"
+        str(args.dataset)
+        + "_"
         + str(model_name)
-        + str(args.dataset)
+        + "_"
+        + str(args.layer)
+        + "_"
+        + str(args.pooling_method)
         + ".h5",
     )
     store_embeddings(
@@ -213,12 +215,19 @@ def main(args):
         "rep_dim": cfc_train_embeddings[0][0].shape[0],
         "num_concepts": num_concepts,
         "model": args.model_id,
-        "llm_layer": args.llm_layer,
+        "llm_layer": args.layer,
         "split": 0.9,
     }
     config_path = os.path.join(
         directory_name,
-        "L_" + str(args.llm_layer) + str(args.dataset) + ".yaml",
+        str(args.dataset)
+        + "_"
+        + str(model_name)
+        + "_"
+        + str(args.layer)
+        + "_"
+        + str(args.pooling_method)
+        + ".yaml",
     )
     with open(config_path, "w") as file:
         yaml.dump(config, file)
@@ -229,32 +238,23 @@ if __name__ == "__main__":
     parser.add_argument(
         "--dataset",
         choices=[
-            "eng-french",
-            "eng-german",
-            "masc-fem-eng",
-            "masc-fem-mixed",
-            "2-binary",
-            "corr-binary",
             "truthful-qa",
-            "categorical",
             "safearena",
             "wildjailbreak",
             "labeled-sentences",
         ],
-        default="eng-french",
+        default="labeled-sentences",
     )
     parser.add_argument(
         "--model_id",
-        default="meta-llama/Meta-Llama-3.1-8B-Instruct",
+        default="EleutherAI/pythia-70m-deduped",
         choices=[
             "meta-llama/Meta-Llama-3.1-8B-Instruct",
             "EleutherAI/pythia-70m-deduped",
             "google/gemma-2-2b-it",
         ],
     )
-    parser.add_argument(
-        "--llm-layer", type=int, default=32, choices=range(0, 33)
-    )
+    parser.add_argument("--layer", type=int, default=31, choices=range(0, 33))
     parser.add_argument(
         "--num-samples",
         type=int,
