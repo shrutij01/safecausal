@@ -244,6 +244,44 @@ class Logger:
         )
         self._buf: Dict[str, float] = {}
 
+    @staticmethod
+    def prepare_config(cfg, dataloader=None, device=None, model=None):
+        """Prepare enhanced config with runtime info for wandb tracking."""
+        config = asdict(cfg)
+
+        # Convert Path objects to strings
+        for k, v in config.items():
+            if isinstance(v, Path):
+                config[k] = str(v)
+
+        # Add runtime info if provided
+        if device:
+            config["device"] = str(device)
+            if torch.cuda.is_available():
+                gpu_props = torch.cuda.get_device_properties(device)
+                config.update(
+                    {
+                        "gpu_name": gpu_props.name,
+                        "gpu_memory_gb": gpu_props.total_memory / 1024**3,
+                    }
+                )
+
+        if dataloader:
+            config.update(
+                {
+                    "dataset_size": len(dataloader.dataset),
+                    "num_batches": len(dataloader),
+                }
+            )
+
+        # Add derived parameters
+        config["hidden_dim"] = cfg.hid
+        if hasattr(cfg, "extra") and hasattr(cfg.extra, "__dict__"):
+            for k, v in vars(cfg.extra).items():
+                config[f"extra_{k}"] = v
+
+        return config
+
     def logkv(self, k, v):
         self._buf[k] = float(v) if torch.is_tensor(v) else v
         return v
@@ -334,13 +372,14 @@ def train_epoch(
     optim,
     cfg,
     dev,
-) -> Tuple[float, float, float]:
+) -> Tuple[float, float, float, Dict[str, float]]:
     dict.train()
 
     # Accumulators
     recon_sum = 0.0
     sparsity_sum = 0.0
     concept_counts = 0
+    latest_activation_stats = {}
 
     # Pre-allocated tensors to eliminate dynamic allocation
     gpu_tensor = None
@@ -407,10 +446,99 @@ def train_epoch(
             # Efficient sparsity counting using cached hidden states
             with torch.no_grad():
                 h = ssae.get_cached_hidden()  # Reuse from forward pass
+                h_abs = torch.abs(h)
 
                 # Use pre-allocated mask for sparsity counting
-                torch.ge(torch.abs(h), cfg.ind_th, out=threshold_mask)
+                torch.ge(h_abs, cfg.ind_th, out=threshold_mask)
                 concept_counts += threshold_mask.sum().item()
+
+                # Log activation distribution every 500 batches for efficiency
+                if batch_idx % 500 == 0:
+                    # Memory-aware activation analysis
+                    with torch.no_grad():
+                        batch_size, hidden_dim = h_abs.shape
+                        total_elements = batch_size * hidden_dim
+
+                        # Check available GPU memory and decide on sampling strategy
+                        if torch.cuda.is_available():
+                            # Get available memory in bytes
+                            free_memory = torch.cuda.get_device_properties(
+                                h_abs.device
+                            ).total_memory - torch.cuda.memory_allocated(
+                                h_abs.device
+                            )
+                            # Estimate memory needed for quantile computation (4 bytes per float32, plus overhead)
+                            estimated_memory_needed = (
+                                total_elements * 4 * 3
+                            )  # factor of 3 for temporary tensors
+
+                            # Use sampling if we would use more than 20% of available memory
+                            use_sampling = estimated_memory_needed > (
+                                free_memory * 0.2
+                            )
+                        else:
+                            # Conservative sampling for CPU
+                            use_sampling = total_elements > 100_000
+
+                        if use_sampling:
+                            # Sample 10% of elements or 50k, whichever is smaller
+                            sample_size = min(
+                                50_000, max(1000, total_elements // 10)
+                            )
+                            flat_indices = torch.randperm(
+                                total_elements, device=h_abs.device
+                            )[:sample_size]
+                            h_sample = h_abs.flatten()[flat_indices]
+                        else:
+                            h_sample = h_abs.flatten()
+
+                        # Compute percentiles on sample/full data
+                        percentiles = torch.quantile(
+                            h_sample,
+                            torch.tensor(
+                                [0.5, 0.75, 0.9, 0.95, 0.99],
+                                device=h_sample.device,
+                            ),
+                        )
+
+                        # Efficient fraction calculations using full data (no extra flattening)
+                        count_01 = (h_abs > 0.1).sum().item()
+                        count_05 = (h_abs > 0.5).sum().item()
+                        count_09 = (h_abs > 0.9).sum().item()
+
+                        # Active neuron statistics
+                        active_mask = h_abs > cfg.ind_th
+                        active_count = active_mask.sum().item()
+
+                        # Compute mean of active neurons efficiently
+                        if active_count > 0:
+                            active_mean = (
+                                h_abs * active_mask.float()
+                            ).sum().item() / active_count
+                        else:
+                            active_mean = 0.0
+
+                        # Store metrics
+                        latest_activation_stats = {
+                            "act_p50": percentiles[0].item(),
+                            "act_p75": percentiles[1].item(),
+                            "act_p90": percentiles[2].item(),
+                            "act_p95": percentiles[3].item(),
+                            "act_p99": percentiles[4].item(),
+                            "act_max": h_abs.max().item(),
+                            "act_std": h_abs.std().item(),
+                            "act_mean_active": active_mean,
+                            "frac_gt_01": count_01 / total_elements,
+                            "frac_gt_05": count_05 / total_elements,
+                            "frac_gt_09": count_09 / total_elements,
+                            "sampled_for_percentiles": use_sampling,
+                        }
+
+                        # Explicit cleanup
+                        del h_sample, percentiles, active_mask
+                        if use_sampling:
+                            del flat_indices
+                        torch.cuda.empty_cache()
 
             batch_count += 1
 
@@ -422,14 +550,13 @@ def train_epoch(
     del gpu_tensor, threshold_mask
     torch.cuda.empty_cache()
 
-    return recon_sum, sparsity_sum, concept_counts
+    return recon_sum, sparsity_sum, concept_counts, latest_activation_stats
 
 
 def main():
     cfg = parse_cfg()
     set_seeds(cfg.seed)
 
-    logger = Logger(entity="causalrepl", project="ssae", config=asdict(cfg))
     dataloader = make_dataloader(cfg)
     dev = (
         torch.device("cuda")
@@ -437,14 +564,24 @@ def main():
         else torch.device("cpu")
     )
     dict = make_dict(cfg).to(dev)
+
+    # Prepare enhanced config with runtime info
+    enhanced_config = Logger.prepare_config(cfg, dataloader, dev, dict)
+    logger = Logger(
+        entity="causalrepl", project="ssae", config=enhanced_config
+    )
+
     ssae = make_ssae(cfg, dev)
     optim = make_optim(dict=dict, ssae=ssae, cfg=cfg)
 
     for ep in range(cfg.epochs):
         ssae.epoch = ep  # Update epoch for sparsity scheduling
-        total_recon_loss, total_sparsity_defect, total_active_concepts = (
-            train_epoch(dataloader, dict, ssae, optim, cfg, dev)
-        )
+        (
+            total_recon_loss,
+            total_sparsity_defect,
+            total_active_concepts,
+            activation_stats,
+        ) = train_epoch(dataloader, dict, ssae, optim, cfg, dev)
 
         # Calculate correct averages
         num_batches = len(dataloader)
@@ -463,6 +600,10 @@ def main():
         }
 
         for k, v in epoch_metrics.items():
+            logger.logkv(k, v)
+
+        # Log activation distribution stats (only when available)
+        for k, v in activation_stats.items():
             logger.logkv(k, v)
 
         # Log memory stats every 10 epochs

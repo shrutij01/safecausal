@@ -2,11 +2,11 @@
 
 # Define hyperparameters for refactored SSAE code
 embedding_files=(
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/L_32_M_llama3labeled-sentences.h5"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/labeled-sentences_pythia70m_5_last_token.h5"
 )
 
 data_configs=(
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/L_32labeled-sentences.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/labeled-sentences_pythia70m_5_last_token.yaml"
 )
 
 # Updated parameter names to match refactored code
@@ -14,13 +14,13 @@ encoding_dims=(
     "--oc 4096"    # overcompleteness factor
 )
 schedules=(
-    "--schedule 3000" # "--schedule 5000"   # scheduler-epochs
+    "--schedule 3000" "--schedule 5000"   # scheduler-epochs
 )
 targets=(
-    "--target 0.1" # "--target 0.05" "--target 0.005" "--target 0.0005"   # target-sparse-level
+    "--target 0.05" "--target 0.02"  "--target 0.005" # target-sparsity
 )
 batch_sizes=(
-    "--batch 64"        # batch-size
+    "--batch 64" "--batch 128"       # batch-size
 )
 norm_types=(
     "--norm ln"         # norm-type
