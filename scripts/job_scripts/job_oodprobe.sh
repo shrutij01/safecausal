@@ -53,7 +53,7 @@ use_amp=(
     "--use-amp"
 )
 num_epochs=(
-    "--epochs 10000"
+    "--epochs 20000"
 )
 
 job_name="ssae_oodprobe"
