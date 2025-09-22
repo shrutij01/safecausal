@@ -52,20 +52,12 @@ def extract_embeddings(
             outputs = model(**tokens, output_hidden_states=True)
             hidden_states = outputs["hidden_states"][layer]
 
-            # Apply attention mask to remove padding tokens
-            attn_mask = tokens["attention_mask"]
-            masked_hidden_states = hidden_states * attn_mask.unsqueeze(-1)
-
             if pooling_method == "last_token":
-                # Get last token embeddings using attention mask
-                seq_lengths = attn_mask.sum(dim=1) - 1
-                batch_size_actual = hidden_states.size(0)
-                pooled_embeddings = hidden_states[
-                    torch.arange(batch_size_actual, device=device), seq_lengths
-                ]
+                # For left padding, last token is always at the rightmost position
+                pooled_embeddings = hidden_states[:, -1, :]
             elif pooling_method == "sum":
                 # Sum pooling across sequence dimension
-                pooled_embeddings = masked_hidden_states.sum(dim=1)
+                pooled_embeddings = hidden_states.sum(dim=1)
             else:
                 raise ValueError(f"Unknown pooling method: {pooling_method}")
 
