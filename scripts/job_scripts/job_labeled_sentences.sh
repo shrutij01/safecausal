@@ -17,10 +17,10 @@ schedules=(
     "--schedule 3000" #"--schedule 5000"   # scheduler-epochs
 )
 targets=(
-    "--target 0.02" #"--target 0.05"  "--target 0.005" # target-sparsity
+    "--target 0.02" "--target 0.05"  "--target 0.005" # target-sparsity
 )
 batch_sizes=(
-    "--batch 256"       # batch-size
+    "--batch 1024" "--batch 512"      # batch-size - increased for better GPU utilization
 )
 norm_types=(
     "--norm ln"         # norm-type
@@ -29,7 +29,7 @@ loss_types=(
     "--loss absolute" # loss-type "--loss absolute"
 )
 learning_rates=(
-    "--lr 0.0005" #  "--lr 0.0007"      # primal-lr
+    "--lr 0.0005"  "--lr 0.0007"      # primal-lr
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2" "--seed 5" "--seed 7"
@@ -50,7 +50,8 @@ num_epochs=(
 job_name="ssae_optimized"
 output="job_output_%j.txt"
 error="job_error_%j.txt"
-time_limit="11:00:00"
+time_limit="3:00:00"
+cpu_req="cpus-per-task=8"
 memory="32Gb"
 gpu_req="gpu:1"
 

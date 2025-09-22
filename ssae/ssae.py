@@ -406,27 +406,28 @@ def train_epoch(
     # Accumulators
     recon_sum = 0.0
     sparsity_sum = 0.0
-    concept_counts = 0
+    concept_counts_gpu = torch.tensor(0, device=dev, dtype=torch.long)
 
     # Pre-allocated tensors to eliminate dynamic allocation
     gpu_tensor = None
     threshold_mask = None
-    batch_count = 0
     renorm_counter = 0
 
-    # Get batch and hidden dimensions for pre-allocation
-    sample_batch = next(iter(dataloader))
-    batch_size, input_dim = sample_batch.shape
+    # Get dimensions from dataset for pre-allocation
+    batch_size = cfg.batch
+    input_dim = dataloader.dataset.data.shape[-1]  # Get from dataset directly
     hid_dim = cfg.hid
 
-    # Pre-allocate all working tensors on GPU
-    if torch.cuda.is_available():
-        gpu_tensor = torch.empty(
-            (batch_size, input_dim), device=dev, dtype=torch.float32
-        )
-        threshold_mask = torch.empty(
-            (batch_size, hid_dim), device=dev, dtype=torch.bool
-        )
+    # Pre-allocate all working tensors on GPU (required)
+    if not torch.cuda.is_available():
+        raise RuntimeError("GPU required for training")
+
+    gpu_tensor = torch.empty(
+        (batch_size, input_dim), device=dev, dtype=torch.float32
+    )
+    threshold_mask = torch.empty(
+        (batch_size, hid_dim), device=dev, dtype=torch.bool
+    )
 
     # Mixed precision scaler for 2x speedup
     scaler = (
@@ -436,57 +437,51 @@ def train_epoch(
     )
 
     for batch_idx, delta_z_cpu in enumerate(dataloader):
-        with torch.cuda.device(dev):
-            # Efficient GPU transfer with pre-allocated tensor
-            gpu_tensor.copy_(delta_z_cpu, non_blocking=True)
+        # Efficient GPU transfer with pre-allocated tensor
+        gpu_tensor.copy_(delta_z_cpu, non_blocking=True)
 
-            # Zero gradients before forward pass
-            optim_kwargs = {
-                "model": dict,
-                "delta_z": gpu_tensor,
-                "loss_type": cfg.loss,
-            }
+        # Zero gradients before forward pass
+        optim_kwargs = {
+            "model": dict,
+            "delta_z": gpu_tensor,
+            "loss_type": cfg.loss,
+        }
 
-            # Mixed precision forward pass
-            if scaler is not None:
-                with torch.cuda.amp.autocast():
-                    optim.roll(compute_cmp_state_kwargs=optim_kwargs)
-                # Note: Cooper handles its own scaling internally
-            else:
+        # Mixed precision forward pass
+        if scaler is not None:
+            with torch.cuda.amp.autocast():
                 optim.roll(compute_cmp_state_kwargs=optim_kwargs)
+            # Note: Cooper handles its own scaling internally
+        else:
+            optim.roll(compute_cmp_state_kwargs=optim_kwargs)
 
-            # Post-step weight operations
-            with torch.no_grad():
-                if dict.decoder.weight.grad is not None:
-                    project_decoder_grads_(dict.decoder.weight)
+        # Post-step weight operations
+        with torch.no_grad():
+            if dict.decoder.weight.grad is not None:
+                project_decoder_grads_(dict.decoder.weight)
 
-                # Renormalize decoder columns at configured frequency
-                renorm_counter += 1
-                if renorm_counter % cfg.renorm_epochs == 0:
-                    renorm_decoder_cols_(dict.decoder.weight)
+            # Renormalize decoder columns at configured frequency
+            renorm_counter += 1
+            if renorm_counter % cfg.renorm_epochs == 0:
+                renorm_decoder_cols_(dict.decoder.weight)
 
-            # Extract metrics
-            recon_loss, sparsity_penalty = ssae.metrics()
-            recon_sum += recon_loss
-            sparsity_sum += sparsity_penalty
+        # Extract metrics
+        recon_loss, sparsity_penalty = ssae.metrics()
+        recon_sum += recon_loss
+        sparsity_sum += sparsity_penalty
 
-            # Efficient sparsity counting using cached hidden states
-            with torch.no_grad():
-                h = ssae.get_cached_hidden()  # Reuse from forward pass
-                h_abs = torch.abs(h)
+        # Efficient sparsity counting using cached hidden states
+        with torch.no_grad():
+            h = ssae.get_cached_hidden()  # Reuse from forward pass
+            h_abs = torch.abs(h)
 
-                # Use pre-allocated mask for sparsity counting
-                torch.ge(h_abs, cfg.ind_th, out=threshold_mask)
-                concept_counts += threshold_mask.sum().item()
+            # Use pre-allocated mask for sparsity counting
+            torch.ge(h_abs, cfg.ind_th, out=threshold_mask)
+            concept_counts_gpu += threshold_mask.sum()
 
-            batch_count += 1
-
-            # Memory cleanup every 100 batches (less frequent, more efficient)
-            if batch_count % 100 == 0:
-                torch.cuda.empty_cache()
-
-    # Final cleanup
-    del gpu_tensor, threshold_mask
+    # Final cleanup and transfer concept counts to CPU once
+    concept_counts = concept_counts_gpu.item()
+    del gpu_tensor, threshold_mask, concept_counts_gpu
     torch.cuda.empty_cache()
 
     return recon_sum, sparsity_sum, concept_counts
@@ -543,6 +538,10 @@ def main():
         # Log memory stats every 10 epochs
         if ep % 10 == 0:
             logger.log_memory_stats()
+
+        # Memory cleanup every 100 epochs for better performance
+        if ep % 100 == 0 and torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         logger.dumpkvs()
         print(
@@ -640,10 +639,10 @@ def make_dataloader(cfg) -> DataLoader:
         dataset,
         batch_size=int(cfg.batch),
         shuffle=True,
-        num_workers=1,  # Reduced to minimize memory overhead
-        prefetch_factor=1,  # Minimal prefetch to reduce memory
-        persistent_workers=False,  # Let workers die to free memory
-        pin_memory=torch.cuda.is_available(),  # Only if GPU available
+        num_workers=8,  # Match CPU cores for better utilization
+        prefetch_factor=4,  # Higher prefetch for larger batches
+        persistent_workers=True,  # Keep workers alive between epochs
+        pin_memory=True,  # Pin memory for faster GPU transfer
         drop_last=True,  # Consistent batch sizes for memory pool
     )
 
