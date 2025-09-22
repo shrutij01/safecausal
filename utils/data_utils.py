@@ -1,3 +1,4 @@
+utils/data_utils.py
 import torch
 
 from datasets import load_dataset as hf_load_dataset
@@ -61,7 +62,7 @@ def create_random_pairs(
 
     random.seed(data_seed)
 
-    num_pairs = min(len(sentences_with_binary_labels) * 2, max_pairs)
+    num_pairs = max(len(sentences_with_binary_labels) * 2, max_pairs)
     cfc_tuples = []
     all_labels = []
 
@@ -214,11 +215,8 @@ def load_single_correlated_file(corr_file_path):
     )
 
     # Create random pairs ONLY within this file
-    max_pairs = min(
-        len(sentences_with_labels) * 2, 10000
-    )  # Smaller limit per file
     cfc_tuples, all_labels = create_random_pairs(
-        sentences_with_labels, data_seed=21, max_pairs=max_pairs
+        sentences_with_labels, data_seed=21, max_pairs=10000
     )
 
     return cfc_tuples, all_labels
