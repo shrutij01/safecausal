@@ -2,11 +2,13 @@
 
 # Define hyperparameters for refactored SSAE code
 embedding_files=(
-    "/network/scratch/j/joshi.shruti/ssae/refusal/L_32_M_llama3refusal.h5"
+    "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.h5",
+    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.h5"
 )
 
 data_configs=(
-    "/network/scratch/j/joshi.shruti/ssae/refusal/L_32refusal.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.yaml",
+    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.yaml"
 )
 
 # Updated parameter names to match refactored code
@@ -17,16 +19,16 @@ schedules=(
     "--schedule 3000" # "--schedule 5000"   # scheduler-epochs
 )
 targets=(
-    "--target 0.1" # "--target 0.05" "--target 0.005" "--target 0.0005"   # target-sparse-level
+    "--target 0.005" # "--target 0.05" "--target 0.005" "--target 0.0005"   # target-sparse-level
 )
 batch_sizes=(
-    "--batch 64"        # batch-size
+    "--batch 1024"        # batch-size
 )
 norm_types=(
     "--norm ln"         # norm-type
 )
 loss_types=(
-    "--loss relative" # loss-type "--loss absolute"
+    "--loss absolute" # loss-type "--loss absolute"
 )
 learning_rates=(
     "--lr 0.0005" #  "--lr 0.0007"      # primal-lr
@@ -90,7 +92,7 @@ for idx in "${!embedding_files[@]}"; do
                                             echo "cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal/ssae" >> "${script_name}"
 
                                             # Updated command with new parameter names and optimizations
-                                            echo "python ssae.py ${embedding_file} ${data_config} ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${amp} ${seed}" >> "${script_name}"
+                                            echo "python ssae.py ${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${amp} ${seed}" >> "${script_name}"
 
                                             # Make the script executable
                                             chmod +x "${script_name}"
