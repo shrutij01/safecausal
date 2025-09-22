@@ -1,3 +1,4 @@
+ssae/store_embeddings.py
 from random import choice
 import torch
 import transformers
@@ -167,7 +168,6 @@ def main(args):
 
         for corr_file in corr_files:
             # Extract correlation level from filename
-            import os
 
             filename = os.path.basename(corr_file)
             # Extract corr-ds-sp-X.X from filename
