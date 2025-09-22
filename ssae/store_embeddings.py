@@ -1,5 +1,4 @@
 from random import choice
-from h5py._hl import dataset
 import torch
 import transformers
 
@@ -328,8 +327,6 @@ def main(args):
             config_filename = f"{dataset_name}_{model_name}_{args.layer}_{args.pooling_method}.yaml"
             config_filepath = os.path.join(directory_name, config_filename)
 
-            import yaml
-
             with open(config_filepath, "w") as f:
                 yaml.dump(config, f)
 
@@ -345,7 +342,6 @@ def main(args):
         )
         cfc_train_labels = None
         cfc_test_labels = None
-
 
     print(
         f"Extracting embeddings from {len(cfc_train_tuples)} training samples..."
