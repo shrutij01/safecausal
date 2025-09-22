@@ -370,7 +370,25 @@ def dump_run(root: Path, model: torch.nn.Module, cfg) -> Path:
     from datetime import datetime
 
     # Extract dataset name from embedding file path
-    dataset_name = cfg.emb.stem.split("_")[0]  # Get first part before '_'
+    # For correlated datasets, preserve the correlation level in the name
+    stem_parts = cfg.emb.stem.split("_")
+    if "corr" in cfg.emb.stem and "ds-sp" in cfg.emb.stem:
+        # For correlated datasets like "labeled_sentences_corr_ds-sp_0.1_pythia70m_5_last_token"
+        # Find the parts up to and including the correlation level
+        dataset_parts = []
+        for i, part in enumerate(stem_parts):
+            dataset_parts.append(part)
+            # Stop after the correlation level (e.g., "0.1")
+            if (
+                i > 0
+                and stem_parts[i - 1].startswith("ds-sp")
+                and part.replace(".", "").isdigit()
+            ):
+                break
+        dataset_name = "_".join(dataset_parts)
+    else:
+        # For regular datasets, use first part only
+        dataset_name = stem_parts[0]
 
     tag = "_".join(f"{k}{getattr(cfg, k)}" for k in KEYS)
 
