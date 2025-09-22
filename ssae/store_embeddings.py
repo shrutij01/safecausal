@@ -111,8 +111,90 @@ def store_embeddings(
 def main(args):
     if args.dataset == "labeled-sentences":
         cfc_train_tuples, cfc_train_labels = utils.load_labeled_sentences()
-        cfc_test_tuples = []  # No test split for labeled-sentences
+        cfc_test_tuples = []
         cfc_test_labels = []
+    elif args.dataset == "oodprobe":
+        data_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "data", "oodprobe")
+        csv_files = [f for f in os.listdir(data_dir) if f.endswith('.csv')]
+
+        # Load model first for oodprobe processing
+        if args.model_id == "EleutherAI/pythia-70m-deduped":
+            model = GPTNeoXForCausalLM.from_pretrained(
+                "EleutherAI/pythia-70m-deduped",
+                revision="step3000",
+                cache_dir="./pythia-70m-deduped/step3000",
+            ).to(device)
+            tokenizer = AutoTokenizer.from_pretrained(
+                "EleutherAI/pythia-70m-deduped",
+                revision="step3000",
+                cache_dir="./pythia-70m-deduped/step3000",
+            )
+            tokenizer.pad_token = tokenizer.eos_token
+            tokenizer.padding_side = "left"
+            model_name = "pythia70m"
+        else:
+            raise NotImplementedError("Only pythia-70m-deduped supported for oodprobe")
+
+        for csv_file in csv_files:
+            dataset_name = csv_file.replace('.csv', '').lower().replace(' ', '_')
+            print(f"Processing {dataset_name}...")
+
+            import tempfile
+            import shutil
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_csv_path = os.path.join(temp_dir, csv_file)
+                shutil.copy(os.path.join(data_dir, csv_file), temp_csv_path)
+
+                cfc_train_tuples, cfc_test_tuples = utils.load_oodprobe_paired_samples(
+                    data_dir=temp_dir,
+                    num_samples=args.num_samples,
+                    train_split=args.split,
+                    seed=42
+                )
+
+            print(f"Extracting embeddings from {len(cfc_train_tuples)} training samples for {dataset_name}...")
+            cfc_train_embeddings = extract_embeddings(
+                cfc_train_tuples, model, tokenizer, args.layer, args.pooling_method, args.batch_size
+            )
+
+            if len(cfc_test_tuples) > 0:
+                print(f"Extracting embeddings from {len(cfc_test_tuples)} test samples for {dataset_name}...")
+                cfc_test_embeddings = extract_embeddings(
+                    cfc_test_tuples, model, tokenizer, args.layer, args.pooling_method, args.batch_size
+                )
+            else:
+                cfc_test_embeddings = []
+
+            directory_location = "/network/scratch/j/joshi.shruti/ssae/"
+            directory_name = os.path.join(directory_location, "oodprobe")
+            if not os.path.exists(directory_name):
+                os.makedirs(directory_name)
+
+            filename = f"{dataset_name}_{model_name}_{args.layer}_{args.pooling_method}.h5"
+            filepath = os.path.join(directory_name, filename)
+            store_embeddings(filepath, cfc_train_embeddings, cfc_test_embeddings)
+
+            config = {
+                "rep_dim": cfc_train_embeddings.shape[-1],
+                "dataset": dataset_name,
+                "model": args.model_id,
+                "layer": args.layer,
+                "pooling_method": args.pooling_method,
+                "num_samples": args.num_samples,
+                "split": args.split
+            }
+
+            config_filename = f"{dataset_name}_{model_name}_{args.layer}_{args.pooling_method}.yaml"
+            config_filepath = os.path.join(directory_name, config_filename)
+
+            import yaml
+            with open(config_filepath, 'w') as f:
+                yaml.dump(config, f)
+
+            print(f"Saved {dataset_name} embeddings to {filepath}")
+            print(f"Saved {dataset_name} config to {config_filepath}")
+
+        return
     else:
         cfc_train_tuples, cfc_test_tuples = utils.load_dataset(
             dataset_name=args.dataset,
@@ -121,26 +203,26 @@ def main(args):
         )
         cfc_train_labels = None
         cfc_test_labels = None
+
+    # Load model for non-oodprobe datasets
     if args.model_id == "meta-llama/Meta-Llama-3.1-8B-Instruct":
         model = transformers.LlamaForCausalLM.from_pretrained(
             args.model_id,
             token=ACCESS_TOKEN,
             low_cpu_mem_usage=True,
-            # attn_implementation="flash_attention_2",
-            # torch_dtype=torch.bfloat16,  # check compatibility
         ).to(device)
         tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
             args.model_id, token=ACCESS_TOKEN
         )
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
+        model_name = "llama3"
     elif args.model_id == "EleutherAI/pythia-70m-deduped":
         model = GPTNeoXForCausalLM.from_pretrained(
             "EleutherAI/pythia-70m-deduped",
             revision="step3000",
             cache_dir="./pythia-70m-deduped/step3000",
         ).to(device)
-
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-70m-deduped",
             revision="step3000",
@@ -148,6 +230,7 @@ def main(args):
         )
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
+        model_name = "pythia70m"
     elif args.model_id == "google/gemma-2-2b-it":
         model = transformers.GemmaForCausalLM.from_pretrained(
             args.model_id,
@@ -157,44 +240,27 @@ def main(args):
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
+        model_name = "gemma2"
     else:
         raise NotImplementedError
-    print(
-        f"Extracting embeddings from {len(cfc_train_tuples)} training samples..."
-    )
+
+    print(f"Extracting embeddings from {len(cfc_train_tuples)} training samples...")
     cfc_train_embeddings = extract_embeddings(
-        cfc_train_tuples,
-        model,
-        tokenizer,
-        args.layer,
-        args.pooling_method,
-        args.batch_size,
+        cfc_train_tuples, model, tokenizer, args.layer, args.pooling_method, args.batch_size
     )
 
     if len(cfc_test_tuples) > 0:
-        print(
-            f"Extracting embeddings from {len(cfc_test_tuples)} test samples..."
-        )
+        print(f"Extracting embeddings from {len(cfc_test_tuples)} test samples...")
         cfc_test_embeddings = extract_embeddings(
-            cfc_test_tuples,
-            model,
-            tokenizer,
-            args.layer,
-            args.pooling_method,
-            args.batch_size,
+            cfc_test_tuples, model, tokenizer, args.layer, args.pooling_method, args.batch_size
         )
     else:
         cfc_test_embeddings = []
+
     directory_location = "/network/scratch/j/joshi.shruti/ssae/"
     directory_name = os.path.join(directory_location, str(args.dataset))
     if not os.path.exists(directory_name):
         os.makedirs(directory_name)
-    if args.model_id == "meta-llama/Meta-Llama-3.1-8B-Instruct":
-        model_name = "llama3"
-    elif args.model_id == "google/gemma-2-2b-it":
-        model_name = "gemma2"
-    elif args.model_id == "EleutherAI/pythia-70m-deduped":
-        model_name = "pythia70m"
     else:
         raise NotImplementedError
     embeddings_path = os.path.join(
@@ -271,6 +337,7 @@ if __name__ == "__main__":
             "safearena",
             "wildjailbreak",
             "labeled-sentences",
+            "oodprobe",
         ],
         default="labeled-sentences",
     )

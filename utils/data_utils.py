@@ -11,6 +11,8 @@ from random import shuffle
 import os
 import json
 import h5py
+import pandas as pd
+from pathlib import Path
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -458,3 +460,110 @@ def load_test_data(datafile):
         tilde_z = cfc_embeddings_test[:, 1]
         z = cfc_embeddings_test[:, 0]
     return tilde_z, z
+
+
+def load_oodprobe_paired_samples(data_dir, num_samples=1000, train_split=0.9, seed=42):
+    """
+    Load CSV files from oodprobe directory and create paired samples with different targets.
+    Returns same format as truthful_qa for compatibility with store_embeddings.py.
+
+    Args:
+        data_dir: Path to directory containing oodprobe CSV files
+        num_samples: Number of paired samples to create per file
+        train_split: Fraction of samples for training (default 0.9)
+        seed: Random seed for reproducibility
+
+    Returns:
+        tuple: (cfc_train_tuples, cfc_test_tuples) where each is a list of [prompt1, prompt2]
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+
+    data_path = Path(data_dir)
+    csv_files = list(data_path.glob("*.csv"))
+
+    if not csv_files:
+        raise FileNotFoundError(f"No CSV files found in {data_dir}")
+
+    all_pairs = []
+
+    for csv_file in csv_files:
+        print(f"Processing {csv_file.name}...")
+
+        # Load CSV file
+        df = pd.read_csv(csv_file)
+
+        # Ensure we have the required columns
+        if not all(col in df.columns for col in ['prompt', 'target']):
+            print(f"Skipping {csv_file.name}: missing 'prompt' or 'target' columns")
+            continue
+
+        # Group by target value
+        target_groups = df.groupby('target')
+        target_values = list(target_groups.groups.keys())
+
+        if len(target_values) < 2:
+            print(f"Skipping {csv_file.name}: only one target value found")
+            continue
+
+        # Create paired samples with different targets
+        for _ in range(num_samples):
+            # Randomly select two different target values
+            target1, target2 = random.sample(target_values, 2)
+
+            # Get random samples from each target group
+            group1 = target_groups.get_group(target1)
+            group2 = target_groups.get_group(target2)
+
+            prompt1 = random.choice(group1['prompt'].tolist())
+            prompt2 = random.choice(group2['prompt'].tolist())
+
+            # Store as [prompt1, prompt2] matching truthful_qa format
+            all_pairs.append([prompt1, prompt2])
+
+    # Shuffle all pairs to mix data from different files
+    random.shuffle(all_pairs)
+
+    # Split into train/test
+    split_idx = int(len(all_pairs) * train_split)
+    cfc_train_tuples = all_pairs[:split_idx]
+    cfc_test_tuples = all_pairs[split_idx:]
+
+    print(f"Total created: {len(cfc_train_tuples)} train pairs and {len(cfc_test_tuples)} test pairs")
+
+    return cfc_train_tuples, cfc_test_tuples
+
+
+def save_oodprobe_pairs(data_dir, output_file, num_samples=1000, train_split=0.9, seed=42):
+    """
+    Create and save oodprobe paired samples to a JSON file for reproducibility.
+
+    Args:
+        data_dir: Path to directory containing oodprobe CSV files
+        output_file: Path to save the paired samples JSON file
+        num_samples: Number of paired samples to create per file
+        train_split: Fraction of samples for training
+        seed: Random seed for reproducibility
+    """
+    cfc_train_tuples, cfc_test_tuples = load_oodprobe_paired_samples(
+        data_dir, num_samples, train_split, seed
+    )
+
+    # Save to JSON file
+    output_data = {
+        "train_pairs": cfc_train_tuples,
+        "test_pairs": cfc_test_tuples,
+        "metadata": {
+            "num_samples_per_file": num_samples,
+            "train_split": train_split,
+            "seed": seed,
+            "total_train": len(cfc_train_tuples),
+            "total_test": len(cfc_test_tuples)
+        }
+    }
+
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(output_data, f, indent=2, ensure_ascii=False)
+
+    print(f"Saved paired samples to {output_file}")
+    return output_file
