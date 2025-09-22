@@ -446,8 +446,8 @@ if __name__ == "__main__":
         "--dataset",
         choices=[
             "truthful-qa",
-            "safearena",
-            "wildjailbreak",
+            "refusal",
+            "sycophancy",
             "labeled-sentences",
             "labeled-sentences-correlated",
             "oodprobe",
