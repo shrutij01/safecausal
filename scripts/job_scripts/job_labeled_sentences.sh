@@ -20,13 +20,13 @@ targets=(
     "--target 0.02" #"--target 0.05"  "--target 0.005" # target-sparsity
 )
 batch_sizes=(
-    "--batch 64" # "--batch 128"       # batch-size
+    "--batch 256"       # batch-size
 )
 norm_types=(
     "--norm ln"         # norm-type
 )
 loss_types=(
-    "--loss relative" # loss-type "--loss absolute"
+    "--loss absolute" # loss-type "--loss absolute"
 )
 learning_rates=(
     "--lr 0.0005" #  "--lr 0.0007"      # primal-lr
@@ -40,7 +40,7 @@ renorm_epochs=(
     "--renorm-epochs 50"    # renormalization frequency for the decoder columns
 )
 use_amp=(
-    "--use-amp"             # Enable mixed precision training
+    #"--use-amp"             # Enable mixed precision training
 )
 num_epochs=(
     "--epochs 10000"
