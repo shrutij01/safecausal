@@ -214,7 +214,7 @@ def get_sentence_embeddings(
     current_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.append(current_dir)
 
-    from store_embeddings import extract_embeddings
+    from ssae.store_embeddings import extract_embeddings
     import torch
     from transformers import GPTNeoXForCausalLM, AutoTokenizer
 
