@@ -52,6 +52,9 @@ renorm_epochs=(
 use_amp=(
     "--use-amp"
 )
+num_epochs=(
+    "--epochs 10000"
+)
 
 job_name="ssae_oodprobe"
 output="job_output_%j.txt"
@@ -77,28 +80,30 @@ for idx in "${!embedding_files[@]}"; do
                         for schedule in "${schedules[@]}"; do
                             for renorm_epoch in "${renorm_epochs[@]}"; do
                                 for amp in "${use_amp[@]}"; do
-                                    for seed in "${seeds[@]}"; do
-                                        script_name="generated_jobs/job_oodprobe_${counter}.sh"
+                                    for epochs in "${num_epochs[@]}"; do
+                                        for seed in "${seeds[@]}"; do
+                                            script_name="generated_jobs/job_oodprobe_${counter}.sh"
 
-                                        echo "#!/bin/bash" > "${script_name}"
-                                        echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
-                                        echo "#SBATCH --error=logs/job_%j.err" >> "${script_name}"
-                                        echo "#SBATCH --time=${time_limit}" >> "${script_name}"
-                                        echo "#SBATCH --mem=${memory}" >> "${script_name}"
-                                        echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
-                                        echo "module load python/3.10" >> "${script_name}"
-                                        echo "module load cuda/12.6.0/cudnn" >> "${script_name}"
-                                        echo "source /home/mila/j/joshi.shruti/venvs/agents/bin/activate" >> "${script_name}"
-                                        echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/safecausal:$PYTHONPATH\"" >> "${script_name}"
-                                        echo "cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal/ssae" >> "${script_name}"
+                                            echo "#!/bin/bash" > "${script_name}"
+                                            echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
+                                            echo "#SBATCH --error=logs/job_%j.err" >> "${script_name}"
+                                            echo "#SBATCH --time=${time_limit}" >> "${script_name}"
+                                            echo "#SBATCH --mem=${memory}" >> "${script_name}"
+                                            echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
+                                            echo "module load python/3.10" >> "${script_name}"
+                                            echo "module load cuda/12.6.0/cudnn" >> "${script_name}"
+                                            echo "source /home/mila/j/joshi.shruti/venvs/agents/bin/activate" >> "${script_name}"
+                                            echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/safecausal:$PYTHONPATH\"" >> "${script_name}"
+                                            echo "cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal/ssae" >> "${script_name}"
 
-                                        echo "python ssae.py ${embedding_file} ${data_config} ${oc_target} ${lr} ${loss_type} ${norm_type} ${batch_size} ${schedule} ${renorm_epoch} ${amp} ${seed}" >> "${script_name}"
+                                            echo "python ssae.py ${embedding_file} ${data_config} ${oc_target} ${lr} ${loss_type} ${norm_type} ${batch_size} ${schedule} ${renorm_epoch} ${amp} ${epochs} ${seed}" >> "${script_name}"
 
-                                        chmod +x "${script_name}"
+                                            chmod +x "${script_name}"
 
-                                        sbatch "${script_name}"
+                                            sbatch "${script_name}"
 
-                                        ((counter++))
+                                            ((counter++))
+                                        done
                                     done
                                 done
                             done

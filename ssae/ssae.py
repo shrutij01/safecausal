@@ -323,7 +323,7 @@ class SimpleCPUData(Dataset):
             return torch.from_numpy(self.data[idx + 1] - self.data[idx])
 
 
-KEYS = ("schedule", "oc", "seed")  # choose what matters
+KEYS = ("schedule", "oc", "seed", "target")  # choose what matters
 
 
 def _hash_cfg(cfg) -> str:
@@ -341,17 +341,17 @@ def _hash_cfg(cfg) -> str:
 def dump_run(root: Path, model: torch.nn.Module, cfg) -> Path:
     from datetime import datetime
 
+    # Extract dataset name from embedding file path
+    dataset_name = cfg.emb.stem.split("_")[0]  # Get first part before '_'
+
     tag = "_".join(f"{k}{getattr(cfg, k)}" for k in KEYS)
-    now = datetime.now()
-    time_id = (
-        f"{now.strftime('%m%d')}{now.strftime('%H%M')}"  # MMDDHHMM format
-    )
-    run = root / f"{tag}_{_hash_cfg(cfg)}"
+
+    run = root / f"{dataset_name}_{tag}_{_hash_cfg(cfg)}"
     run.mkdir(
         parents=True, exist_ok=True
     )  # Allow multiple runs with same config
 
-    torch.save(model.state_dict(), run / f"weights_{time_id}.pth")
+    torch.save(model.state_dict(), run / f"weights.pth")
 
     # Convert config to YAML-serializable format
     cfg_dict = asdict(cfg)
