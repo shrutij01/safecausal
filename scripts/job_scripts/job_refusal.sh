@@ -2,12 +2,12 @@
 
 # Define hyperparameters for refactored SSAE code
 embedding_files=(
-    "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.h5",
+    "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.h5"
 )
 
 data_configs=(
-    "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.yaml",
+    "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.yaml"
 )
 

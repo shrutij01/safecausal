@@ -318,9 +318,9 @@ class SimpleCPUData(Dataset):
         with h5py.File(h5_path, "r") as f:
             full_data = f[key][:]  # Load entire dataset into RAM
 
-        # Sample subset for labeled-sentences to speed up training
+        # Sample subset for behavioral datasets to speed up training
         if (
-            dataset_name == "labeled-sentences"
+            dataset_name in ["labeled-sentences", "sycophancy", "refusal"]
             and max_samples is not None
             and len(full_data) > max_samples
         ):
@@ -334,7 +334,7 @@ class SimpleCPUData(Dataset):
             )
             self.data = full_data[indices]
             print(
-                f"Sampled {max_samples} from {len(full_data)} samples using data_seed={data_seed}"
+                f"Sampled {max_samples} from {len(full_data)} samples for {dataset_name} using data_seed={data_seed}"
             )
         else:
             self.data = full_data
