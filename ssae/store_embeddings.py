@@ -72,8 +72,6 @@ def extract_embeddings(
             tokens,
             outputs,
             hidden_states,
-            attn_mask,
-            masked_hidden_states,
             pooled_embeddings,
         )
         torch.cuda.empty_cache()
