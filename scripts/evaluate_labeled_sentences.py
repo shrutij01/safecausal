@@ -148,8 +148,9 @@ def score_identification(acts, labels, lamda=0.1, metric="accuracy"):
             acts_std = acts_centered.norm(dim=0, keepdim=True)
             # Convert boolean labels to float for mean calculation
             label_matrix_float = label_matrix.T.float()
-            label_matrix_centered = label_matrix_float - label_matrix_float.mean(
-                dim=0, keepdim=True
+            label_matrix_centered = (
+                label_matrix_float
+                - label_matrix_float.mean(dim=0, keepdim=True)
             )
             label_matrix_std = label_matrix_centered.norm(dim=0, keepdim=True)
             # Correct correlation computation
@@ -391,9 +392,22 @@ def main():
     if args.output:
         # Convert tensors to lists for JSON serialization
         save_results = {}
+        save_results["dataset"] = "labeled-sentences"
+
         for metric, data in results.items():
             if metric == "mcc":
+                scores = data["correlation_matrix"]
+                top_features = data["top_features"]
+                top_scores = scores.max(dim=0).values
+
+                # Extract individual MCC scores for each concept
+                mcc_scores = {}
+                for i, label in enumerate(list(top_features.keys())):
+                    mcc_scores[label] = float(top_scores[i])
+
                 save_results[metric] = {
+                    "scores": mcc_scores,
+                    "average_mcc": float(top_scores.mean().item()),
                     "top_features": {
                         k: int(v) for k, v in data["top_features"].items()
                     },
@@ -404,6 +418,9 @@ def main():
             else:
                 save_results[metric] = {
                     "scores": {k: float(v) for k, v in data["scores"].items()},
+                    "average_score": float(
+                        sum(data["scores"].values()) / len(data["scores"])
+                    ),
                     "top_features": {
                         k: int(v) for k, v in data["top_features"].items()
                     },
