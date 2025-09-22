@@ -40,7 +40,7 @@ renorm_epochs=(
     "--renorm-epochs 50"    # renormalization frequency for the decoder columns
 )
 use_amp=(
-    #"--use-amp"             # Enable mixed precision training
+    "--use-amp"             # Enable mixed precision training
 )
 num_epochs=(
     "--epochs 10000"
