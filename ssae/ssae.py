@@ -307,9 +307,37 @@ class Logger:
 
 
 class SimpleCPUData(Dataset):
-    def __init__(self, h5_path: str, key: str = "cfc_train"):
+    def __init__(
+        self,
+        h5_path: str,
+        key: str = "cfc_train",
+        dataset_name: str = None,
+        max_samples: int = None,
+        data_seed: int = 21,
+    ):
         with h5py.File(h5_path, "r") as f:
-            self.data = f[key][:]  # Load entire dataset into RAM
+            full_data = f[key][:]  # Load entire dataset into RAM
+
+        # Sample subset for labeled-sentences to speed up training
+        if (
+            dataset_name == "labeled-sentences"
+            and max_samples is not None
+            and len(full_data) > max_samples
+        ):
+            import numpy as np
+
+            rng = np.random.RandomState(
+                data_seed
+            )  # Fixed data seed independent of model seed
+            indices = rng.choice(
+                len(full_data), size=max_samples, replace=False
+            )
+            self.data = full_data[indices]
+            print(
+                f"Sampled {max_samples} from {len(full_data)} samples using data_seed={data_seed}"
+            )
+        else:
+            self.data = full_data
 
     def __len__(self):
         return (
@@ -595,7 +623,18 @@ def parse_cfg() -> Cfg:
 
 def make_dataloader(cfg) -> DataLoader:
     # Optimize for memory efficiency over throughput
-    dataset = SimpleCPUData(cfg.emb, key="cfc_train")
+    # Extract dataset name from embedding file path
+    dataset_name = cfg.emb.stem.split("_")[0] if "_" in cfg.emb.stem else None
+
+    # Set max_samples for labeled-sentences to speed up training
+    max_samples = 5500 if dataset_name == "labeled-sentences" else None
+
+    dataset = SimpleCPUData(
+        cfg.emb,
+        key="cfc_train",
+        dataset_name=dataset_name,
+        max_samples=max_samples,
+    )
 
     train_loader = DataLoader(
         dataset,
