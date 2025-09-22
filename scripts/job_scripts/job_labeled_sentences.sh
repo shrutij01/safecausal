@@ -14,13 +14,13 @@ encoding_dims=(
     "--oc 4096"    # overcompleteness factor
 )
 schedules=(
-    "--schedule 3000" "--schedule 5000"   # scheduler-epochs
+    "--schedule 3000" #"--schedule 5000"   # scheduler-epochs
 )
 targets=(
-    "--target 0.05" "--target 0.02"  "--target 0.005" # target-sparsity
+    "--target 0.02" #"--target 0.05"  "--target 0.005" # target-sparsity
 )
 batch_sizes=(
-    "--batch 64" "--batch 128"       # batch-size
+    "--batch 64" # "--batch 128"       # batch-size
 )
 norm_types=(
     "--norm ln"         # norm-type
@@ -41,6 +41,9 @@ renorm_epochs=(
 )
 use_amp=(
     "--use-amp"             # Enable mixed precision training
+)
+num_epochs=(
+    "--epochs 10000"
 )
 
 # Job settings
@@ -72,34 +75,36 @@ for idx in "${!embedding_files[@]}"; do
                             for schedule in "${schedules[@]}"; do
                                 for renorm_epoch in "${renorm_epochs[@]}"; do
                                     for amp in "${use_amp[@]}"; do
-                                        for seed in "${seeds[@]}"; do
-                                            # Define a script name
-                                            script_name="generated_jobs/job_${counter}.sh"
+                                        for epochs in "${num_epochs[@]}"; do
+                                            for seed in "${seeds[@]}"; do
+                                                # Define a script name
+                                                script_name="generated_jobs/job_${counter}.sh"
 
-                                            # Create a batch script for each job
-                                            echo "#!/bin/bash" > "${script_name}"
-                                            echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
-                                            echo "#SBATCH --error=logs/job_%j.err" >> "${script_name}"
-                                            echo "#SBATCH --time=${time_limit}" >> "${script_name}"
-                                            echo "#SBATCH --mem=${memory}" >> "${script_name}"
-                                            echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
-                                            echo "module load python/3.10" >> "${script_name}"
-                                            echo "module load cuda/12.6.0/cudnn" >> "${script_name}"
-                                            echo "source /home/mila/j/joshi.shruti/venvs/agents/bin/activate" >> "${script_name}"
-                                            echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/safecausal:$PYTHONPATH\"" >> "${script_name}"
-                                            echo "cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal/ssae" >> "${script_name}"
+                                                # Create a batch script for each job
+                                                echo "#!/bin/bash" > "${script_name}"
+                                                echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
+                                                echo "#SBATCH --error=logs/job_%j.err" >> "${script_name}"
+                                                echo "#SBATCH --time=${time_limit}" >> "${script_name}"
+                                                echo "#SBATCH --mem=${memory}" >> "${script_name}"
+                                                echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
+                                                echo "module load python/3.10" >> "${script_name}"
+                                                echo "module load cuda/12.6.0/cudnn" >> "${script_name}"
+                                                echo "source /home/mila/j/joshi.shruti/venvs/agents/bin/activate" >> "${script_name}"
+                                                echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/safecausal:$PYTHONPATH\"" >> "${script_name}"
+                                                echo "cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal/ssae" >> "${script_name}"
 
-                                            # Updated command with new parameter names and optimizations
-                                            echo "python ssae.py ${embedding_file} ${data_config} ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${amp} ${seed}" >> "${script_name}"
+                                                # Updated command with new parameter names and optimizations
+                                                echo "python ssae.py ${embedding_file} ${data_config} ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${amp} ${epochs} ${seed}" >> "${script_name}"
 
-                                            # Make the script executable
-                                            chmod +x "${script_name}"
+                                                # Make the script executable
+                                                chmod +x "${script_name}"
 
-                                            # Submit the job
-                                            sbatch "${script_name}"
+                                                # Submit the job
+                                                sbatch "${script_name}"
 
-                                            # Increment counter
-                                            ((counter++))
+                                                # Increment counter
+                                                ((counter++))
+                                            done
                                         done
                                     done
                                 done
