@@ -108,7 +108,56 @@ def store_embeddings(
             hdf_file.create_dataset("cfc_test_labels", data=test_labels_json)
 
 
+def load_model_and_tokenizer(model_id):
+    """Load model and tokenizer based on model_id."""
+    if model_id == "meta-llama/Meta-Llama-3.1-8B-Instruct":
+        model = transformers.LlamaForCausalLM.from_pretrained(
+            model_id,
+            token=ACCESS_TOKEN,
+            low_cpu_mem_usage=True,
+        ).to(device)
+        tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
+            model_id, token=ACCESS_TOKEN
+        )
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        model_name = "llama3"
+    elif model_id == "EleutherAI/pythia-70m-deduped":
+        model = GPTNeoXForCausalLM.from_pretrained(
+            "EleutherAI/pythia-70m-deduped",
+            revision="step3000",
+            cache_dir="./pythia-70m-deduped/step3000",
+        ).to(device)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "EleutherAI/pythia-70m-deduped",
+            revision="step3000",
+            cache_dir="./pythia-70m-deduped/step3000",
+        )
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        model_name = "pythia70m"
+    elif model_id == "google/gemma-2-2b-it":
+        model = transformers.GemmaForCausalLM.from_pretrained(
+            model_id,
+            token=ACCESS_TOKEN,
+            low_cpu_mem_usage=True,
+        ).to(device)
+        tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
+            model_id, token=ACCESS_TOKEN
+        )
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        model_name = "gemma2"
+    else:
+        raise NotImplementedError(f"Model {model_id} not supported")
+
+    return model, tokenizer, model_name
+
+
 def main(args):
+    # Load model and tokenizer once at the beginning
+    model, tokenizer, model_name = load_model_and_tokenizer(args.model_id)
+
     if args.dataset == "labeled-sentences":
         cfc_train_tuples, cfc_train_labels = utils.load_labeled_sentences()
         cfc_test_tuples = []
@@ -117,11 +166,86 @@ def main(args):
         # Get list of correlated files to process individually
         corr_files = utils.load_labeled_sentences_correlated()
 
-        # We'll process these in the oodprobe-style loop below
-        cfc_train_tuples = None
-        cfc_train_labels = None
-        cfc_test_tuples = []
-        cfc_test_labels = []
+        for corr_file in corr_files:
+            # Extract correlation level from filename
+            import os
+
+            filename = os.path.basename(corr_file)
+            # Extract corr-ds-sp-X.X from filename
+            import re
+
+            match = re.search(r"corr_ds-sp-([0-9.]+)", filename)
+            if match:
+                corr_level = match.group(1)
+                dataset_name = f"corr-ds-sp-{corr_level}"
+            else:
+                dataset_name = filename.replace(".jsonl", "")
+
+            print(f"Processing {dataset_name}...")
+
+            # Load data for this specific correlation file
+            cfc_train_tuples, cfc_train_labels = (
+                utils.load_single_correlated_file(corr_file)
+            )
+            cfc_test_tuples = []
+            cfc_test_labels = []
+
+            print(
+                f"Extracting embeddings from {len(cfc_train_tuples)} training samples for {dataset_name}..."
+            )
+            cfc_train_embeddings = extract_embeddings(
+                cfc_train_tuples,
+                model,
+                tokenizer,
+                args.layer,
+                args.pooling_method,
+                args.batch_size,
+            )
+
+            cfc_test_embeddings = []
+
+            # Create output directory
+            directory_location = "/network/scratch/j/joshi.shruti/ssae/"
+            directory_name = os.path.join(
+                directory_location, "labeled-sentences-correlated"
+            )
+            if not os.path.exists(directory_name):
+                os.makedirs(directory_name)
+
+            # Create unique filename for this correlation level
+            filename = f"{dataset_name}_{model_name}_{args.layer}_{args.pooling_method}.h5"
+            filepath = os.path.join(directory_name, filename)
+            store_embeddings(
+                filepath,
+                cfc_train_embeddings,
+                cfc_test_embeddings,
+                cfc_train_labels,
+                cfc_test_labels,
+            )
+
+            config = {
+                "rep_dim": cfc_train_embeddings.shape[-1],
+                "dataset": dataset_name,
+                "model": args.model_id,
+                "layer": args.layer,
+                "pooling_method": args.pooling_method,
+                "data_seed": 21,
+                "training_dataset_length": len(cfc_train_embeddings),
+                "test_dataset_length": 0,
+                "num_concepts": 5,
+                "llm_layer": args.layer,
+                "split": 0.9,
+            }
+
+            config_filename = f"{dataset_name}_{model_name}_{args.layer}_{args.pooling_method}.yaml"
+            config_filepath = os.path.join(directory_name, config_filename)
+            with open(config_filepath, "w") as f:
+                yaml.dump(config, f)
+
+            print(f"Saved {dataset_name} embeddings to {filepath}")
+            print(f"Saved {dataset_name} config to {config_filepath}")
+
+        return
     elif args.dataset == "oodprobe":
         data_dir = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
@@ -130,26 +254,6 @@ def main(args):
             "oodprobe",
         )
         csv_files = [f for f in os.listdir(data_dir) if f.endswith(".csv")]
-
-        # Load model first for oodprobe processing
-        if args.model_id == "EleutherAI/pythia-70m-deduped":
-            model = GPTNeoXForCausalLM.from_pretrained(
-                "EleutherAI/pythia-70m-deduped",
-                revision="step3000",
-                cache_dir="./pythia-70m-deduped/step3000",
-            ).to(device)
-            tokenizer = AutoTokenizer.from_pretrained(
-                "EleutherAI/pythia-70m-deduped",
-                revision="step3000",
-                cache_dir="./pythia-70m-deduped/step3000",
-            )
-            tokenizer.pad_token = tokenizer.eos_token
-            tokenizer.padding_side = "left"
-            model_name = "pythia70m"
-        else:
-            raise NotImplementedError(
-                "Only pythia-70m-deduped supported for oodprobe"
-            )
 
         for csv_file in csv_files:
             dataset_name = (
@@ -233,100 +337,6 @@ def main(args):
             print(f"Saved {dataset_name} config to {config_filepath}")
 
         return
-    elif args.dataset == "labeled-sentences-correlated":
-        # Load model first for correlated processing
-        if args.model_id == "EleutherAI/pythia-70m-deduped":
-            model = GPTNeoXForCausalLM.from_pretrained(
-                "EleutherAI/pythia-70m-deduped",
-                revision="step3000",
-                cache_dir="./pythia-70m-deduped/step3000",
-            ).to(device)
-            tokenizer = AutoTokenizer.from_pretrained(
-                "EleutherAI/pythia-70m-deduped",
-                revision="step3000",
-                cache_dir="./pythia-70m-deduped/step3000",
-            )
-            tokenizer.pad_token = tokenizer.eos_token
-            tokenizer.padding_side = "left"
-            model_name = "pythia70m"
-        else:
-            raise NotImplementedError(
-                "Only pythia-70m-deduped supported for correlated"
-            )
-
-        # Process each correlated file separately
-        for corr_file in corr_files:
-            filename = os.path.basename(corr_file)
-            dataset_name = (
-                filename.replace(".jsonl", "")
-                .replace("labeled_sentences_", "")
-                .replace("_", "-")
-            )
-            print(f"Processing {dataset_name}...")
-
-            # Load data for this specific file
-            cfc_train_tuples, cfc_train_labels = (
-                utils.load_single_correlated_file(corr_file)
-            )
-
-            print(
-                f"Extracting embeddings from {len(cfc_train_tuples)} training samples for {dataset_name}..."
-            )
-            cfc_train_embeddings = extract_embeddings(
-                cfc_train_tuples,
-                model,
-                tokenizer,
-                args.layer,
-                args.pooling_method,
-                args.batch_size,
-            )
-
-            cfc_test_embeddings = []
-
-            # Create output directory
-            directory_location = "/network/scratch/j/joshi.shruti/ssae/"
-            directory_name = os.path.join(
-                directory_location, "labeled-sentences-correlated"
-            )
-            if not os.path.exists(directory_name):
-                os.makedirs(directory_name)
-
-            # Create unique filename for this correlation level
-            filename_h5 = f"{dataset_name}_{model_name}_{args.layer}_{args.pooling_method}.h5"
-            filepath = os.path.join(directory_name, filename_h5)
-            store_embeddings(
-                filepath,
-                cfc_train_embeddings,
-                cfc_test_embeddings,
-                cfc_train_labels,
-                [],
-            )
-
-            # Create config for this correlation level
-            config = {
-                "rep_dim": cfc_train_embeddings.shape[-1],
-                "dataset": dataset_name,
-                "model": args.model_id,
-                "layer": args.layer,
-                "pooling_method": args.pooling_method,
-                "data_seed": 21,
-                "training_dataset_length": len(cfc_train_embeddings),
-                "test_dataset_length": 0,
-                "num_concepts": 5,
-                "llm_layer": args.layer,
-                "split": 0.9,
-            }
-
-            config_filename = f"{dataset_name}_{model_name}_{args.layer}_{args.pooling_method}.yaml"
-            config_filepath = os.path.join(directory_name, config_filename)
-
-            with open(config_filepath, "w") as f:
-                yaml.dump(config, f)
-
-            print(f"Saved {dataset_name} embeddings to {filepath}")
-            print(f"Saved {dataset_name} config to {config_filepath}")
-
-        return
     else:
         cfc_train_tuples, cfc_test_tuples = utils.load_dataset(
             dataset_name=args.dataset,
@@ -336,45 +346,6 @@ def main(args):
         cfc_train_labels = None
         cfc_test_labels = None
 
-    # Load model for non-oodprobe datasets
-    if args.model_id == "meta-llama/Meta-Llama-3.1-8B-Instruct":
-        model = transformers.LlamaForCausalLM.from_pretrained(
-            args.model_id,
-            token=ACCESS_TOKEN,
-            low_cpu_mem_usage=True,
-        ).to(device)
-        tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
-            args.model_id, token=ACCESS_TOKEN
-        )
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.padding_side = "left"
-        model_name = "llama3"
-    elif args.model_id == "EleutherAI/pythia-70m-deduped":
-        model = GPTNeoXForCausalLM.from_pretrained(
-            "EleutherAI/pythia-70m-deduped",
-            revision="step3000",
-            cache_dir="./pythia-70m-deduped/step3000",
-        ).to(device)
-        tokenizer = AutoTokenizer.from_pretrained(
-            "EleutherAI/pythia-70m-deduped",
-            revision="step3000",
-            cache_dir="./pythia-70m-deduped/step3000",
-        )
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.padding_side = "left"
-        model_name = "pythia70m"
-    elif args.model_id == "google/gemma-2-2b-it":
-        model = transformers.GemmaForCausalLM.from_pretrained(
-            args.model_id,
-            low_cpu_mem_usage=True,
-        ).to(device)
-        tokenizer = transformers.GemmaTokenizer.from_pretrained(args.model_id)
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.padding_side = "left"
-        model_name = "gemma2"
-    else:
-        raise NotImplementedError
 
     print(
         f"Extracting embeddings from {len(cfc_train_tuples)} training samples..."
