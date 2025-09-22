@@ -680,6 +680,8 @@ def make_dataloader(cfg) -> DataLoader:
         drop_last=True,  # Consistent batch sizes for memory pool
     )
 
+    print(f"DataLoader length: {len(train_loader)}")
+
     # Store dataset reference for cleanup
     train_loader._dataset_ref = dataset
     return train_loader
