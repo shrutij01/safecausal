@@ -351,7 +351,7 @@ class SimpleCPUData(Dataset):
             return torch.from_numpy(self.data[idx + 1] - self.data[idx])
 
 
-KEYS = ("schedule", "oc", "seed", "target")  # choose what matters
+KEYS = "seed"  # choose what matters
 
 
 def _hash_cfg(cfg) -> str:
@@ -374,7 +374,7 @@ def dump_run(root: Path, model: torch.nn.Module, cfg) -> Path:
 
     tag = "_".join(f"{k}{getattr(cfg, k)}" for k in KEYS)
 
-    run = root / f"{dataset_name}_{tag}_{_hash_cfg(cfg)}"
+    run = root / f"{dataset_name}_{tag}"
     run.mkdir(
         parents=True, exist_ok=True
     )  # Allow multiple runs with same config
@@ -579,6 +579,7 @@ class Cfg:
     seed: int = 0
     renorm_epochs: int = 50
     use_amp: bool = True
+    quick: bool = False
 
     # spill-over lives here (read-only)
     extra: Dict[str, Any] = field(default_factory=dict, init=False)
@@ -607,6 +608,12 @@ def parse_cfg() -> Cfg:
     add("--seed", type=int, default=0)
     add("--renorm-epochs", type=int, default=50)
     add("--use-amp", action="store_true", default=True)
+    add(
+        "--quick",
+        action="store_true",
+        default=False,
+        help="Use smaller dataset for quick training",
+    )
     cli: Dict[str, Any] = vars(p.parse_args())
 
     yaml_path = cli.pop("data_cfg")
@@ -625,8 +632,13 @@ def make_dataloader(cfg) -> DataLoader:
     # Extract dataset name from embedding file path
     dataset_name = cfg.emb.stem.split("_")[0] if "_" in cfg.emb.stem else None
 
-    # Set max_samples for labeled-sentences to speed up training
-    max_samples = 5500 if dataset_name == "labeled-sentences" else None
+    # Set max_samples based on quick flag and dataset
+    if cfg.quick and dataset_name == "labeled-sentences":
+        max_samples = 11000
+    elif not cfg.quick and dataset_name == "labeled-sentences":
+        max_samples = None  # Use full dataset
+    else:
+        max_samples = None  # Other datasets use full data by default
 
     dataset = SimpleCPUData(
         cfg.emb,

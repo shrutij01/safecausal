@@ -17,10 +17,10 @@ schedules=(
     "--schedule 3000" #"--schedule 5000"   # scheduler-epochs
 )
 targets=(
-    "--target 0.02" "--target 0.05"  "--target 0.005" # target-sparsity
+    "--target 0.005" # target-sparsity
 )
 batch_sizes=(
-    "--batch 1024" "--batch 512"      # batch-size - increased for better GPU utilization
+    "--batch 1024" # "--batch 512"      # batch-size - increased for better GPU utilization
 )
 norm_types=(
     "--norm ln"         # norm-type
@@ -29,7 +29,7 @@ loss_types=(
     "--loss absolute" # loss-type "--loss absolute"
 )
 learning_rates=(
-    "--lr 0.0005"  "--lr 0.0007"      # primal-lr
+    "--lr 0.0005" # "--lr 0.0007"      # primal-lr
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2" "--seed 5" "--seed 7"
@@ -39,9 +39,6 @@ seeds=(
 renorm_epochs=(
     "--renorm-epochs 50"    # renormalization frequency for the decoder columns
 )
-# use_amp=(
-#     "--use-amp"             # Enable mixed precision training
-# )
 num_epochs=(
     "--epochs 10000"
 )
