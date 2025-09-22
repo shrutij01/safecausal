@@ -146,7 +146,9 @@ def score_identification(acts, labels, lamda=0.1, metric="accuracy"):
         elif metric == "mcc":
             acts_centered = acts - acts.mean(dim=0, keepdim=True)
             acts_std = acts_centered.norm(dim=0, keepdim=True)
-            label_matrix_centered = label_matrix.T - label_matrix.T.mean(
+            # Convert boolean labels to float for mean calculation
+            label_matrix_float = label_matrix.T.float()
+            label_matrix_centered = label_matrix_float - label_matrix_float.mean(
                 dim=0, keepdim=True
             )
             label_matrix_std = label_matrix_centered.norm(dim=0, keepdim=True)
