@@ -398,6 +398,8 @@ def main(args):
         "masc-fem-mixed",
         "truthful-qa",
         "safearena",
+        "refusal",
+        "sycophancy",
     ]:
         num_concepts = 1
     elif args.dataset in [
