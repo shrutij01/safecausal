@@ -3,12 +3,12 @@
 # Define hyperparameters for refactored SSAE code
 embedding_files=(
     "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.h5"
+    # "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.h5"
 )
 
 data_configs=(
     "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.yaml"
+    # "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.yaml"
 )
 
 # Updated parameter names to match refactored code
@@ -22,7 +22,7 @@ targets=(
     "--target 0.005" # "--target 0.05" "--target 0.005" "--target 0.0005"   # target-sparse-level
 )
 batch_sizes=(
-    "--batch 1024"        # batch-size
+    "--batch 64"        # batch-size
 )
 norm_types=(
     "--norm ln"         # norm-type

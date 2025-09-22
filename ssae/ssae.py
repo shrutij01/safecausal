@@ -320,7 +320,7 @@ class SimpleCPUData(Dataset):
 
         # Sample subset for behavioral datasets to speed up training
         if (
-            dataset_name in ["labeled-sentences", "sycophancy", "refusal"]
+            dataset_name in ["labeled-sentences", "sycophancy"]
             and max_samples is not None
             and len(full_data) > max_samples
         ):
@@ -651,12 +651,12 @@ def make_dataloader(cfg) -> DataLoader:
     dataset_name = cfg.emb.stem.split("_")[0] if "_" in cfg.emb.stem else None
 
     # Set max_samples based on quick flag and dataset
-    if cfg.quick and dataset_name in ["labeled-sentences", "sycophancy", "refusal"]:
+    if cfg.quick and dataset_name in ["labeled-sentences", "sycophancy"]:
         max_samples = 5500  # Quick mode for behavioral datasets
     elif not cfg.quick and dataset_name in ["labeled-sentences", "sycophancy", "refusal"]:
         max_samples = None  # Use full dataset
     else:
-        max_samples = None  # Other datasets use full data by default
+        max_samples = None  # Other datasets use full data by default (includes refusal)
 
     dataset = SimpleCPUData(
         cfg.emb,
