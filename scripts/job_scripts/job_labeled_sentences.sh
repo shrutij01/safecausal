@@ -50,7 +50,7 @@ num_epochs=(
 job_name="ssae_optimized"
 output="job_output_%j.txt"
 error="job_error_%j.txt"
-time_limit="3:00:00"
+time_limit="11:00:00"
 memory="32Gb"
 gpu_req="gpu:1"
 
