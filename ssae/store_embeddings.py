@@ -1,4 +1,3 @@
-ssae/store_embeddings.py
 from random import choice
 import torch
 import transformers
