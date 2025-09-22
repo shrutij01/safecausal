@@ -37,6 +37,97 @@ def load_jsonl(filepath: str):
         return [json.loads(line) for line in f if line.strip()]
 
 
+def create_random_pairs(
+    sentences_with_binary_labels, data_seed=21, max_pairs=50000
+):
+    """Create random pairs from sentences with consistent seeding."""
+    import random
+
+    values_ordered = [
+        "tense-present",
+        "tense-past",
+        "voice-active",
+        "voice-passive",
+        "domain-science",
+        "domain-fantasy",
+        "domain-news",
+        "domain-other",
+        "reading-level-high",
+        "reading-level-low",
+        "sentiment-positive",
+        "sentiment-neutral",
+        "sentiment-negative",
+    ]
+
+    random.seed(data_seed)
+
+    num_pairs = min(len(sentences_with_binary_labels) * 2, max_pairs)
+    cfc_tuples = []
+    all_labels = []
+
+    for _ in range(num_pairs):
+        # Randomly select two different indices
+        i, j = random.sample(range(len(sentences_with_binary_labels)), 2)
+
+        sent1, labels1 = sentences_with_binary_labels[i]
+        sent2, labels2 = sentences_with_binary_labels[j]
+
+        cfc_tuples.append([sent1, sent2])
+
+        # Create labels indicating differences between the pair
+        pair_labels = {}
+        for key in values_ordered:
+            pair_labels[key] = (
+                labels1[key] != labels2[key]
+            )  # True if different
+        all_labels.append(pair_labels)
+
+    print(
+        f"Created {len(cfc_tuples)} random pairs using data_seed={data_seed}"
+    )
+    return cfc_tuples, all_labels
+
+
+def binarize_sentence_labels(data):
+    """Convert sentence data to binary labels following the standard scheme."""
+    values_ordered = [
+        "tense-present",
+        "tense-past",
+        "voice-active",
+        "voice-passive",
+        "domain-science",
+        "domain-fantasy",
+        "domain-news",
+        "domain-other",
+        "reading-level-high",
+        "reading-level-low",
+        "sentiment-positive",
+        "sentiment-neutral",
+        "sentiment-negative",
+    ]
+
+    sentence = data["sentence"]
+    binary_labels = {}
+
+    # Initialize all binary labels to False
+    for value in values_ordered:
+        binary_labels[value] = False
+
+    # Set binary labels based on attributes
+    for key, val in data.items():
+        if key == "sentence":
+            continue
+        if key == "reading_level":
+            binary_labels["reading-level-high"] = val > 11.5
+            binary_labels["reading-level-low"] = val <= 11.5
+        else:
+            kv = f"{key}-{val}"
+            if kv in binary_labels:
+                binary_labels[kv] = True
+
+    return sentence, binary_labels
+
+
 def load_labeled_sentences():
     script_dir = os.path.dirname(os.path.abspath(__file__))
     datapath = os.path.join(
@@ -74,42 +165,61 @@ def load_labeled_sentences():
     # Create binary labels for each sentence
     sentences_with_binary_labels = []
     for data in labeled_sentences:
-        sentence = data["sentence"]
-        binary_labels = {}
-
-        # Initialize all binary labels to False
-        for value in values_ordered:
-            binary_labels[value] = False
-
-        # Set binary labels based on attributes
-        for key, val in data.items():
-            if key == "sentence":
-                continue
-            if key == "reading_level":
-                binary_labels["reading-level-high"] = val > 11.5
-                binary_labels["reading-level-low"] = val <= 11.5
-            else:
-                kv = f"{key}-{val}"
-                if kv in binary_labels:
-                    binary_labels[kv] = True
-
+        sentence, binary_labels = binarize_sentence_labels(data)
         sentences_with_binary_labels.append((sentence, binary_labels))
 
-    # Create random pairs
-    for i in range(len(sentences_with_binary_labels)):
-        for j in range(i + 1, min(i + 3, len(sentences_with_binary_labels))):
-            sent1, labels1 = sentences_with_binary_labels[i]
-            sent2, labels2 = sentences_with_binary_labels[j]
+    # Create random pairs using shared function
+    return create_random_pairs(
+        sentences_with_binary_labels, data_seed=21, max_pairs=50000
+    )
 
-            cfc_tuples.append([sent1, sent2])
 
-            # Create labels indicating differences between the pair
-            pair_labels = {}
-            for key in values_ordered:
-                pair_labels[key] = (
-                    labels1[key] != labels2[key]
-                )  # True if different
-            all_labels.append(pair_labels)
+def load_labeled_sentences_correlated():
+    """Get list of correlated files for individual processing."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    data_dir = os.path.join(script_dir, "..", "data", "labeled-sentences")
+
+    # Find all correlated files matching the pattern
+    import glob
+
+    pattern = os.path.join(data_dir, "labeled_sentences_corr_ds-sp*.jsonl")
+    corr_files = glob.glob(pattern)
+
+    if not corr_files:
+        raise FileNotFoundError(
+            f"No correlated files found matching pattern: {pattern}"
+        )
+
+    print(
+        f"Found {len(corr_files)} correlated files: {[os.path.basename(f) for f in corr_files]}"
+    )
+    return sorted(corr_files)
+
+
+def load_single_correlated_file(corr_file_path):
+    """Load and create pairs from a single correlated file."""
+    print(f"Processing {os.path.basename(corr_file_path)}...")
+
+    # Load the correlated sentences
+    corr_sentences = load_jsonl(corr_file_path)
+
+    # Create binary labels for each sentence using shared function
+    sentences_with_labels = []
+    for data in corr_sentences:
+        sentence, binary_labels = binarize_sentence_labels(data)
+        sentences_with_labels.append((sentence, binary_labels))
+
+    print(
+        f"Loaded {len(sentences_with_labels)} sentences from {os.path.basename(corr_file_path)}"
+    )
+
+    # Create random pairs ONLY within this file
+    max_pairs = min(
+        len(sentences_with_labels) * 2, 10000
+    )  # Smaller limit per file
+    cfc_tuples, all_labels = create_random_pairs(
+        sentences_with_labels, data_seed=21, max_pairs=max_pairs
+    )
 
     return cfc_tuples, all_labels
 
@@ -462,7 +572,9 @@ def load_test_data(datafile):
     return tilde_z, z
 
 
-def load_oodprobe_paired_samples(data_dir, num_samples=1000, train_split=0.9, seed=42):
+def load_oodprobe_paired_samples(
+    data_dir, num_samples=1000, train_split=0.9, seed=42
+):
     """
     Load CSV files from oodprobe directory and create paired samples with different targets.
     Returns same format as truthful_qa for compatibility with store_embeddings.py.
@@ -494,12 +606,14 @@ def load_oodprobe_paired_samples(data_dir, num_samples=1000, train_split=0.9, se
         df = pd.read_csv(csv_file)
 
         # Ensure we have the required columns
-        if not all(col in df.columns for col in ['prompt', 'target']):
-            print(f"Skipping {csv_file.name}: missing 'prompt' or 'target' columns")
+        if not all(col in df.columns for col in ["prompt", "target"]):
+            print(
+                f"Skipping {csv_file.name}: missing 'prompt' or 'target' columns"
+            )
             continue
 
         # Group by target value
-        target_groups = df.groupby('target')
+        target_groups = df.groupby("target")
         target_values = list(target_groups.groups.keys())
 
         if len(target_values) < 2:
@@ -515,8 +629,8 @@ def load_oodprobe_paired_samples(data_dir, num_samples=1000, train_split=0.9, se
             group1 = target_groups.get_group(target1)
             group2 = target_groups.get_group(target2)
 
-            prompt1 = random.choice(group1['prompt'].tolist())
-            prompt2 = random.choice(group2['prompt'].tolist())
+            prompt1 = random.choice(group1["prompt"].tolist())
+            prompt2 = random.choice(group2["prompt"].tolist())
 
             # Store as [prompt1, prompt2] matching truthful_qa format
             all_pairs.append([prompt1, prompt2])
@@ -529,12 +643,16 @@ def load_oodprobe_paired_samples(data_dir, num_samples=1000, train_split=0.9, se
     cfc_train_tuples = all_pairs[:split_idx]
     cfc_test_tuples = all_pairs[split_idx:]
 
-    print(f"Total created: {len(cfc_train_tuples)} train pairs and {len(cfc_test_tuples)} test pairs")
+    print(
+        f"Total created: {len(cfc_train_tuples)} train pairs and {len(cfc_test_tuples)} test pairs"
+    )
 
     return cfc_train_tuples, cfc_test_tuples
 
 
-def save_oodprobe_pairs(data_dir, output_file, num_samples=1000, train_split=0.9, seed=42):
+def save_oodprobe_pairs(
+    data_dir, output_file, num_samples=1000, train_split=0.9, seed=42
+):
     """
     Create and save oodprobe paired samples to a JSON file for reproducibility.
 
@@ -558,11 +676,11 @@ def save_oodprobe_pairs(data_dir, output_file, num_samples=1000, train_split=0.9
             "train_split": train_split,
             "seed": seed,
             "total_train": len(cfc_train_tuples),
-            "total_test": len(cfc_test_tuples)
-        }
+            "total_test": len(cfc_test_tuples),
+        },
     }
 
-    with open(output_file, 'w', encoding='utf-8') as f:
+    with open(output_file, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
 
     print(f"Saved paired samples to {output_file}")
