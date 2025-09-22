@@ -665,6 +665,10 @@ def make_dataloader(cfg) -> DataLoader:
         max_samples=max_samples,
     )
 
+    print(f"Dataset size: {len(dataset)}")
+    print(f"Batch size: {cfg.batch}")
+    print(f"Number of batches: {len(dataset) // cfg.batch}")
+
     train_loader = DataLoader(
         dataset,
         batch_size=int(cfg.batch),
