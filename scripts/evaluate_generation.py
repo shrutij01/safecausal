@@ -124,7 +124,13 @@ def generate(
         interv_configs,
     )
 
-    generated_text = tokenizer.batch_decode(output, skip_special_tokens=True)
+    # Get input length to slice off the prompt from generated output
+    input_length = inputs['input_ids'].shape[1]
+
+    # Slice to get only newly generated tokens (excluding the input prompt)
+    generated_tokens = output[:, input_length:]
+
+    generated_text = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
     return generated_text
 
 
