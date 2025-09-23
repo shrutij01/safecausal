@@ -457,14 +457,14 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--model_id",
-        default="EleutherAI/pythia-70m-deduped",
+        default="google/gemma-2-2b-it",
         choices=[
             "meta-llama/Meta-Llama-3.1-8B-Instruct",
             "EleutherAI/pythia-70m-deduped",
             "google/gemma-2-2b-it",
         ],
     )
-    parser.add_argument("--layer", type=int, default=31, choices=range(0, 33))
+    parser.add_argument("--layer", type=int, default=25, choices=range(0, 33))
     parser.add_argument(
         "--num-samples",
         type=int,
