@@ -23,7 +23,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _generate_base(
-    model, inputs, generate_config, interv_configs, **kwargs
+    model, tokenizer, inputs, generate_config, interv_configs, **kwargs
 ) -> List[str]:
     """
     Generate text without any interventions.
@@ -32,11 +32,17 @@ def _generate_base(
         **inputs,
         max_length=generate_config.max_length,
         do_sample=True,
+        temperature=0.7,
+        top_p=0.9,
+        repetition_penalty=1.1,
+        pad_token_id=tokenizer.eos_token_id,
     )
     return output
 
 
-def _intervene(model, hyperparameters, inputs, max_length) -> List[str]:
+def _intervene(
+    model, tokenizer, hyperparameters, inputs, max_length
+) -> List[str]:
     # Set up hook for forward pass to inject probe vector.
     def hook_model(steer_vec, scale):
         def forward_hook(module, input, output):
@@ -81,6 +87,10 @@ def _intervene(model, hyperparameters, inputs, max_length) -> List[str]:
         **inputs,
         max_length=max_length,
         do_sample=True,
+        temperature=0.7,
+        top_p=0.9,
+        repetition_penalty=1.1,
+        pad_token_id=tokenizer.eos_token_id,
     )
     for hook in hooks:
         hook.remove()
@@ -88,10 +98,11 @@ def _intervene(model, hyperparameters, inputs, max_length) -> List[str]:
 
 
 def _generate_ssae(
-    model, inputs, generate_config, interv_configs
+    model, tokenizer, inputs, generate_config, interv_configs
 ) -> List[str]:
     return _intervene(
         model,
+        tokenizer,
         interv_configs,
         inputs,
         generate_config.max_length,
@@ -107,6 +118,7 @@ def generate(
     }[generate_config.type]
     output = generate_func(
         model,
+        tokenizer,
         inputs,
         generate_config,
         interv_configs,
@@ -483,8 +495,8 @@ if __name__ == "__main__":
         "--max-length",
         "-ml",
         type=int,
-        default=300,
-        help="Maximum length of the generated text (default: 300)",
+        default=50,
+        help="Maximum length of the generated text (default: 50)",
     )
     args = parser.parse_args()
     generate_configs = [
