@@ -22,7 +22,9 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def _generate_base(model, inputs, generate_config, interv_configs, **kwargs) -> List[str]:
+def _generate_base(
+    model, inputs, generate_config, interv_configs, **kwargs
+) -> List[str]:
     """
     Generate text without any interventions.
     """
@@ -42,7 +44,9 @@ def _intervene(model, hyperparameters, inputs, max_length) -> List[str]:
             if isinstance(output, tuple):
                 _output = output[0]
             # orig_norm = _output.norm()
-            _output = (_output + scale * steer_vec.to(_output.dtype)).to(_output.dtype)
+            _output = (_output + scale * steer_vec.to(_output.dtype)).to(
+                _output.dtype
+            )
             # _output = _output * (orig_norm / _output.norm())
             return (
                 (_output, *output[1:])
@@ -94,7 +98,9 @@ def _generate_ssae(
     )
 
 
-def generate(model, inputs, generate_config, interv_configs) -> List[str]:
+def generate(
+    model, tokenizer, inputs, generate_config, interv_configs
+) -> List[str]:
     generate_func = {
         "base": _generate_base,
         "ssae": _generate_ssae,
@@ -106,7 +112,7 @@ def generate(model, inputs, generate_config, interv_configs) -> List[str]:
         interv_configs,
     )
 
-    generated_text = output
+    generated_text = tokenizer.batch_decode(output, skip_special_tokens=True)
     return generated_text
 
 
@@ -344,7 +350,7 @@ def main(args, generate_configs):
             "output_filename": "baseline_generation.json",
         }
     )
-    baseline_text = generate(llm, inputs, baseline_config, [])
+    baseline_text = generate(llm, tokenizer, inputs, baseline_config, [])
 
     # Generate with positive steering (should increase target behavior)
     behavior_name = "refusal" if dataset_name == "refusal" else "sycophancy"
@@ -362,7 +368,9 @@ def main(args, generate_configs):
             "output_filename": f"positive_{dataset_name}_steering_generation.json",
         }
     )
-    positive_text = generate(llm, inputs, positive_config, interv_configs)
+    positive_text = generate(
+        llm, tokenizer, inputs, positive_config, interv_configs
+    )
 
     # Generate with negative steering (should decrease target behavior)
     print(
@@ -386,7 +394,7 @@ def main(args, generate_configs):
         }
     )
     negative_text = generate(
-        llm, inputs, negative_config, negative_interv_configs
+        llm, tokenizer, inputs, negative_config, negative_interv_configs
     )
 
     # Save results and print comparison
