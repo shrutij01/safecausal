@@ -409,13 +409,47 @@ def main(args, generate_configs):
         llm, tokenizer, inputs, negative_config, negative_interv_configs
     )
 
-    # Save results and print comparison
+    # Generate with random steering vector
+    print(f"\n=== Generating with random steering vector ===")
+    random_vector = torch.randn_like(steering_vector).to(device)
+    random_vector = random_vector / random_vector.norm()  # Normalize
+    random_interv_configs = []
+    random_interv_configs.append(
+        Box(
+            {
+                "layer": used_layer,
+                "scale": args.steering_alpha,
+                "steer_vec": random_vector,
+            }
+        )
+    )
+    random_config = Box(
+        {
+            "type": "ssae",
+            "max_length": args.max_length,
+            "output_filename": f"random_steering_generation.json",
+        }
+    )
+    random_text = generate(
+        llm, tokenizer, inputs, random_config, random_interv_configs
+    )
+
+    # Restructure results prompt by prompt for first 10 prompts
+    prompt_results = []
+    for i in range(min(10, len(test_prompts))):
+        prompt_result = {
+            "prompt_id": i + 1,
+            "original_prompt": test_prompts[i],
+            "baseline_generation": baseline_text[i],
+            "positive_steering_generation": positive_text[i],
+            "negative_steering_generation": negative_text[i],
+            "random_steering_generation": random_text[i],
+        }
+        prompt_results.append(prompt_result)
+
+    # Save results
     results = {
         "dataset": dataset_name,
-        "test_prompts": test_prompts,
-        "baseline_responses": baseline_text,
-        "positive_steering_responses": positive_text,
-        "negative_steering_responses": negative_text,
         "steering_info": {
             "feature_idx": feature_idx,
             "correlation": correlation,
@@ -423,6 +457,7 @@ def main(args, generate_configs):
             "steering_alpha": args.steering_alpha,
             "concept": behavior_name,
         },
+        "prompt_results": prompt_results,
     }
 
     save_path = os.path.join(
@@ -435,16 +470,24 @@ def main(args, generate_configs):
         json.dump(results, f, indent=2)
 
     print(f"\n=== Comparison Results ===")
-    for i, prompt in enumerate(test_prompts):
-        print(f"\nPrompt {i+1}: {prompt[:100]}...")
-        print(f"Baseline: {baseline_text[i][len(prompt):len(prompt)+150]}...")
-        print(
-            f"Positive Steering (+{behavior_name}): {positive_text[i][len(prompt):len(prompt)+150]}..."
-        )
-        print(
-            f"Negative Steering (+{opposite_name}): {negative_text[i][len(prompt):len(prompt)+150]}..."
-        )
-        print("-" * 80)
+    for i in range(min(10, len(test_prompts))):
+        print(f"\n{'='*80}")
+        print(f"PROMPT {i+1}: {test_prompts[i]}")
+        print(f"{'='*80}")
+
+        print(f"\nBASELINE:")
+        print(f"{baseline_text[i]}")
+
+        print(f"\nPOSITIVE STEERING (+{behavior_name}):")
+        print(f"{positive_text[i]}")
+
+        print(f"\nNEGATIVE STEERING (+{opposite_name}):")
+        print(f"{negative_text[i]}")
+
+        print(f"\nRANDOM STEERING:")
+        print(f"{random_text[i]}")
+
+        print(f"\n{'-'*80}")
 
 
 if __name__ == "__main__":
