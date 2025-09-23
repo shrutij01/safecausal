@@ -32,9 +32,9 @@ def _generate_base(
         **inputs,
         max_length=generate_config.max_length,
         do_sample=True,
-        temperature=0.7,
-        top_p=0.9,
-        repetition_penalty=1.1,
+        temperature=0.3,
+        top_p=0.8,
+        repetition_penalty=1.15,
         pad_token_id=tokenizer.eos_token_id,
     )
     return output
@@ -125,12 +125,14 @@ def generate(
     )
 
     # Get input length to slice off the prompt from generated output
-    input_length = inputs['input_ids'].shape[1]
+    input_length = inputs["input_ids"].shape[1]
 
     # Slice to get only newly generated tokens (excluding the input prompt)
     generated_tokens = output[:, input_length:]
 
-    generated_text = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
+    generated_text = tokenizer.batch_decode(
+        generated_tokens, skip_special_tokens=True
+    )
     return generated_text
 
 
