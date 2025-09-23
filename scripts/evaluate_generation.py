@@ -42,7 +42,7 @@ def _intervene(model, hyperparameters, inputs, max_length) -> List[str]:
             if isinstance(output, tuple):
                 _output = output[0]
             # orig_norm = _output.norm()
-            _output = (_output + scale * steer_vec).float()
+            _output = (_output + scale * steer_vec.to(_output.dtype)).to(_output.dtype)
             # _output = _output * (orig_norm / _output.norm())
             return (
                 (_output, *output[1:])
