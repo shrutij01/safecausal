@@ -22,7 +22,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-def _generate_base(model, inputs, generate_config, **kwargs) -> List[str]:
+def _generate_base(model, inputs, generate_config, interv_configs, **kwargs) -> List[str]:
     """
     Generate text without any interventions.
     """
