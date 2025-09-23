@@ -483,8 +483,8 @@ if __name__ == "__main__":
         "--max-length",
         "-ml",
         type=int,
-        default=150,
-        help="Maximum length of the generated text (default: 150)",
+        default=300,
+        help="Maximum length of the generated text (default: 300)",
     )
     args = parser.parse_args()
     generate_configs = [
