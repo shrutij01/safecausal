@@ -1,4 +1,5 @@
 from random import choice
+import random
 import torch
 import transformers
 
@@ -108,6 +109,19 @@ def store_embeddings(
             hdf_file.create_dataset("cfc_test_labels", data=test_labels_json)
 
 
+def apply_quick_sampling(cfc_train_tuples, cfc_train_labels, use_quick):
+    """Apply quick sampling if enabled: randomly sample 5500 pairs."""
+    if use_quick and len(cfc_train_tuples) > 5500:
+        print(f"Quick mode: randomly sampling 5500 pairs from {len(cfc_train_tuples)} available pairs...")
+        # Set seed for reproducibility
+        random.seed(42)
+        indices = random.sample(range(len(cfc_train_tuples)), 5500)
+        cfc_train_tuples = [cfc_train_tuples[i] for i in indices]
+        if cfc_train_labels:
+            cfc_train_labels = [cfc_train_labels[i] for i in indices]
+    return cfc_train_tuples, cfc_train_labels
+
+
 def load_model_and_tokenizer(model_id):
     """Load model and tokenizer based on model_id."""
     if model_id == "meta-llama/Meta-Llama-3.1-8B-Instruct":
@@ -158,6 +172,11 @@ def main(args):
         cfc_train_tuples, cfc_train_labels = utils.load_labeled_sentences()
         cfc_test_tuples = []
         cfc_test_labels = []
+
+        # Apply quick sampling if enabled
+        cfc_train_tuples, cfc_train_labels = apply_quick_sampling(
+            cfc_train_tuples, cfc_train_labels, args.quick
+        )
     elif args.dataset == "labeled-sentences-correlated":
         # Get list of correlated files to process individually
         corr_files = utils.load_labeled_sentences_correlated()
@@ -184,6 +203,11 @@ def main(args):
             )
             cfc_test_tuples = []
             cfc_test_labels = []
+
+            # Apply quick sampling if enabled
+            cfc_train_tuples, cfc_train_labels = apply_quick_sampling(
+                cfc_train_tuples, cfc_train_labels, args.quick
+            )
 
             print(
                 f"Extracting embeddings from {len(cfc_train_tuples)} training samples for {dataset_name}..."
@@ -272,6 +296,11 @@ def main(args):
                     )
                 )
 
+            # Apply quick sampling if enabled
+            cfc_train_tuples, _ = apply_quick_sampling(
+                cfc_train_tuples, None, args.quick
+            )
+
             print(
                 f"Extracting embeddings from {len(cfc_train_tuples)} training samples for {dataset_name}..."
             )
@@ -338,6 +367,11 @@ def main(args):
         )
         cfc_train_labels = None
         cfc_test_labels = None
+
+        # Apply quick sampling if enabled
+        cfc_train_tuples, cfc_train_labels = apply_quick_sampling(
+            cfc_train_tuples, cfc_train_labels, args.quick
+        )
 
     print(
         f"Extracting embeddings from {len(cfc_train_tuples)} training samples..."
@@ -461,7 +495,7 @@ if __name__ == "__main__":
             "google/gemma-2-2b-it",
         ],
     )
-    parser.add_argument("--layer", type=int, default=25, choices=range(0, 33))
+    parser.add_argument("google/gemma-2-2b-it", type=int, default=25, choices=range(0, 33))
     parser.add_argument(
         "--num-samples",
         type=int,
@@ -483,6 +517,11 @@ if __name__ == "__main__":
         type=int,
         default=128,
         help="Batch size for processing contexts (default: 128, optimized for A100-class GPUs)",
+    )
+    parser.add_argument(
+        "--quick",
+        action="store_true",
+        help="Use quick mode: randomly sample 5500 training pairs (same as quick training)",
     )
     # Llama-3 has 32 layers, CAA paper showed most effective steering around the
     # 13th layer for Llama-2 with 33 layers
