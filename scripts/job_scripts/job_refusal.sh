@@ -53,6 +53,7 @@ num_epochs=(
 job_name="ssae_refusal_sycophancy"
 output="job_output_%j.txt"
 error="job_error_%j.txt"
+cpu_req="cpus-per-task=8"
 time_limit="3:00:00"
 memory="32Gb"
 gpu_req="gpu:1"
