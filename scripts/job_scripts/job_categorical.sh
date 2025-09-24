@@ -15,7 +15,7 @@ data_configs=(
 # Updated parameter names to match refactored code
 # For categorical dataset: num-concepts = 3, so encoder_dim = 3
 encoding_dims=(
-    "--oc 3"    # overcompleteness factor = num-concepts = 3
+    "--oc 4096"    # overcompleteness factor = num-concepts = 3
 )
 schedules=(
     "--schedule 3000" #"--schedule 5000"   # scheduler-epochs
