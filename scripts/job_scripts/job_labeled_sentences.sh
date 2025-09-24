@@ -2,11 +2,11 @@
 
 # Define hyperparameters for refactored SSAE code
 embedding_files=(
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/labeled-sentences_pythia70m_5_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/labeled-sentences_gemma2_25_last_token.h5"
 )
 
 data_configs=(
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/labeled-sentences_pythia70m_5_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/labeled-sentences_gemma2_25_last_token.yaml"
 )
 
 # Updated parameter names to match refactored code
