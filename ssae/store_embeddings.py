@@ -112,7 +112,9 @@ def store_embeddings(
 def apply_quick_sampling(cfc_train_tuples, cfc_train_labels, use_quick):
     """Apply quick sampling if enabled: randomly sample 5500 pairs."""
     if use_quick and len(cfc_train_tuples) > 5500:
-        print(f"Quick mode: randomly sampling 5500 pairs from {len(cfc_train_tuples)} available pairs...")
+        print(
+            f"Quick mode: randomly sampling 5500 pairs from {len(cfc_train_tuples)} available pairs..."
+        )
         # Set seed for reproducibility
         random.seed(42)
         indices = random.sample(range(len(cfc_train_tuples)), 5500)
@@ -133,20 +135,26 @@ def load_model_and_tokenizer(model_id):
                 torch_dtype=torch.float16,
                 device_map="auto",
                 low_cpu_mem_usage=True,
-                trust_remote_code=True
+                trust_remote_code=True,
             )
             tokenizer = transformers.LlamaTokenizer.from_pretrained(
-                model_id,
-                token=ACCESS_TOKEN,
-                trust_remote_code=True
+                model_id, token=ACCESS_TOKEN, trust_remote_code=True
             )
         except Exception as e:
-            print(f"Failed to load with LlamaTokenizer, trying AutoTokenizer: {e}")
+            print(
+                f"Failed to load with LlamaTokenizer, trying AutoTokenizer: {e}"
+            )
             # Fallback to AutoTokenizer if LlamaTokenizer fails
             tokenizer = transformers.AutoTokenizer.from_pretrained(
+                model_id, token=ACCESS_TOKEN, trust_remote_code=True
+            )
+            model = transformers.AutoModelForCausalLM.from_pretrained(
                 model_id,
                 token=ACCESS_TOKEN,
-                trust_remote_code=True
+                torch_dtype=torch.float16,
+                device_map="auto",
+                low_cpu_mem_usage=True,
+                trust_remote_code=True,
             )
 
         tokenizer.pad_token = tokenizer.eos_token
