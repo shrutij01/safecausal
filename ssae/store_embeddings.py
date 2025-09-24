@@ -125,14 +125,30 @@ def apply_quick_sampling(cfc_train_tuples, cfc_train_labels, use_quick):
 def load_model_and_tokenizer(model_id):
     """Load model and tokenizer based on model_id."""
     if model_id == "meta-llama/Meta-Llama-3.1-8B-Instruct":
-        model = transformers.LlamaForCausalLM.from_pretrained(
-            model_id,
-            token=ACCESS_TOKEN,
-            low_cpu_mem_usage=True,
-        ).to(device)
-        tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
-            model_id, token=ACCESS_TOKEN
-        )
+        try:
+            # Try with torch_dtype and device_map for better memory management
+            model = transformers.LlamaForCausalLM.from_pretrained(
+                model_id,
+                token=ACCESS_TOKEN,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                low_cpu_mem_usage=True,
+                trust_remote_code=True
+            )
+            tokenizer = transformers.LlamaTokenizer.from_pretrained(
+                model_id,
+                token=ACCESS_TOKEN,
+                trust_remote_code=True
+            )
+        except Exception as e:
+            print(f"Failed to load with LlamaTokenizer, trying AutoTokenizer: {e}")
+            # Fallback to AutoTokenizer if LlamaTokenizer fails
+            tokenizer = transformers.AutoTokenizer.from_pretrained(
+                model_id,
+                token=ACCESS_TOKEN,
+                trust_remote_code=True
+            )
+
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
         model_name = "llama3"
