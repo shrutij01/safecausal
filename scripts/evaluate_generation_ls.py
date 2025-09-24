@@ -360,7 +360,10 @@ def main(args, generate_configs):
     elif "gemma" in args.llm.lower():
         tokenizer = AutoTokenizer.from_pretrained(args.llm)
         llm = AutoModelForCausalLM.from_pretrained(
-            args.llm, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+            args.llm,
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=True,
+            attn_implementation="eager"  # Use eager attention for better compatibility
         ).to(device)
     else:
         # Default to Llama-style loading for other models
