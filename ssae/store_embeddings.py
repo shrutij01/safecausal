@@ -136,15 +136,10 @@ def load_model_and_tokenizer(model_id):
         tokenizer.padding_side = "left"
         model_name = "pythia70m"
     elif model_id == "google/gemma-2-2b-it":
-        model = transformers.GemmaForCausalLM.from_pretrained(
-            model_id,
-            # token=ACCESS_TOKEN,
-            low_cpu_mem_usage=True,
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True
         ).to(device)
-        tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
-            model_id,
-            # token=ACCESS_TOKEN
-        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
         model_name = "gemma2"
