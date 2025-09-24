@@ -377,8 +377,10 @@ def load_dataset(
         cfc_train_tuples, cfc_test_tuples = load_biasinbios(
             split=split, num_samples=num_samples
         )
-        cfc_train_labels = None
-        cfc_test_labels = None
+        # Create gender labels: 1 = gender change (male->female), 0 = no change
+        cfc_train_labels = [{"gender_change": True} for _ in cfc_train_tuples]
+        cfc_test_labels = [{"gender_change": True} for _ in cfc_test_tuples]
+        concept_labels_test = None
     elif dataset_name in [
         "eng-french",
         "eng-german",
