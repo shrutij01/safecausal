@@ -407,7 +407,7 @@ def main(args, generate_configs):
         {
             "type": "ssae",
             "max_length": args.max_length,
-            "output_filename": f"positive_{dataset_name}_steering_generation.json",
+            "output_filename": f"positive_{selected_feature}_steering_generation.json",
         }
     )
     positive_text = generate(
