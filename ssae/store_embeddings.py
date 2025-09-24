@@ -138,11 +138,12 @@ def load_model_and_tokenizer(model_id):
     elif model_id == "google/gemma-2-2b-it":
         model = transformers.GemmaForCausalLM.from_pretrained(
             model_id,
-            token=ACCESS_TOKEN,
+            # token=ACCESS_TOKEN,
             low_cpu_mem_usage=True,
         ).to(device)
         tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
-            model_id, token=ACCESS_TOKEN
+            model_id,
+            # token=ACCESS_TOKEN
         )
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
