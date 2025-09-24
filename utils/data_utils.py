@@ -1,4 +1,4 @@
-utils/data_utils.py import torch
+import torch
 
 from datasets import load_dataset as hf_load_dataset
 
@@ -727,20 +727,26 @@ def load_biasinbios(split=0.9, num_samples=None, data_seed=42):
     print("Filtering biographies by gender...")
 
     # Filter by gender: 0 = male, 1 = female
-    male_data = data.filter(lambda x: x['gender'] == 0)
-    female_data = data.filter(lambda x: x['gender'] == 1)
+    male_data = data.filter(lambda x: x["gender"] == 0)
+    female_data = data.filter(lambda x: x["gender"] == 1)
 
-    print(f"Found {len(male_data)} male bios and {len(female_data)} female bios")
+    print(
+        f"Found {len(male_data)} male bios and {len(female_data)} female bios"
+    )
 
     # Extract text data
-    male_bios = [item['hard_text'] for item in male_data]
-    female_bios = [item['hard_text'] for item in female_data]
+    male_bios = [item["hard_text"] for item in male_data]
+    female_bios = [item["hard_text"] for item in female_data]
 
     # Sample if requested
     if num_samples is not None:
         male_bios = random.sample(male_bios, min(num_samples, len(male_bios)))
-        female_bios = random.sample(female_bios, min(num_samples, len(female_bios)))
-        print(f"Sampled {len(male_bios)} male bios and {len(female_bios)} female bios")
+        female_bios = random.sample(
+            female_bios, min(num_samples, len(female_bios))
+        )
+        print(
+            f"Sampled {len(male_bios)} male bios and {len(female_bios)} female bios"
+        )
 
     # Create contrastive pairs [male_bio, female_bio]
     min_count = min(len(male_bios), len(female_bios))
@@ -761,6 +767,8 @@ def load_biasinbios(split=0.9, num_samples=None, data_seed=42):
     cfc_train_tuples = cfc_tuples[:split_idx]
     cfc_test_tuples = cfc_tuples[split_idx:]
 
-    print(f"Split: {len(cfc_train_tuples)} train pairs, {len(cfc_test_tuples)} test pairs")
+    print(
+        f"Split: {len(cfc_train_tuples)} train pairs, {len(cfc_test_tuples)} test pairs"
+    )
 
     return cfc_train_tuples, cfc_test_tuples
