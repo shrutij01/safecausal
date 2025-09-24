@@ -1,4 +1,4 @@
-import torch
+utils/data_utils.py import torch
 
 from datasets import load_dataset as hf_load_dataset
 
@@ -373,6 +373,12 @@ def load_dataset(
         cfc_train_labels = None
         cfc_test_labels = None
 
+    elif dataset_name == "bias-in-bios":
+        cfc_train_tuples, cfc_test_tuples = load_biasinbios(
+            split=split, num_samples=num_samples
+        )
+        cfc_train_labels = None
+        cfc_test_labels = None
     elif dataset_name in [
         "eng-french",
         "eng-german",
@@ -689,3 +695,72 @@ def save_oodprobe_pairs(
 
     print(f"Saved paired samples to {output_file}")
     return output_file
+
+
+def load_biasinbios(split=0.9, num_samples=None, data_seed=42):
+    """
+    Load bias_in_bios dataset and create contrastive pairs split by gender.
+
+    Args:
+        split: Train/test split ratio (default: 0.9)
+        num_samples: Maximum number of samples to use from each gender (default: None for all)
+        data_seed: Random seed for reproducible sampling and pairing
+
+    Returns:
+        tuple: (cfc_train_tuples, cfc_test_tuples) where each tuple contains
+               [male_bio, female_bio] pairs for gender contrast
+    """
+    from datasets import load_dataset
+
+    # Set random seed for reproducibility
+    random.seed(data_seed)
+    np.random.seed(data_seed)
+
+    print("Loading bias_in_bios dataset...")
+
+    # Load the dataset
+    ds = load_dataset("LabHC/bias_in_bios")
+
+    # Use the train split which has the most data (257k samples)
+    data = ds["train"]
+
+    print("Filtering biographies by gender...")
+
+    # Filter by gender: 0 = male, 1 = female
+    male_data = data.filter(lambda x: x['gender'] == 0)
+    female_data = data.filter(lambda x: x['gender'] == 1)
+
+    print(f"Found {len(male_data)} male bios and {len(female_data)} female bios")
+
+    # Extract text data
+    male_bios = [item['hard_text'] for item in male_data]
+    female_bios = [item['hard_text'] for item in female_data]
+
+    # Sample if requested
+    if num_samples is not None:
+        male_bios = random.sample(male_bios, min(num_samples, len(male_bios)))
+        female_bios = random.sample(female_bios, min(num_samples, len(female_bios)))
+        print(f"Sampled {len(male_bios)} male bios and {len(female_bios)} female bios")
+
+    # Create contrastive pairs [male_bio, female_bio]
+    min_count = min(len(male_bios), len(female_bios))
+
+    # Shuffle both lists to ensure random pairing
+    random.shuffle(male_bios)
+    random.shuffle(female_bios)
+
+    cfc_tuples = []
+    for i in range(min_count):
+        # Create contrastive pair: [male_bio, female_bio]
+        cfc_tuples.append([male_bios[i], female_bios[i]])
+
+    print(f"Created {len(cfc_tuples)} contrastive gender pairs")
+
+    # Split into train/test
+    split_idx = int(len(cfc_tuples) * split)
+    cfc_train_tuples = cfc_tuples[:split_idx]
+    cfc_test_tuples = cfc_tuples[split_idx:]
+
+    print(f"Split: {len(cfc_train_tuples)} train pairs, {len(cfc_test_tuples)} test pairs")
+
+    return cfc_train_tuples, cfc_test_tuples

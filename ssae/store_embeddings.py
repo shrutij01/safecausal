@@ -431,6 +431,7 @@ def main(args):
         "safearena",
         "refusal",
         "sycophancy",
+        "bias-in-bios",
     ]:
         num_concepts = 1
     elif args.dataset in [
@@ -483,6 +484,13 @@ if __name__ == "__main__":
             "labeled-sentences",
             "labeled-sentences-correlated",
             "oodprobe",
+            "eng-french",
+            "eng-german",
+            "masc-fem-eng",
+            "masc-fem-mixed",
+            "2-binary",
+            "corr-binary",
+            "bias-in-bios",
         ],
         default="labeled-sentences",
     )
