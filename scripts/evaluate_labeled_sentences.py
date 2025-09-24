@@ -217,28 +217,16 @@ def get_sentence_embeddings(
     current_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.append(current_dir)
 
-    from ssae.store_embeddings import extract_embeddings
+    from ssae.store_embeddings import (
+        extract_embeddings,
+        load_model_and_tokenizer,
+    )
     import torch
-    from transformers import GPTNeoXForCausalLM, AutoTokenizer
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    # Load the language model
-    if model_name == "EleutherAI/pythia-70m-deduped":
-        model = GPTNeoXForCausalLM.from_pretrained(
-            "EleutherAI/pythia-70m-deduped",
-            revision="step3000",
-            cache_dir="./pythia-70m-deduped/step3000",
-        ).to(device)
-        tokenizer = AutoTokenizer.from_pretrained(
-            "EleutherAI/pythia-70m-deduped",
-            revision="step3000",
-            cache_dir="./pythia-70m-deduped/step3000",
-        )
-        tokenizer.pad_token = tokenizer.eos_token
-        tokenizer.padding_side = "left"
-    else:
-        raise NotImplementedError(f"Model {model_name} not supported")
+    # Use the existing load_model_and_tokenizer function that supports multiple models
+    model, tokenizer, _ = load_model_and_tokenizer(model_name)
 
     # Convert individual sentences to fake pairs format for extract_embeddings
     # We'll duplicate each sentence so we get (sentence, sentence) pairs
@@ -274,6 +262,7 @@ def evaluate_sentence_labels(
     model_path: Path,
     threshold: float = 0.1,
     metrics: list = ["accuracy", "macrof1", "mcc"],
+    embedding_model: str = "pythia",
 ) -> Dict[str, Any]:
     """Evaluate SSAE on individual sentence labels."""
 
@@ -284,7 +273,22 @@ def evaluate_sentence_labels(
 
     # Get sentence embeddings
     print("Extracting sentence embeddings...")
-    embeddings = get_sentence_embeddings(sentences)
+
+    # Choose model based on embedding_model parameter
+    if embedding_model == "pythia":
+        model_name = "EleutherAI/pythia-70m-deduped"
+        layer = 5
+    elif embedding_model == "gemma":
+        model_name = "google/gemma-2-2b-it"
+        layer = 16
+    else:
+        raise ValueError(
+            f"Unknown embedding_model: {embedding_model}. Choose 'pythia' or 'gemma'"
+        )
+
+    embeddings = get_sentence_embeddings(
+        sentences, model_name=model_name, layer=layer
+    )
     print(f"Embeddings shape: {embeddings.shape}")
 
     # Load model
@@ -342,13 +346,19 @@ def main():
         choices=["accuracy", "macrof1", "mcc"],
         help="Metrics to compute",
     )
+    parser.add_argument(
+        "--embedding-model",
+        choices=["pythia", "gemma"],
+        default="pythia",
+        help="Model to use for sentence embeddings (pythia=512D, gemma=2304D)",
+    )
     parser.add_argument("--output", type=Path, help="Output file for results")
 
     args = parser.parse_args()
 
     # Evaluate model
     results = evaluate_sentence_labels(
-        args.model_path, args.threshold, args.metrics
+        args.model_path, args.threshold, args.metrics, args.embedding_model
     )
 
     # Print results
