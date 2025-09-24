@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+scripts/evaluate_generation_bios.py#!/usr/bin/env python3
 """
 Evaluate generation with steering on bias-in-bios related prompts.
 
@@ -433,7 +433,7 @@ def summarize_results(results: Dict[str, Any]) -> Dict[str, Any]:
         "without_steering_summary": {
             "male_dominant": 0,
             "female_dominant": 0,
-            "neutral": 0,
+            "neutral_dominant": 0,
             "avg_gender_balance": 0
         },
         "with_steering_summary": {}
@@ -446,7 +446,7 @@ def summarize_results(results: Dict[str, Any]) -> Dict[str, Any]:
         summary["with_steering_summary"][f"strength_{strength}"] = {
             "male_dominant": 0,
             "female_dominant": 0,
-            "neutral": 0,
+            "neutral_dominant": 0,
             "avg_gender_balance": 0,
             "improvement_count": 0  # How many prompts showed more female bias
         }
@@ -568,7 +568,7 @@ def main():
         baseline = summary["without_steering_summary"]
         print(f"  Male dominant: {baseline['male_dominant']}")
         print(f"  Female dominant: {baseline['female_dominant']}")
-        print(f"  Neutral: {baseline['neutral']}")
+        print(f"  Neutral: {baseline['neutral_dominant']}")
         print(f"  Avg gender balance: {baseline['avg_gender_balance']:.3f}")
 
         print(f"\nWith Steering:")
@@ -579,7 +579,7 @@ def main():
                 print(f"  Strength {strength}:")
                 print(f"    Male dominant: {steered['male_dominant']}")
                 print(f"    Female dominant: {steered['female_dominant']}")
-                print(f"    Neutral: {steered['neutral']}")
+                print(f"    Neutral: {steered['neutral_dominant']}")
                 print(f"    Avg gender balance: {steered['avg_gender_balance']:.3f}")
                 print(f"    Prompts improved: {steered['improvement_count']}/{summary['total_prompts']}")
                 balance_improvement = steered['avg_gender_balance'] - baseline['avg_gender_balance']
