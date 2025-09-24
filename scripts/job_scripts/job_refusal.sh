@@ -4,15 +4,15 @@
 embedding_files=(
     "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_gemma2_25_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_gemma2_25_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.h5"
+    # "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_gemma2_25_last_token.h5"
+    # "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.h5"
 )
 
 data_configs=(
     "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_gemma2_25_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_gemma2_25_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.yaml"
+    # "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_gemma2_25_last_token.yaml"
+    # "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.yaml"
 )
 
 # Updated parameter names to match refactored code
@@ -96,7 +96,7 @@ for idx in "${!embedding_files[@]}"; do
                                             echo "cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal/ssae" >> "${script_name}"
 
                                             # Updated command with new parameter names and optimizations
-                                            echo "python ssae.py ${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${epochs} ${seed}" >> "${script_name}"
+                                            echo "python ssae.py ${embedding_file} ${data_config} ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${epochs} ${seed}" >> "${script_name}"
 
                                             # Make the script executable
                                             chmod +x "${script_name}"
