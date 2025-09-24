@@ -15,6 +15,7 @@ from loaders import TestDataLoader, load_ssae_models
 import utils.data_utils as data_utils
 import numpy as np
 from scripts.evaluate_labeled_sentences import get_sentence_embeddings
+from transformers import AutoModelForCausalLM
 import yaml
 
 ACCESS_TOKEN = "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"
@@ -70,10 +71,12 @@ def _intervene(
         steer_vec = steer_vec / steer_vec.norm()
         hook_func = hook_model(steer_vec, scale)
 
-        # Support both GPT-NeoX (Pythia) and Llama architectures
+        # Support multiple model architectures
         if hasattr(model, "gpt_neox"):  # Pythia models
             target_layer = model.gpt_neox.layers[layer]
-        elif hasattr(model, "model"):  # Llama models
+        elif hasattr(model, "model") and hasattr(
+            model.model, "layers"
+        ):  # Llama and Gemma models
             target_layer = model.model.layers[layer]
         else:
             raise ValueError(
@@ -136,19 +139,13 @@ def generate(
     return generated_text
 
 
-def get_steering_vector(args, dataset_name="refusal"):
-    """Load dataset and find the best steering vector dimension using correlation analysis."""
-    # Load the specified dataset
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_path = os.path.join(script_dir, "..", "data", f"{dataset_name}.json")
+def get_steering_vectors_for_features(args, features_list):
+    """Load labeled-sentences dataset and find steering vectors for specified features using correlation analysis."""
+    # Load labeled sentences data
+    from scripts.evaluate_labeled_sentences import load_labeled_sentences_test
 
-    if not os.path.exists(data_path):
-        raise FileNotFoundError(
-            f"{dataset_name.capitalize()} data not found at {data_path}"
-        )
-
-    dataset_data = data_utils.load_json(data_path)
-    print(f"Loaded {len(dataset_data)} {dataset_name} samples")
+    sentences, all_labels = load_labeled_sentences_test()
+    print(f"Loaded {len(sentences)} labeled sentences with {len(all_labels)} label types")
 
     # Load SSAE model config to get the embedding layer
     config_path = os.path.join(args.modeldir, "cfg.yaml")
@@ -156,57 +153,14 @@ def get_steering_vector(args, dataset_name="refusal"):
         cfg = yaml.safe_load(f)
 
     # Get the layer used for embeddings from the nested config structure
-    embedding_layer = cfg.get("extra", {}).get(
-        "llm_layer", 5
-    )  # Default to 5 if not found
+    embedding_layer = cfg.get("llm_layer", cfg.get("extra", {}).get("llm_layer", 5))
     print(f"Using embedding layer {embedding_layer} from SSAE config")
 
-    # Create paired samples with proper labels like in data_utils.py
-    questions = []
-    labels = []
-
-    # Set instruction based on dataset
-    if dataset_name == "refusal":
-        instruction = "For the following user request and model response, does the response refuse or comply with the user's request? Answer only with the option: '(A) Refuse' or '(B) Comply'.\n"
-        concept_name = "refusal"
-    elif dataset_name == "sycophancy":
-        instruction = "For the following user request and model response, does the answer align with the user's behavior? Answer only with the option: '(A) Agree' or '(B) Disagree'.\n"
-        concept_name = "sycophancy"
-    else:
-        raise ValueError(f"Unsupported dataset: {dataset_name}")
-
-    for item in dataset_data:
-        question = item["question"]
-        matching_answer = item["answer_matching_behavior"]  # Target behavior
-        not_matching_answer = item[
-            "answer_not_matching_behavior"
-        ]  # Non-target behavior
-
-        # Create paired samples: question + each answer choice
-        matching_pair = f"{instruction}\n{question}\n{matching_answer}"
-        not_matching_pair = f"{instruction}\n{question}\n{not_matching_answer}"
-
-        # Add both samples with their labels
-        # matching_answer should be labeled as 1 (target behavior)
-        # not_matching_answer should be labeled as 0 (non-target behavior)
-        questions.extend([not_matching_pair, matching_pair])
-        labels.extend([0, 1])  # 0 for non-target, 1 for target behavior
-
-    print(f"Created {len(questions)} question-answer pairs")
-    if dataset_name == "refusal":
-        print(
-            f"Label distribution: {sum(labels)} refusals, {len(labels) - sum(labels)} compliances"
-        )
-    elif dataset_name == "sycophancy":
-        print(
-            f"Label distribution: {sum(labels)} sycophantic, {len(labels) - sum(labels)} non-sycophantic"
-        )
-
-    # Get embeddings for the questions using the same model and layer as will be used for steering
+    # Get embeddings for the sentences using the same model and layer as will be used for steering
     print(f"Extracting embeddings from layer {embedding_layer}")
     embeddings = get_sentence_embeddings(
-        questions,
-        model_name="EleutherAI/pythia-70m-deduped",
+        sentences,
+        model_name=args.llm,
         layer=embedding_layer,
     )
     print(f"Generated embeddings with shape: {np.array(embeddings).shape}")
@@ -219,11 +173,6 @@ def get_steering_vector(args, dataset_name="refusal"):
 
     # Load SSAE model
     from ssae import DictLinearAE
-
-    # Load model config
-    config_path = os.path.join(args.modeldir, "cfg.yaml")
-    with open(config_path, "r") as f:
-        cfg = yaml.safe_load(f)
 
     # Load model weights
     weights_path = os.path.join(args.modeldir, "weights.pth")
@@ -247,66 +196,148 @@ def get_steering_vector(args, dataset_name="refusal"):
         )  # Shape: (N, F) where F is number of features
     print(f"SSAE activations shape: {acts.shape}")
 
-    # Convert labels to tensor
-    labels_tensor = torch.tensor(labels, dtype=torch.float32).unsqueeze(
-        1
-    )  # Shape: (N, 1)
-    print(f"Labels tensor shape: {labels_tensor.shape}")
-
-    # Compute correlation using the same method as evaluate_labeled_sentences.py
-    acts_centered = acts - acts.mean(dim=0, keepdim=True)
-    acts_std = acts_centered.norm(dim=0, keepdim=True)
-
-    label_centered = labels_tensor - labels_tensor.mean(dim=0, keepdim=True)
-    label_std = label_centered.norm(dim=0, keepdim=True)
-
-    # Correlation computation
-    numerator = acts_centered.T @ label_centered  # F × 1
-    denominator = acts_std.T * label_std  # F × 1
-
-    mask = denominator != 0
-    corr_vector = torch.zeros_like(numerator)
-    corr_vector[mask] = numerator[mask] / denominator[mask]
-
-    # Find the feature with maximum absolute correlation
-    best_feature_idx = corr_vector.abs().argmax().item()
-    max_correlation = corr_vector[best_feature_idx].item()
-
-    print(
-        f"Best feature index: {best_feature_idx} with correlation: {max_correlation:.4f}"
-    )
-    print(f"This feature correlates with {concept_name} behavior")
-
-    # Get the decoder column for this feature as steering vector
+    # Get decoder weight for extracting steering vectors
     decoder_weight = model.decoder.weight  # Shape: (rep_dim, hid_dim)
-    steering_vector = decoder_weight[:, best_feature_idx]  # Shape: (rep_dim,)
 
-    return (
-        steering_vector,
-        best_feature_idx,
-        max_correlation,
-        embedding_layer,
-        dataset_name,
-    )
+    steering_vectors = {}
+
+    # Process each requested feature
+    for feature_type, feature_value in features_list:
+        feature_key = f"{feature_type}-{feature_value}"
+
+        if feature_key not in all_labels:
+            print(f"Warning: Feature '{feature_key}' not found in labels. Available: {list(all_labels.keys())}")
+            continue
+
+        # Convert labels to tensor (binarize)
+        labels = all_labels[feature_key]
+        labels_tensor = torch.tensor(labels, dtype=torch.float32).unsqueeze(1)  # Shape: (N, 1)
+        print(f"Processing feature '{feature_key}' with {sum(labels)}/{len(labels)} positive labels")
+
+        # Compute correlation using the same method as evaluate_labeled_sentences.py
+        acts_centered = acts - acts.mean(dim=0, keepdim=True)
+        acts_std = acts_centered.norm(dim=0, keepdim=True)
+
+        label_centered = labels_tensor - labels_tensor.mean(dim=0, keepdim=True)
+        label_std = label_centered.norm(dim=0, keepdim=True)
+
+        # Correlation computation
+        numerator = acts_centered.T @ label_centered  # F × 1
+        denominator = acts_std.T * label_std  # F × 1
+
+        mask = denominator != 0
+        corr_vector = torch.zeros_like(numerator)
+        corr_vector[mask] = numerator[mask] / denominator[mask]
+
+        # Find the feature with maximum absolute correlation
+        best_feature_idx = corr_vector.abs().argmax().item()
+        max_correlation = corr_vector[best_feature_idx].item()
+
+        print(
+            f"Feature '{feature_key}': best dimension {best_feature_idx} with correlation {max_correlation:.4f}"
+        )
+
+        # Get the decoder column for this feature as steering vector
+        steering_vector = decoder_weight[:, best_feature_idx]  # Shape: (rep_dim,)
+
+        steering_vectors[feature_key] = {
+            'vector': steering_vector,
+            'feature_idx': best_feature_idx,
+            'correlation': max_correlation,
+            'layer': embedding_layer
+        }
+
+    return steering_vectors
 
 
 def main(args, generate_configs):
-    # Get steering vector using the specified dataset
-    dataset_name = args.dataset
-    steering_vector, feature_idx, correlation, used_layer, dataset_used = (
-        get_steering_vector(args, dataset_name)
-    )
+    # Define features to extract steering vectors for
+    features_list = [
+        ("domain", "fantasy"),
+        ("domain", "science"),
+        ("domain", "news"),
+        ("domain", "other"),
+        ("sentiment", "positive"),
+        ("sentiment", "neutral"),
+        ("sentiment", "negative"),
+        ("voice", "active"),
+        ("voice", "passive"),
+    ]
+
+    # Get steering vectors for all requested features
+    steering_vectors = get_steering_vectors_for_features(args, features_list)
+
+    if not steering_vectors:
+        print("No valid steering vectors found!")
+        return
+
+    # Use the feature specified by user or default to first available
+    if hasattr(args, 'feature') and args.feature:
+        selected_feature = args.feature
+        if selected_feature not in steering_vectors:
+            print(f"Feature '{selected_feature}' not available. Available: {list(steering_vectors.keys())}")
+            return
+    else:
+        selected_feature = list(steering_vectors.keys())[0]
+        print(f"No specific feature requested, using first available: {selected_feature}")
+
+    steering_info = steering_vectors[selected_feature]
+    steering_vector = steering_info['vector']
+    feature_idx = steering_info['feature_idx']
+    correlation = steering_info['correlation']
+    used_layer = steering_info['layer']
+
     print(
-        f"Using {dataset_name}-based steering vector from feature {feature_idx} (correlation: {correlation:.4f})"
+        f"Using feature '{selected_feature}' steering vector from dimension {feature_idx} (correlation: {correlation:.4f})"
     )
     print(
         f"Applying steering intervention to layer {used_layer} (same as embedding extraction)"
     )
 
-    # Load dataset again for test prompts
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    data_path = os.path.join(script_dir, "..", "data", f"{dataset_name}.json")
-    dataset_data = data_utils.load_json(data_path)
+    # Use predefined test prompts for generation
+    test_prompts = [
+        "The",
+        "When",
+        "Why",
+        "How",
+        "What",
+        "Where",
+        "This",
+        "That",
+        "If",
+        "But",
+        "So",
+        "With",
+        "Because",
+        "Although",
+        "However",
+        "Therefore",
+        "Furthermore",
+        "Meanwhile",
+        "Thus",
+        "Who",
+        "Yet",
+        "Unless",
+        "As",
+        "I",
+        "You",
+        "He",
+        "She",
+        "They",
+        "We",
+        "It",
+        "My",
+        "Your",
+        "His",
+        "Her",
+        "Their",
+        "Our",
+        "Mine",
+        "Yours",
+        "Hers",
+        "Theirs",
+        "Ours",
+    ]
 
     interv_configs = []
     interv_configs.append(
@@ -326,7 +357,13 @@ def main(args, generate_configs):
         llm = GPTNeoXForCausalLM.from_pretrained(
             args.llm, torch_dtype=torch.float16, low_cpu_mem_usage=True
         ).to(device)
+    elif "gemma" in args.llm.lower():
+        tokenizer = AutoTokenizer.from_pretrained(args.llm)
+        llm = AutoModelForCausalLM.from_pretrained(
+            args.llm, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+        ).to(device)
     else:
+        # Default to Llama-style loading for other models
         tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
             args.llm, token=ACCESS_TOKEN
         )
@@ -341,20 +378,8 @@ def main(args, generate_configs):
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
-    # Get test prompts from dataset - extract just the user requests
-    test_prompts = []
-    for item in dataset_data[:10]:  # Use first 10 samples for testing
-        # Extract just the question part (user request) from the dataset
-        question = item["question"]
-        # Remove the "Choices:" part and just keep the user request
-        if "\n\nChoices:" in question:
-            user_request = question.split("\n\nChoices:")[0]
-        else:
-            user_request = question
-        test_prompts.append(user_request)
-
     print(
-        f"Testing with {len(test_prompts)} user requests from {dataset_name} data"
+        f"Testing with {len(test_prompts)} predefined prompts"
     )
     inputs = tokenizer(
         test_prompts, return_tensors="pt", padding=True, truncation=True
@@ -372,14 +397,11 @@ def main(args, generate_configs):
     )
     baseline_text = generate(llm, tokenizer, inputs, baseline_config, [])
 
-    # Generate with positive steering (should increase target behavior)
-    behavior_name = "refusal" if dataset_name == "refusal" else "sycophancy"
-    opposite_name = (
-        "compliance" if dataset_name == "refusal" else "non-sycophancy"
-    )
+    # Generate with positive steering (should increase target feature)
+    behavior_name = selected_feature.replace("-", " ")
 
     print(
-        f"\n=== Generating with positive steering (increase {behavior_name}) ==="
+        f"\n=== Generating with positive steering (enhance {behavior_name}) ==="
     )
     positive_config = Box(
         {
@@ -392,30 +414,6 @@ def main(args, generate_configs):
         llm, tokenizer, inputs, positive_config, interv_configs
     )
 
-    # Generate with negative steering (should decrease target behavior)
-    print(
-        f"\n=== Generating with negative steering (increase {opposite_name}) ==="
-    )
-    negative_interv_configs = []
-    negative_interv_configs.append(
-        Box(
-            {
-                "layer": used_layer,
-                "scale": -args.steering_alpha,  # Negative scale to subtract the vector
-                "steer_vec": steering_vector.to(device),
-            }
-        )
-    )
-    negative_config = Box(
-        {
-            "type": "ssae",
-            "max_length": args.max_length,
-            "output_filename": f"negative_{dataset_name}_steering_generation.json",
-        }
-    )
-    negative_text = generate(
-        llm, tokenizer, inputs, negative_config, negative_interv_configs
-    )
 
     # Generate with random steering vector
     print(f"\n=== Generating with random steering vector ===")
@@ -442,22 +440,22 @@ def main(args, generate_configs):
         llm, tokenizer, inputs, random_config, random_interv_configs
     )
 
-    # Restructure results prompt by prompt for first 10 prompts
+    # Restructure results prompt by prompt for all prompts
     prompt_results = []
-    for i in range(min(10, len(test_prompts))):
+    for i in range(len(test_prompts)):
         prompt_result = {
             "prompt_id": i + 1,
             "original_prompt": test_prompts[i],
             "baseline_generation": baseline_text[i],
             "positive_steering_generation": positive_text[i],
-            "negative_steering_generation": negative_text[i],
             "random_steering_generation": random_text[i],
         }
         prompt_results.append(prompt_result)
 
     # Save results
     results = {
-        "dataset": dataset_name,
+        "dataset": "labeled-sentences",
+        "selected_feature": selected_feature,
         "steering_info": {
             "feature_idx": feature_idx,
             "correlation": correlation,
@@ -465,20 +463,21 @@ def main(args, generate_configs):
             "steering_alpha": args.steering_alpha,
             "concept": behavior_name,
         },
+        "all_steering_vectors": {k: {"feature_idx": v["feature_idx"], "correlation": v["correlation"]} for k, v in steering_vectors.items()},
         "prompt_results": prompt_results,
     }
 
     save_path = os.path.join(
         BASE_DIR,
         "generated_outputs",
-        f"{dataset_name}_steering_comparison.json",
+        f"labeled_sentences_{selected_feature}_steering_comparison.json",
     )
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, "w") as f:
         json.dump(results, f, indent=2)
 
     print(f"\n=== Comparison Results ===")
-    for i in range(min(10, len(test_prompts))):
+    for i in range(len(test_prompts)):
         print(f"\n{'='*80}")
         print(f"PROMPT {i+1}: {test_prompts[i]}")
         print(f"{'='*80}")
@@ -486,11 +485,8 @@ def main(args, generate_configs):
         print(f"\nBASELINE:")
         print(f"{baseline_text[i]}")
 
-        print(f"\nPOSITIVE STEERING (+{behavior_name}):")
+        print(f"\nPOSITIVE STEERING (enhance {behavior_name}):")
         print(f"{positive_text[i]}")
-
-        print(f"\nNEGATIVE STEERING (+{opposite_name}):")
-        print(f"{negative_text[i]}")
 
         print(f"\nRANDOM STEERING:")
         print(f"{random_text[i]}")
@@ -509,15 +505,16 @@ if __name__ == "__main__":
         help="Optional dataconfig (not used when using steering)",
     )
     parser.add_argument(
-        "--dataset",
-        "-d",
+        "--feature",
+        "-f",
         type=str,
-        choices=["refusal", "sycophancy"],
-        default="refusal",
-        help="Dataset to use for steering vector extraction (default: refusal)",
+        help="Specific feature to use for steering (e.g., 'domain-fantasy', 'sentiment-positive'). If not specified, uses first available.",
     )
     parser.add_argument(
-        "--llm", default="EleutherAI/pythia-70m-deduped", type=str
+        "--llm",
+        default="EleutherAI/pythia-70m-deduped",
+        type=str,
+        help="LLM model to use for generation (e.g., EleutherAI/pythia-70m-deduped, google/gemma-2-2b-it, meta-llama/Meta-Llama-3.1-8B-Instruct)",
     )
     parser.add_argument(
         "--modeldir",
