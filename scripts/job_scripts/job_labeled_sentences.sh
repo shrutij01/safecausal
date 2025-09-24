@@ -3,10 +3,12 @@
 # Define hyperparameters for refactored SSAE code
 embedding_files=(
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/labeled-sentences_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/labeled-sentences_pythia70m_5_last_token.h5"
 )
 
 data_configs=(
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/labeled-sentences_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/labeled-sentences_pythia70m_5_last_token.yaml"
 )
 
 # Updated parameter names to match refactored code
@@ -85,6 +87,7 @@ for idx in "${!embedding_files[@]}"; do
                                             echo "#SBATCH --time=${time_limit}" >> "${script_name}"
                                             echo "#SBATCH --mem=${memory}" >> "${script_name}"
                                             echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
+                                            echo "#SBATCH --${cpu_req}" >> "${script_name}"
                                             echo "module load python/3.10" >> "${script_name}"
                                             echo "module load cuda/12.6.0/cudnn" >> "${script_name}"
                                             echo "source /home/mila/j/joshi.shruti/venvs/agents/bin/activate" >> "${script_name}"

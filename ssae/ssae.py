@@ -351,7 +351,7 @@ class SimpleCPUData(Dataset):
             return torch.from_numpy(self.data[idx + 1] - self.data[idx])
 
 
-KEYS = ["seed"]  # choose what matters
+KEYS = ["seed", "model"]  # choose what matters
 
 
 def _hash_cfg(cfg) -> str:
@@ -390,9 +390,14 @@ def dump_run(root: Path, model: torch.nn.Module, cfg) -> Path:
         # For regular datasets, use first part only
         dataset_name = stem_parts[0]
 
-    tag = "_".join(f"{k}{getattr(cfg, k)}" for k in KEYS)
+    # Get model name from cfg.extra.model and clean it up for directory name
+    model_name = getattr(cfg.extra, "model", "unknown")
+    # Extract just the model name part (e.g., "gemma-2-2b-it" from "google/gemma-2-2b-it")
+    if "/" in model_name:
+        model_name = model_name.split("/")[-1]
 
-    run = root / f"{dataset_name}_{tag}"
+    # Build directory name: dataset_model_seed
+    run = root / f"{dataset_name}_{model_name}_seed{cfg.seed}"
     run.mkdir(
         parents=True, exist_ok=True
     )  # Allow multiple runs with same config
@@ -653,10 +658,16 @@ def make_dataloader(cfg) -> DataLoader:
     # Set max_samples based on quick flag and dataset
     if cfg.quick and dataset_name in ["labeled-sentences", "sycophancy"]:
         max_samples = 5500  # Quick mode for behavioral datasets
-    elif not cfg.quick and dataset_name in ["labeled-sentences", "sycophancy", "refusal"]:
+    elif not cfg.quick and dataset_name in [
+        "labeled-sentences",
+        "sycophancy",
+        "refusal",
+    ]:
         max_samples = None  # Use full dataset
     else:
-        max_samples = None  # Other datasets use full data by default (includes refusal)
+        max_samples = (
+            None  # Other datasets use full data by default (includes refusal)
+        )
 
     dataset = SimpleCPUData(
         cfg.emb,
