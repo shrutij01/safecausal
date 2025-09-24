@@ -655,6 +655,13 @@ def make_dataloader(cfg) -> DataLoader:
     # Extract dataset name from embedding file path
     dataset_name = cfg.emb.stem.split("_")[0] if "_" in cfg.emb.stem else None
 
+    # Disable quick mode for all datasets except allowed ones
+    allowed_quick_datasets = ["labeled-sentences", "sycophancy", "bias-in-bios"]
+    if cfg.quick and dataset_name not in allowed_quick_datasets:
+        print(f"⚠️  Warning: Disabling --quick mode for '{dataset_name}' dataset (was enabled)")
+        print(f"   Quick mode is only allowed for: {', '.join(allowed_quick_datasets)}")
+        cfg.quick = False
+
     # Set max_samples based on quick flag and dataset
     if cfg.quick and dataset_name in ["labeled-sentences", "sycophancy"]:
         max_samples = 5500  # Quick mode for behavioral datasets
