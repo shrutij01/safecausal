@@ -1,14 +1,18 @@
 #!/bin/bash
 
-# Define hyperparameters for refactored SSAE code
+# Define hyperparameters for refusal and sycophancy datasets with Gemma and Pythia embeddings
 embedding_files=(
+    "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_gemma2_25_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.h5"
-    # "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.h5"
 )
 
 data_configs=(
+    "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_gemma2_25_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.yaml"
-    # "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.yaml"
 )
 
 # Updated parameter names to match refactored code
@@ -22,7 +26,7 @@ targets=(
     "--target 0.005" # "--target 0.05" "--target 0.005" "--target 0.0005"   # target-sparse-level
 )
 batch_sizes=(
-    "--batch 64"        # batch-size
+    "--batch 1024"        # batch-size - increased for better GPU utilization
 )
 norm_types=(
     "--norm ln"         # norm-type
@@ -41,12 +45,12 @@ seeds=(
 renorm_epochs=(
     "--renorm-epochs 50"    # renormalization frequency for the decoder columns
 )
-use_amp=(
-    "--use-amp"             # Enable mixed precision training
+num_epochs=(
+    "--epochs 15000"
 )
 
 # Job settings
-job_name="ssae_optimized"
+job_name="ssae_refusal_sycophancy"
 output="job_output_%j.txt"
 error="job_error_%j.txt"
 time_limit="3:00:00"
@@ -73,10 +77,10 @@ for idx in "${!embedding_files[@]}"; do
                         for loss_type in "${loss_types[@]}"; do
                             for schedule in "${schedules[@]}"; do
                                 for renorm_epoch in "${renorm_epochs[@]}"; do
-                                    for amp in "${use_amp[@]}"; do
+                                    for epochs in "${num_epochs[@]}"; do
                                         for seed in "${seeds[@]}"; do
                                             # Define a script name
-                                            script_name="generated_jobs/job_${counter}.sh"
+                                            script_name="generated_jobs/job_refusal_sycophancy_${counter}.sh"
 
                                             # Create a batch script for each job
                                             echo "#!/bin/bash" > "${script_name}"
@@ -92,7 +96,7 @@ for idx in "${!embedding_files[@]}"; do
                                             echo "cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal/ssae" >> "${script_name}"
 
                                             # Updated command with new parameter names and optimizations
-                                            echo "python ssae.py ${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${amp} ${seed}" >> "${script_name}"
+                                            echo "python ssae.py ${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${epochs} ${seed}" >> "${script_name}"
 
                                             # Make the script executable
                                             chmod +x "${script_name}"
