@@ -4,12 +4,12 @@
 # Categorical dataset has num-concepts = 3 (color_changed, shape_changed, object_changed)
 embedding_files=(
     "/network/scratch/j/joshi.shruti/ssae/categorical-contrastive/categorical-contrastive_gemma2_25_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/categorical-contrastive/categorical-contrastive_pythia70m_5_last_token.h5"
+    # "/network/scratch/j/joshi.shruti/ssae/categorical-contrastive/categorical-contrastive_pythia70m_5_last_token.h5"
 )
 
 data_configs=(
     "/network/scratch/j/joshi.shruti/ssae/categorical-contrastive/categorical-contrastive_gemma2_25_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/categorical-contrastive/categorical-contrastive_pythia70m_5_last_token.yaml"
+    # "/network/scratch/j/joshi.shruti/ssae/categorical-contrastive/categorical-contrastive_pythia70m_5_last_token.yaml"
 )
 
 # Updated parameter names to match refactored code
