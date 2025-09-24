@@ -35,7 +35,7 @@ schedules=(
     "--schedule 3000" #"--schedule 5000"   # scheduler-epochs
 )
 targets=(
-    "--target 0.005" # target-sparsity
+    "--target 11" # target-sparsity
 )
 batch_sizes=(
     "--batch 64" # "--batch 512"      # batch-size - increased for better GPU utilization
