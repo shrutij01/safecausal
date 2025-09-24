@@ -351,7 +351,7 @@ class SimpleCPUData(Dataset):
             return torch.from_numpy(self.data[idx + 1] - self.data[idx])
 
 
-KEYS = ["seed", "model"]  # choose what matters
+KEYS = ["seed", "model", "oc", "target"]  # choose what matters
 
 
 def _hash_cfg(cfg) -> str:
