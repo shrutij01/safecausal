@@ -10,6 +10,7 @@ import yaml
 
 import utils.data_utils as utils
 from transformers import GPTNeoXForCausalLM, AutoTokenizer
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 
 ACCESS_TOKEN = "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"
