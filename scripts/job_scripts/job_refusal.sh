@@ -26,7 +26,8 @@ targets=(
     "--target 0.005" # "--target 0.05" "--target 0.005" "--target 0.0005"   # target-sparse-level
 )
 batch_sizes=(
-    "--batch 1024"        # batch-size - increased for better GPU utilization
+    # "--batch 1024"        # batch-size - for sycophancy
+    "--batch 64"      # batch-size - for refusal
 )
 norm_types=(
     "--norm ln"         # norm-type
