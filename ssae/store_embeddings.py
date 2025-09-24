@@ -441,6 +441,8 @@ def main(args):
         num_concepts = 2
     elif args.dataset in ["labeled-sentences", "labeled-sentences-correlated"]:
         num_concepts = 5
+    elif args.dataset == "categorical-contrastive":
+        num_concepts = 3
     elif args.dataset == "categorical":
         num_concepts = 135
     elif args.dataset in ["safearena", "wildjailbreak"]:  # fixme
@@ -491,6 +493,7 @@ if __name__ == "__main__":
             "2-binary",
             "corr-binary",
             "bias-in-bios",
+            "categorical-contrastive",
         ],
         default="labeled-sentences",
     )

@@ -381,6 +381,11 @@ def load_dataset(
         cfc_train_labels = [{"gender_change": True} for _ in cfc_train_tuples]
         cfc_test_labels = [{"gender_change": True} for _ in cfc_test_tuples]
         concept_labels_test = None
+    elif dataset_name == "categorical-contrastive":
+        cfc_train_tuples, cfc_test_tuples, cfc_train_labels, cfc_test_labels = load_categorical_contrastive(
+            split=split, num_samples=num_samples
+        )
+        concept_labels_test = None
     elif dataset_name in [
         "eng-french",
         "eng-german",
@@ -774,3 +779,76 @@ def load_biasinbios(split=0.9, num_samples=None, data_seed=42):
     )
 
     return cfc_train_tuples, cfc_test_tuples
+
+
+def load_categorical_contrastive(split=0.9, num_samples=None, data_seed=42):
+    """
+    Load categorical contrastive dataset with multi-label concept changes.
+
+    Args:
+        split: Train/test split ratio (default: 0.9)
+        num_samples: Maximum number of samples to use (default: None for all)
+        data_seed: Random seed for reproducible sampling
+
+    Returns:
+        tuple: (cfc_train_tuples, cfc_test_tuples, cfc_train_labels, cfc_test_labels)
+               where labels are [color_changed, shape_changed, object_changed]
+    """
+    import json
+
+    # Set random seed for reproducibility
+    random.seed(data_seed)
+    np.random.seed(data_seed)
+
+    print("Loading categorical contrastive dataset...")
+
+    # Load the train data (contains most samples)
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    train_file = os.path.join(
+        script_dir, "..", "data", "categorical_dataset", "categorical_contrastive_train.json"
+    )
+
+    if not os.path.exists(train_file):
+        raise FileNotFoundError(
+            f"Categorical dataset not found at {train_file}. "
+            "Please run 'python data/categorical.py' to generate it first."
+        )
+
+    with open(train_file, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    print(f"Found {len(data)} samples in categorical dataset")
+
+    # Sample if requested
+    if num_samples is not None and len(data) > num_samples:
+        data = random.sample(data, num_samples)
+        print(f"Sampled {len(data)} samples")
+
+    # Extract tuples and labels
+    cfc_tuples = []
+    labels = []
+
+    for sample in data:
+        # Create contrastive pair
+        cfc_tuples.append([sample["prompt1"], sample["prompt2"]])
+
+        # Convert labels to dict format for consistency with other datasets
+        label_dict = {
+            "color_changed": bool(sample["labels"][0]),
+            "shape_changed": bool(sample["labels"][1]),
+            "object_changed": bool(sample["labels"][2])
+        }
+        labels.append(label_dict)
+
+    print(f"Created {len(cfc_tuples)} contrastive pairs with 3-concept labels")
+
+    # Split into train/test
+    split_idx = int(len(cfc_tuples) * split)
+    cfc_train_tuples = cfc_tuples[:split_idx]
+    cfc_test_tuples = cfc_tuples[split_idx:]
+    cfc_train_labels = labels[:split_idx]
+    cfc_test_labels = labels[split_idx:]
+
+    print(f"Split: {len(cfc_train_tuples)} train pairs, {len(cfc_test_tuples)} test pairs")
+
+    return cfc_train_tuples, cfc_test_tuples, cfc_train_labels, cfc_test_labels
