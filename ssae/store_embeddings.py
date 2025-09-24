@@ -126,7 +126,7 @@ def apply_quick_sampling(cfc_train_tuples, cfc_train_labels, use_quick):
 
 def load_model_and_tokenizer(model_id):
     """Load model and tokenizer based on model_id."""
-    if model_id == "meta-llama/Meta-Llama-3.1-8B-Instruct":
+    if model_id == "meta-llama/Llama-3.1-8B-Instruct":
         try:
             # Try with torch_dtype and device_map for better memory management
             model = transformers.LlamaForCausalLM.from_pretrained(
@@ -525,7 +525,7 @@ if __name__ == "__main__":
         "--model_id",
         default="google/gemma-2-2b-it",
         choices=[
-            "meta-llama/Meta-Llama-3.1-8B-Instruct",
+            "meta-llama/Llama-3.1-8B-Instruct",
             "EleutherAI/pythia-70m-deduped",
             "google/gemma-2-2b-it",
         ],
