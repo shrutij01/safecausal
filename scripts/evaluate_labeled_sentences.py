@@ -13,7 +13,7 @@ def load_jsonl(filepath: str):
         return [json.loads(line) for line in f if line.strip()]
 
 
-def load_labeled_sentences_test():
+def load_labeled_sentences_test(max_samples=None):
     """Load test sentences with binary labels for each individual sentence (no pairing)."""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     datapath = os.path.join(
@@ -51,6 +51,10 @@ def load_labeled_sentences_test():
     # Initialize label collections
     for value in values_ordered:
         all_labels[value] = []
+
+    # Limit samples if specified
+    if max_samples is not None and len(labeled_sentences) > max_samples:
+        labeled_sentences = labeled_sentences[:max_samples]
 
     # Create binary labels for each sentence
     for data in labeled_sentences:
@@ -263,11 +267,12 @@ def evaluate_sentence_labels(
     threshold: float = 0.1,
     metrics: list = ["accuracy", "macrof1", "mcc"],
     embedding_model: str = "pythia",
+    max_samples: int = None,
 ) -> Dict[str, Any]:
     """Evaluate SSAE on individual sentence labels."""
 
     # Load test sentences and labels
-    sentences, labels = load_labeled_sentences_test()
+    sentences, labels = load_labeled_sentences_test(max_samples)
     print(f"Loaded {len(sentences)} test sentences")
     print(f"Available labels: {list(labels.keys())}")
 
@@ -352,13 +357,19 @@ def main():
         default="pythia",
         help="Model to use for sentence embeddings (pythia=512D, gemma=2304D)",
     )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=100,
+        help="Maximum number of test sentences to evaluate (default: 100)",
+    )
     parser.add_argument("--output", type=Path, help="Output file for results")
 
     args = parser.parse_args()
 
     # Evaluate model
     results = evaluate_sentence_labels(
-        args.model_path, args.threshold, args.metrics, args.embedding_model
+        args.model_path, args.threshold, args.metrics, args.embedding_model, args.max_samples
     )
 
     # Print results
