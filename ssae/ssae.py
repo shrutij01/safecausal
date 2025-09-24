@@ -656,25 +656,28 @@ def make_dataloader(cfg) -> DataLoader:
     dataset_name = cfg.emb.stem.split("_")[0] if "_" in cfg.emb.stem else None
 
     # Disable quick mode for all datasets except allowed ones
-    allowed_quick_datasets = ["labeled-sentences", "sycophancy", "bias-in-bios"]
+    allowed_quick_datasets = [
+        "labeled-sentences",
+        "sycophancy",
+        "bias-in-bios",
+        "labeled-sentences-correlated",
+    ]
     if cfg.quick and dataset_name not in allowed_quick_datasets:
-        print(f"⚠️  Warning: Disabling --quick mode for '{dataset_name}' dataset (was enabled)")
-        print(f"   Quick mode is only allowed for: {', '.join(allowed_quick_datasets)}")
+        print(
+            f"⚠️  Warning: Disabling --quick mode for '{dataset_name}' dataset (was enabled)"
+        )
+        print(
+            f"   Quick mode is only allowed for: {', '.join(allowed_quick_datasets)}"
+        )
         cfg.quick = False
 
     # Set max_samples based on quick flag and dataset
-    if cfg.quick and dataset_name in ["labeled-sentences", "sycophancy"]:
+    if cfg.quick and dataset_name in allowed_quick_datasets:
         max_samples = 5500  # Quick mode for behavioral datasets
-    elif not cfg.quick and dataset_name in [
-        "labeled-sentences",
-        "sycophancy",
-        "refusal",
-    ]:
+    elif not cfg.quick and dataset_name in allowed_quick_datasets:
         max_samples = None  # Use full dataset
     else:
-        max_samples = (
-            None  # Other datasets use full data by default (includes refusal)
-        )
+        max_samples = None
 
     dataset = SimpleCPUData(
         cfg.emb,
