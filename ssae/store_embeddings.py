@@ -495,7 +495,7 @@ if __name__ == "__main__":
             "google/gemma-2-2b-it",
         ],
     )
-    parser.add_argument("google/gemma-2-2b-it", type=int, default=25, choices=range(0, 33))
+    parser.add_argument("--layer", type=int, default=25, choices=range(0, 33))
     parser.add_argument(
         "--num-samples",
         type=int,
