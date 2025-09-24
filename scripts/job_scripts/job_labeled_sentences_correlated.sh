@@ -2,21 +2,21 @@
 
 # Define hyperparameters for correlated labeled sentences
 corr_embedding_files=(
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.1_pythia70m_5_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.2_pythia70m_5_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.5_pythia70m_5_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.9_pythia70m_5_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.99_pythia70m_5_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_1.0_pythia70m_5_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.1_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.2_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.5_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.9_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.99_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_1.0_gemma2_25_last_token.h5"
 )
 
 corr_data_configs=(
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.1_pythia70m_5_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.2_pythia70m_5_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.5_pythia70m_5_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.9_pythia70m_5_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.99_pythia70m_5_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_1.0_pythia70m_5_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.1_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.2_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.5_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.9_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.99_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_1.0_gemma2_25_last_token.yaml"
 )
 
 # Same parameters as job_labeled_sentences.sh
