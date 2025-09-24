@@ -38,7 +38,7 @@ targets=(
     "--target 0.005" # target-sparsity
 )
 batch_sizes=(
-    "--batch 1024" # "--batch 512"      # batch-size - increased for better GPU utilization
+    "--batch 64" # "--batch 512"      # batch-size - increased for better GPU utilization
 )
 norm_types=(
     "--norm ln"         # norm-type
@@ -111,7 +111,7 @@ for idx in "${!embedding_files[@]}"; do
                                             echo "cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal/ssae" >> "${script_name}"
 
                                             # Updated command with new parameter names and optimizations
-                                            echo "python ssae.py ${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${epochs} ${seed}" >> "${script_name}"
+                                            echo "python ssae.py ${embedding_file} ${data_config} ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${epochs} ${seed}" >> "${script_name}"
 
                                             # Make the script executable
                                             chmod +x "${script_name}"
