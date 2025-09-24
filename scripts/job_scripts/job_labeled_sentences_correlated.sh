@@ -50,7 +50,7 @@ renorm_epochs=(
     "--renorm-epochs 50"    # renormalization frequency for the decoder columns
 )
 num_epochs=(
-    "--epochs 10000"
+    "--epochs 15000"
 )
 
 # Job settings
