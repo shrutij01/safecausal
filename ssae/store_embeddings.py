@@ -14,7 +14,7 @@ from transformers import GPTNeoXForCausalLM, AutoTokenizer
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 
-ACCESS_TOKEN = "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"
+ACCESS_TOKEN = "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"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
