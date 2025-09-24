@@ -1,4 +1,4 @@
-scripts/evaluate_generation_bios.py#!/usr/bin/env python3
+#!/usr/bin/env python3
 """
 Evaluate generation with steering on bias-in-bios related prompts.
 
