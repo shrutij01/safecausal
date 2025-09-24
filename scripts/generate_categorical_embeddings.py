@@ -74,9 +74,9 @@ def generate_embeddings_for_model(model_config, args):
     print(f"   Batch size: {batch_size}")
     print(f"   Samples: {args.num_samples}")
 
-    # Build command
+    # Build command (script is run from safecausal/ directory)
     cmd = [
-        "python", "ssae/store_embeddings.py",
+        "python", "-m", "ssae.store_embeddings",
         "--dataset", "categorical-contrastive",
         "--model_id", model_id,
         "--layer", str(layer),
@@ -122,9 +122,9 @@ def main():
     parser.add_argument(
         "--models",
         nargs="+",
-        choices=["llama", "gemma", "pythia", "all"],
+        choices=["gemma", "pythia", "all"],
         default=["all"],
-        help="Which models to run (default: all)"
+        help="Which models to run (default: all - currently gemma and pythia)"
     )
     parser.add_argument(
         "--skip-existing",
@@ -159,11 +159,11 @@ def main():
         }
     }
 
-    # Determine which models to run
+    # Determine which models to run (skip llama for now)
     if "all" in args.models:
-        models_to_run = ["llama", "gemma", "pythia"]
+        models_to_run = ["gemma", "pythia"]  # Skip llama due to access issues
     else:
-        models_to_run = [m for m in args.models if m != "all"]
+        models_to_run = [m for m in args.models if m != "all" and m != "llama"]
 
     print("🎯 Categorical Contrastive Embedding Generation")
     print("=" * 60)
