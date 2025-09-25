@@ -285,12 +285,14 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
     print(f"SSAE activations shape: {ssae_acts.shape}")
 
     ssae_corr_vector = compute_correlations(ssae_acts, labels_tensor)
+
+    # Find best feature (max absolute correlation)
+    best_feature_idx = ssae_corr_vector.abs().argmax().item()
     ssae_max_mcc = ssae_corr_vector.abs().max().item()
 
-    # Compute mean and std error for SSAE
-    ssae_abs_corrs = ssae_corr_vector.abs()
-    ssae_mean_mcc = ssae_abs_corrs.mean().item()
-    ssae_std_error = (ssae_abs_corrs.std() / (len(ssae_abs_corrs) ** 0.5)).item()
+    # Compute MCC for best feature over samples
+    best_feature_acts = (ssae_acts[:, best_feature_idx] > 0.1).float()  # Binarize activations
+    ssae_mean_mcc, ssae_std_error = compute_mcc_over_samples(best_feature_acts, labels_tensor.squeeze())
 
     # Load and evaluate appropriate external SAE based on LLM model
     external_name = ""
@@ -333,12 +335,14 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
             pythia_corr_vector = compute_correlations(
                 pythia_acts, labels_tensor
             )
+
+            # Find best feature for Pythia SAE
+            pythia_best_feature_idx = pythia_corr_vector.abs().argmax().item()
             external_max_mcc = pythia_corr_vector.abs().max().item()
 
-            # Compute mean and std error for Pythia SAE
-            pythia_abs_corrs = pythia_corr_vector.abs()
-            external_mean_mcc = pythia_abs_corrs.mean().item()
-            external_std_error = (pythia_abs_corrs.std() / (len(pythia_abs_corrs) ** 0.5)).item()
+            # Compute MCC for best feature over samples
+            pythia_best_feature_acts = (pythia_acts[:, pythia_best_feature_idx] > 0.1).float()
+            external_mean_mcc, external_std_error = compute_mcc_over_samples(pythia_best_feature_acts, labels_tensor.squeeze())
             external_name = "Pythia SAE"
         except Exception as e:
             print(f"Failed to load Pythia SAE: {e}")
@@ -374,12 +378,14 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
             print(f"Gemma Scope activations shape: {gemma_acts.shape}")
 
             gemma_corr_vector = compute_correlations(gemma_acts, labels_tensor)
+
+            # Find best feature for Gemma Scope
+            gemma_best_feature_idx = gemma_corr_vector.abs().argmax().item()
             external_max_mcc = gemma_corr_vector.abs().max().item()
 
-            # Compute mean and std error for Gemma Scope
-            gemma_abs_corrs = gemma_corr_vector.abs()
-            external_mean_mcc = gemma_abs_corrs.mean().item()
-            external_std_error = (gemma_abs_corrs.std() / (len(gemma_abs_corrs) ** 0.5)).item()
+            # Compute MCC for best feature over samples
+            gemma_best_feature_acts = (gemma_acts[:, gemma_best_feature_idx] > 0.1).float()
+            external_mean_mcc, external_std_error = compute_mcc_over_samples(gemma_best_feature_acts, labels_tensor.squeeze())
             external_name = "Gemma Scope"
         except Exception as e:
             print(f"Failed to load Gemma Scope: {e}")
@@ -454,6 +460,43 @@ def compute_correlations(activations, labels):
     corr_vector[mask] = numerator[mask] / denominator[mask]
 
     return corr_vector.squeeze()
+
+
+def compute_mcc_over_samples(predictions, labels, n_bootstrap=100):
+    """
+    Compute MCC mean and std error over bootstrap samples.
+
+    Args:
+        predictions: Binary predictions for the best feature [N]
+        labels: Binary labels [N]
+        n_bootstrap: Number of bootstrap samples
+
+    Returns:
+        mean_mcc, std_error
+    """
+    from sklearn.metrics import matthews_corrcoef
+
+    n_samples = len(predictions)
+    predictions_np = predictions.numpy()
+    labels_np = labels.numpy()
+
+    # Bootstrap sampling to get MCC distribution
+    mcc_scores = []
+    for _ in range(n_bootstrap):
+        # Sample with replacement
+        indices = np.random.choice(n_samples, n_samples, replace=True)
+        boot_preds = predictions_np[indices]
+        boot_labels = labels_np[indices]
+
+        # Compute MCC for this bootstrap sample
+        mcc = matthews_corrcoef(boot_labels, boot_preds)
+        mcc_scores.append(mcc)
+
+    mcc_scores = np.array(mcc_scores)
+    mean_mcc = np.mean(mcc_scores)
+    std_error = np.std(mcc_scores) / np.sqrt(n_bootstrap)
+
+    return mean_mcc, std_error
 
 
 def get_steering_vector(args, dataset_name="refusal"):
