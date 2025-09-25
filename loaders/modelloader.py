@@ -117,13 +117,21 @@ def load_pythia_sae_checkpoint(layer: int = 5, hf_token: str = None):
     # Debug: print available keys
     print(f"Available keys in Pythia SAE: {list(state_dict.keys())}")
 
-    # Pythia SAE uses W_enc and W_dec naming convention
-    if "W_enc" in state_dict:
+    # Handle mixed naming convention in Pythia SAE
+    if "W_dec" in state_dict and "encoder.weight" in state_dict:
+        # Mixed convention: decoder uses W_dec/b_dec, encoder uses encoder.weight/encoder.bias
+        encoder_weight = state_dict["encoder.weight"]
+        decoder_weight = state_dict["W_dec"].T  # Transpose to match our convention
+        encoder_bias = state_dict["encoder.bias"]
+        decoder_bias = state_dict["b_dec"]
+    elif "W_enc" in state_dict:
+        # Pure W_enc/W_dec convention
         encoder_weight = state_dict["W_enc"].T  # Transpose to match our convention
         decoder_weight = state_dict["W_dec"].T  # Transpose to match our convention
         encoder_bias = state_dict.get("b_enc", torch.zeros(encoder_weight.shape[0]))
         decoder_bias = state_dict.get("b_dec", torch.zeros(decoder_weight.shape[1]))
     elif "encoder.weight" in state_dict:
+        # Pure encoder.weight/decoder.weight convention
         encoder_weight = state_dict["encoder.weight"]
         decoder_weight = state_dict["decoder.weight"]
         encoder_bias = state_dict.get("encoder.bias", torch.zeros(encoder_weight.shape[0]))
