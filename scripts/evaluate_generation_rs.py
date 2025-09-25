@@ -11,7 +11,7 @@ import transformers
 from box import Box
 import json
 
-from loaders import TestDataLoader, load_ssae_models
+from loaders import TestDataLoader, load_ssae_models, load_gemmascope_checkpoint
 import utils.data_utils as data_utils
 import numpy as np
 from scripts.evaluate_labeled_sentences import get_sentence_embeddings
@@ -21,6 +21,33 @@ import yaml
 ACCESS_TOKEN = "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"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+class GemmaScopeModel:
+    """Wrapper for Gemma Scope model to match SSAE interface."""
+    def __init__(self, decoder_weight, decoder_bias, encoder_weight, encoder_bias):
+        self.decoder_weight = decoder_weight
+        self.decoder_bias = decoder_bias
+        self.encoder_weight = encoder_weight
+        self.encoder_bias = encoder_bias
+
+    def encoder(self, x):
+        """Apply encoder transformation."""
+        return torch.nn.functional.relu(torch.matmul(x, self.encoder_weight.T) + self.encoder_bias)
+
+    def decoder(self, x):
+        """Apply decoder transformation."""
+        return torch.matmul(x, self.decoder_weight.T) + self.decoder_bias
+
+    def forward(self, x):
+        """Full forward pass."""
+        encoded = self.encoder(x)
+        decoded = self.decoder(encoded)
+        return decoded, encoded
+
+    def eval(self):
+        """Set to eval mode (no-op for this implementation)."""
+        pass
 
 
 def _generate_base(
@@ -139,8 +166,8 @@ def generate(
     return generated_text
 
 
-def get_steering_vector(args, dataset_name="refusal"):
-    """Load dataset and find the best steering vector dimension using correlation analysis."""
+def compute_mcc_comparison(args, dataset_name="refusal"):
+    """Compare MCC values between SSAE and Gemma Scope models."""
     # Load the specified dataset
     script_dir = os.path.dirname(os.path.abspath(__file__))
     data_path = os.path.join(script_dir, "..", "data", f"{dataset_name}.json")
@@ -220,8 +247,19 @@ def get_steering_vector(args, dataset_name="refusal"):
         embeddings = np.array(embeddings)
 
     print(f"Final embeddings shape: {embeddings.shape}")
+    embeddings_tensor = torch.tensor(embeddings, dtype=torch.float32)
 
-    # Load SSAE model
+    # Convert labels to tensor
+    labels_tensor = torch.tensor(labels, dtype=torch.float32).unsqueeze(
+        1
+    )  # Shape: (N, 1)
+    print(f"Labels tensor shape: {labels_tensor.shape}")
+
+    # 1. Load and evaluate SSAE model
+    print(f"\n{'='*60}")
+    print("EVALUATING SSAE MODEL")
+    print(f"{'='*60}")
+
     from ssae import DictLinearAE
 
     # Load model config
@@ -236,32 +274,106 @@ def get_steering_vector(args, dataset_name="refusal"):
     # Get dimensions from the saved weights
     rep_dim = state_dict["encoder.weight"].shape[1]  # input dimension
     hid_dim = state_dict["encoder.weight"].shape[0]  # hidden dimension
-    print(f"Model dimensions: rep_dim={rep_dim}, hid_dim={hid_dim}")
+    print(f"SSAE dimensions: rep_dim={rep_dim}, hid_dim={hid_dim}")
 
     # Create and load model
-    model = DictLinearAE(rep_dim, hid_dim, cfg.get("norm", "ln"))
-    model.load_state_dict(state_dict)
-    model.eval()
+    ssae_model = DictLinearAE(rep_dim, hid_dim, cfg.get("norm", "ln"))
+    ssae_model.load_state_dict(state_dict)
+    ssae_model.eval()
 
     # Get SSAE activations
-    embeddings_tensor = torch.tensor(embeddings, dtype=torch.float32)
     with torch.no_grad():
-        acts = model.encoder(
-            embeddings_tensor
-        )  # Shape: (N, F) where F is number of features
-    print(f"SSAE activations shape: {acts.shape}")
+        ssae_acts = ssae_model.encoder(embeddings_tensor)  # Shape: (N, F)
+    print(f"SSAE activations shape: {ssae_acts.shape}")
 
-    # Convert labels to tensor
-    labels_tensor = torch.tensor(labels, dtype=torch.float32).unsqueeze(
-        1
-    )  # Shape: (N, 1)
-    print(f"Labels tensor shape: {labels_tensor.shape}")
+    # Compute SSAE correlations
+    ssae_corr_vector = compute_correlations(ssae_acts, labels_tensor)
+    ssae_best_idx = ssae_corr_vector.abs().argmax().item()
+    ssae_max_corr = ssae_corr_vector[ssae_best_idx].item()
 
-    # Compute correlation using the same method as evaluate_labeled_sentences.py
-    acts_centered = acts - acts.mean(dim=0, keepdim=True)
+    print(f"SSAE - Best feature: {ssae_best_idx}, MCC: {ssae_max_corr:.4f}")
+
+    # 2. Load and evaluate Gemma Scope model
+    print(f"\n{'='*60}")
+    print("EVALUATING GEMMA SCOPE MODEL")
+    print(f"{'='*60}")
+
+    # Load Gemma Scope checkpoint
+    gemma_decoder_weight, gemma_decoder_bias, gemma_encoder_weight, gemma_encoder_bias = load_gemmascope_checkpoint()
+
+    print(f"Gemma Scope dimensions: encoder_weight={gemma_encoder_weight.shape}, decoder_weight={gemma_decoder_weight.shape}")
+
+    # Create Gemma Scope model
+    gemma_model = GemmaScopeModel(gemma_decoder_weight, gemma_decoder_bias, gemma_encoder_weight, gemma_encoder_bias)
+
+    # Get Gemma Scope activations
+    with torch.no_grad():
+        gemma_acts = gemma_model.encoder(embeddings_tensor)  # Shape: (N, F)
+    print(f"Gemma Scope activations shape: {gemma_acts.shape}")
+
+    # Compute Gemma Scope correlations
+    gemma_corr_vector = compute_correlations(gemma_acts, labels_tensor)
+    gemma_best_idx = gemma_corr_vector.abs().argmax().item()
+    gemma_max_corr = gemma_corr_vector[gemma_best_idx].item()
+
+    print(f"Gemma Scope - Best feature: {gemma_best_idx}, MCC: {gemma_max_corr:.4f}")
+
+    # 3. Comparison results
+    print(f"\n{'='*60}")
+    print("MCC COMPARISON RESULTS")
+    print(f"{'='*60}")
+    print(f"Dataset: {dataset_name}")
+    print(f"Concept: {concept_name}")
+    print(f"Embedding layer: {embedding_layer}")
+    print(f"Number of samples: {len(labels)}")
+    print(f"\nSSAE Model:")
+    print(f"  Best feature index: {ssae_best_idx}")
+    print(f"  MCC value: {ssae_max_corr:.4f}")
+    print(f"  Model dimensions: {rep_dim} -> {hid_dim}")
+    print(f"\nGemma Scope Model:")
+    print(f"  Best feature index: {gemma_best_idx}")
+    print(f"  MCC value: {gemma_max_corr:.4f}")
+    print(f"  Model dimensions: {gemma_encoder_weight.shape[1]} -> {gemma_encoder_weight.shape[0]}")
+    print(f"\nComparison:")
+    mcc_diff = gemma_max_corr - ssae_max_corr
+    print(f"  MCC difference (Gemma - SSAE): {mcc_diff:.4f}")
+    if abs(mcc_diff) < 0.01:
+        print(f"  Result: Similar performance")
+    elif mcc_diff > 0:
+        print(f"  Result: Gemma Scope performs better (+{mcc_diff:.4f})")
+    else:
+        print(f"  Result: SSAE performs better (+{abs(mcc_diff):.4f})")
+
+    # Return comparison results
+    return {
+        "dataset": dataset_name,
+        "concept": concept_name,
+        "embedding_layer": embedding_layer,
+        "num_samples": len(labels),
+        "ssae": {
+            "best_feature_idx": ssae_best_idx,
+            "mcc": ssae_max_corr,
+            "dimensions": (rep_dim, hid_dim)
+        },
+        "gemma_scope": {
+            "best_feature_idx": gemma_best_idx,
+            "mcc": gemma_max_corr,
+            "dimensions": (gemma_encoder_weight.shape[1], gemma_encoder_weight.shape[0])
+        },
+        "comparison": {
+            "mcc_difference": mcc_diff,
+            "winner": "gemma_scope" if mcc_diff > 0.01 else "ssae" if mcc_diff < -0.01 else "similar"
+        }
+    }
+
+
+def compute_correlations(activations, labels):
+    """Compute correlations between activations and labels."""
+    # Center the data
+    acts_centered = activations - activations.mean(dim=0, keepdim=True)
     acts_std = acts_centered.norm(dim=0, keepdim=True)
 
-    label_centered = labels_tensor - labels_tensor.mean(dim=0, keepdim=True)
+    label_centered = labels - labels.mean(dim=0, keepdim=True)
     label_std = label_centered.norm(dim=0, keepdim=True)
 
     # Correlation computation
@@ -272,31 +384,71 @@ def get_steering_vector(args, dataset_name="refusal"):
     corr_vector = torch.zeros_like(numerator)
     corr_vector[mask] = numerator[mask] / denominator[mask]
 
-    # Find the feature with maximum absolute correlation
-    best_feature_idx = corr_vector.abs().argmax().item()
-    max_correlation = corr_vector[best_feature_idx].item()
+    return corr_vector.squeeze()
 
-    print(
-        f"Best feature index: {best_feature_idx} with correlation: {max_correlation:.4f}"
-    )
-    print(f"This feature correlates with {concept_name} behavior")
 
-    # Get the decoder column for this feature as steering vector
+def get_steering_vector(args, dataset_name="refusal"):
+    """Load dataset and find the best steering vector dimension using correlation analysis.
+    This function maintains backward compatibility for generation functionality."""
+
+    # Use the new comparison function but return only SSAE results for backward compatibility
+    comparison_results = compute_mcc_comparison(args, dataset_name)
+
+    # Extract SSAE-specific results for steering
+    ssae_results = comparison_results["ssae"]
+
+    # Load SSAE model for steering vector extraction
+    from ssae import DictLinearAE
+    config_path = os.path.join(args.modeldir, "cfg.yaml")
+    with open(config_path, "r") as f:
+        cfg = yaml.safe_load(f)
+
+    weights_path = os.path.join(args.modeldir, "weights.pth")
+    state_dict = torch.load(weights_path, map_location="cpu")
+
+    rep_dim = state_dict["encoder.weight"].shape[1]
+    hid_dim = state_dict["encoder.weight"].shape[0]
+
+    model = DictLinearAE(rep_dim, hid_dim, cfg.get("norm", "ln"))
+    model.load_state_dict(state_dict)
+    model.eval()
+
+    # Get the decoder column for the best feature as steering vector
     decoder_weight = model.decoder.weight  # Shape: (rep_dim, hid_dim)
-    steering_vector = decoder_weight[:, best_feature_idx]  # Shape: (rep_dim,)
+    steering_vector = decoder_weight[:, ssae_results["best_feature_idx"]]  # Shape: (rep_dim,)
 
     return (
         steering_vector,
-        best_feature_idx,
-        max_correlation,
-        embedding_layer,
+        ssae_results["best_feature_idx"],
+        ssae_results["mcc"],
+        comparison_results["embedding_layer"],
         dataset_name,
     )
 
 
 def main(args, generate_configs):
-    # Get steering vector using the specified dataset
     dataset_name = args.dataset
+
+    # Check if MCC-only mode is enabled
+    if args.mcc_only:
+        print("=" * 80)
+        print("MCC COMPARISON MODE - SSAE vs GEMMA SCOPE")
+        print("=" * 80)
+
+        # Run MCC comparison only
+        comparison_results = compute_mcc_comparison(args, dataset_name)
+
+        # Save results if output file specified
+        if args.output_json:
+            import json
+            with open(args.output_json, 'w') as f:
+                json.dump(comparison_results, f, indent=2)
+            print(f"\nResults saved to {args.output_json}")
+
+        return comparison_results
+
+    # Original generation functionality
+    # Get steering vector using the specified dataset
     steering_vector, feature_idx, correlation, used_layer, dataset_used = (
         get_steering_vector(args, dataset_name)
     )
@@ -561,6 +713,16 @@ if __name__ == "__main__":
         type=int,
         default=50,
         help="Maximum length of the generated text (default: 50)",
+    )
+    parser.add_argument(
+        "--mcc-only",
+        action="store_true",
+        help="Only compute MCC comparison between SSAE and Gemma Scope, skip generation",
+    )
+    parser.add_argument(
+        "--output-json",
+        type=str,
+        help="Save MCC comparison results to JSON file",
     )
     args = parser.parse_args()
     generate_configs = [

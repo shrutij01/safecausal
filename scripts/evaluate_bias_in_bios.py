@@ -29,7 +29,11 @@ sys.path.append(parent_dir)
 from utils.data_utils import load_biasinbios
 
 
-def heuristic_feature_ranking_binary(train_activations: t.Tensor, train_labels: np.ndarray, method: str = "correlation") -> t.Tensor:
+def heuristic_feature_ranking_binary(
+    train_activations: t.Tensor,
+    train_labels: np.ndarray,
+    method: str = "correlation",
+) -> t.Tensor:
     """
     Rank features based on their correlation with binary labels.
 
@@ -45,20 +49,26 @@ def heuristic_feature_ranking_binary(train_activations: t.Tensor, train_labels: 
     train_labels_tensor = t.tensor(train_labels, dtype=t.float32)
 
     # Center the data for correlation computation
-    acts_centered = train_activations - train_activations.mean(dim=0, keepdim=True)
+    acts_centered = train_activations - train_activations.mean(
+        dim=0, keepdim=True
+    )
     acts_std = acts_centered.norm(dim=0, keepdim=True) + 1e-8
 
     labels_centered = train_labels_tensor - train_labels_tensor.mean()
     labels_std = labels_centered.norm() + 1e-8
 
     # Compute correlations for each feature
-    numerator = acts_centered.T @ labels_centered.unsqueeze(1)  # [num_features, 1]
+    numerator = acts_centered.T @ labels_centered.unsqueeze(
+        1
+    )  # [num_features, 1]
     denominator = acts_std.T * labels_std  # [num_features, 1]
 
     # Prevent division by zero
     mask = denominator.squeeze() != 0
     correlations = t.zeros(train_activations.shape[1])
-    correlations[mask] = (numerator.squeeze()[mask] / denominator.squeeze()[mask])
+    correlations[mask] = (
+        numerator.squeeze()[mask] / denominator.squeeze()[mask]
+    )
 
     # Sort by absolute correlation (ascending order, so top features are at the end)
     abs_correlations = correlations.abs()
@@ -72,7 +82,7 @@ def train_probe_on_top_features(
     train_labels: np.ndarray,
     sorted_neurons: t.Tensor,
     k: int = 10,
-    seed: int = 42
+    seed: int = 42,
 ) -> LogisticRegression:
     """
     Train a logistic regression probe on top k features.
@@ -98,7 +108,7 @@ def train_probe_on_top_features(
         random_state=seed,
         max_iter=1000,
         class_weight="balanced",
-        solver="lbfgs" if k <= 1000 else "saga"
+        solver="lbfgs" if k <= 1000 else "saga",
     )
 
     classifier.fit(train_features, train_labels)
@@ -111,7 +121,7 @@ def evaluate_probe_on_top_features(
     activations: t.Tensor,
     labels: np.ndarray,
     sorted_neurons: t.Tensor,
-    k: int = 10
+    k: int = 10,
 ) -> float:
     """
     Evaluate probe on top k features.
@@ -146,7 +156,7 @@ def train_and_evaluate_probe(
     test_labels: np.ndarray,
     seed: int = 42,
     sparse: str = None,
-    k: int = 10
+    k: int = 10,
 ) -> Dict[str, Any]:
     """
     Train and evaluate a logistic regression probe.
@@ -191,7 +201,7 @@ def train_and_evaluate_probe(
             "train_accuracy": train_accuracy,
             "test_accuracy": test_accuracy,
             "method": "sparse",
-            "k": k
+            "k": k,
         }
 
     else:
@@ -200,7 +210,7 @@ def train_and_evaluate_probe(
             random_state=seed,
             max_iter=1000,
             class_weight="balanced",
-            solver="lbfgs" if train_activations.shape[1] <= 1000 else "saga"
+            solver="lbfgs" if train_activations.shape[1] <= 1000 else "saga",
         )
 
         train_features = train_activations.numpy()
@@ -215,7 +225,7 @@ def train_and_evaluate_probe(
             "classifier": classifier,
             "train_accuracy": train_accuracy,
             "test_accuracy": test_accuracy,
-            "method": "all_features"
+            "method": "all_features",
         }
 
     print(f"Train Accuracy: {results['train_accuracy']:.4f}")
@@ -253,7 +263,7 @@ def get_bias_in_bios_embeddings_and_labels(
     model_name="google/gemma-2-2b-it",
     layer=16,
     batch_size=64,
-    max_samples=None
+    max_samples=None,
 ):
     """
     Extract embeddings and gender labels for bias-in-bios test data.
@@ -269,7 +279,10 @@ def get_bias_in_bios_embeddings_and_labels(
                and gender_labels are [N] with 0=male, 1=female
     """
     from datasets import load_dataset
-    from ssae.store_embeddings import load_model_and_tokenizer, extract_embeddings
+    from ssae.store_embeddings import (
+        load_model_and_tokenizer,
+        extract_embeddings,
+    )
 
     print("Loading bias_in_bios dataset...")
     ds = load_dataset("LabHC/bias_in_bios")
@@ -281,6 +294,7 @@ def get_bias_in_bios_embeddings_and_labels(
     # Sample if requested
     if max_samples is not None and len(test_data) > max_samples:
         import random
+
         random.seed(42)
         indices = random.sample(range(len(test_data)), max_samples)
         test_data = test_data.select(indices)
@@ -291,14 +305,16 @@ def get_bias_in_bios_embeddings_and_labels(
     gender_labels = []
 
     for item in test_data:
-        bio_text = item['hard_text']
-        gender = item['gender']  # 0 = male, 1 = female
+        bio_text = item["hard_text"]
+        gender = item["gender"]  # 0 = male, 1 = female
 
         biographies.append(bio_text)
         gender_labels.append(gender)
 
     print(f"Extracted {len(biographies)} biographies")
-    print(f"Gender distribution: {sum(gender_labels)} female, {len(gender_labels) - sum(gender_labels)} male")
+    print(
+        f"Gender distribution: {sum(gender_labels)} female, {len(gender_labels) - sum(gender_labels)} male"
+    )
 
     # Load model and tokenizer
     model, tokenizer, _ = load_model_and_tokenizer(model_name)
@@ -319,9 +335,7 @@ def get_bias_in_bios_embeddings_and_labels(
 
 
 def get_ssae_activations(
-    model: t.nn.Module,
-    embeddings: t.Tensor,
-    batch_size: int = 512
+    model: t.nn.Module, embeddings: t.Tensor, batch_size: int = 512
 ) -> t.Tensor:
     """Get SSAE activations for embeddings."""
     model.eval()
@@ -336,9 +350,14 @@ def get_ssae_activations(
     return t.cat(all_activations, dim=0)
 
 
-def compute_mcc_for_gender(activations: t.Tensor, gender_labels: np.ndarray, threshold: float = 0.1):
+def compute_mcc_for_gender(
+    activations: t.Tensor, gender_labels: np.ndarray, threshold: float = 0.1
+):
     """
-    Compute MCC between SSAE activations and gender labels.
+    Compute MCC between SSAE activations and gender labels WITHOUT PROBING.
+
+    Finds the single feature with maximum correlation to gender labels
+    and computes MCC using only that feature's binary activations.
 
     Args:
         activations: SSAE activations [N, num_features]
@@ -346,9 +365,9 @@ def compute_mcc_for_gender(activations: t.Tensor, gender_labels: np.ndarray, thr
         threshold: Activation threshold for binarization
 
     Returns:
-        dict: Results including MCC scores and top features
+        dict: Results including MCC for max correlation feature
     """
-    print("Computing MCC for gender detection...")
+    print("Computing MCC for gender detection (max correlation feature, no probing)...")
 
     # Convert to tensors
     activations = activations.float()
@@ -358,20 +377,26 @@ def compute_mcc_for_gender(activations: t.Tensor, gender_labels: np.ndarray, thr
     binary_activations = (activations > threshold).float()  # [N, num_features]
 
     # Center the data for correlation computation
-    acts_centered = binary_activations - binary_activations.mean(dim=0, keepdim=True)
+    acts_centered = binary_activations - binary_activations.mean(
+        dim=0, keepdim=True
+    )
     acts_std = acts_centered.norm(dim=0, keepdim=True) + 1e-8  # Add epsilon
 
     labels_centered = gender_tensor - gender_tensor.mean()
     labels_std = labels_centered.norm() + 1e-8  # Add epsilon
 
     # Compute correlations for each feature
-    numerator = acts_centered.T @ labels_centered.unsqueeze(1)  # [num_features, 1]
+    numerator = acts_centered.T @ labels_centered.unsqueeze(
+        1
+    )  # [num_features, 1]
     denominator = acts_std.T * labels_std  # [num_features, 1]
 
     # Prevent division by zero
     mask = denominator.squeeze() != 0
     correlations = t.zeros(activations.shape[1])
-    correlations[mask] = (numerator.squeeze()[mask] / denominator.squeeze()[mask])
+    correlations[mask] = (
+        numerator.squeeze()[mask] / denominator.squeeze()[mask]
+    )
 
     # Get absolute correlations and find best feature
     abs_correlations = correlations.abs()
@@ -382,26 +407,28 @@ def compute_mcc_for_gender(activations: t.Tensor, gender_labels: np.ndarray, thr
     mean_abs_correlation = abs_correlations.mean().item()
     max_abs_correlation = abs_correlations.max().item()
 
-    print(f"Best feature: {best_feature_idx}")
-    print(f"Best correlation: {best_correlation:.4f}")
+    print(f"Max correlation feature: {best_feature_idx} (correlation: {best_correlation:.4f})")
     print(f"Max absolute correlation: {max_abs_correlation:.4f}")
     print(f"Mean absolute correlation: {mean_abs_correlation:.4f}")
 
-    # Additional metrics for the best feature
+    # MCC computation for the max correlation feature ONLY
     best_activations = binary_activations[:, best_feature_idx]
 
-    # Confusion matrix elements
+    # Confusion matrix elements for max correlation feature
     tp = ((best_activations == 1) & (gender_tensor == 1)).sum().item()
     tn = ((best_activations == 0) & (gender_tensor == 0)).sum().item()
     fp = ((best_activations == 1) & (gender_tensor == 0)).sum().item()
     fn = ((best_activations == 0) & (gender_tensor == 1)).sum().item()
 
-    # Compute MCC for best feature
-    denominator = np.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
-    mcc_best = (tp * tn - fp * fn) / (denominator + 1e-8)
+    # Compute MCC for max correlation feature (NO PROBING)
+    mcc_denominator = np.sqrt((tp + fp) * (tp + fn) * (tn + fp) * (tn + fn))
+    mcc_best = (tp * tn - fp * fn) / (mcc_denominator + 1e-8)
 
-    # Accuracy for best feature
+    # Accuracy for max correlation feature
     accuracy = (tp + tn) / len(gender_labels)
+
+    print(f"MCC (max correlation feature): {mcc_best:.4f}")
+    print(f"Accuracy (max correlation feature): {accuracy:.4f}")
 
     return {
         "best_feature_idx": best_feature_idx,
@@ -410,20 +437,18 @@ def compute_mcc_for_gender(activations: t.Tensor, gender_labels: np.ndarray, thr
         "mean_abs_correlation": mean_abs_correlation,
         "mcc_best_feature": mcc_best,
         "accuracy_best_feature": accuracy,
-        "confusion_matrix": {
-            "tp": tp, "tn": tn, "fp": fp, "fn": fn
-        },
-        "correlations_all": correlations.tolist()
+        "confusion_matrix": {"tp": tp, "tn": tn, "fp": fp, "fn": fn},
+        "correlations_all": correlations.tolist(),
     }
 
 
-def evaluate_bias_in_bios(
+def evaluate_bias_in_bios_single_model(
     model_path: Path,
     threshold: float = 0.1,
     embedding_model: str = "gemma",
     max_samples: int = None,
     probe_k: int = 10,
-    probe_seed: int = 42
+    probe_seed: int = 42,
 ) -> Dict[str, Any]:
     """Evaluate SSAE on bias-in-bios gender detection."""
 
@@ -437,7 +462,9 @@ def evaluate_bias_in_bios(
         layer = 16
         batch_size = 64
     else:
-        raise ValueError(f"Unknown embedding_model: {embedding_model}. Choose 'pythia' or 'gemma'")
+        raise ValueError(
+            f"Unknown embedding_model: {embedding_model}. Choose 'pythia' or 'gemma'"
+        )
 
     print(f"Using {embedding_model} model: {model_name}")
     print(f"Layer: {layer}, Batch size: {batch_size}")
@@ -448,7 +475,7 @@ def evaluate_bias_in_bios(
         model_name=model_name,
         layer=layer,
         batch_size=batch_size,
-        max_samples=max_samples
+        max_samples=max_samples,
     )
     print(f"Embeddings shape: {embeddings.shape}")
     print(f"Gender labels shape: {gender_labels.shape}")
@@ -465,7 +492,11 @@ def evaluate_bias_in_bios(
     # Split data for probing evaluation
     print("Splitting data for probing evaluation...")
     train_acts, test_acts, train_labels, test_labels = train_test_split(
-        activations.numpy(), gender_labels, test_size=0.3, random_state=probe_seed, stratify=gender_labels
+        activations.numpy(),
+        gender_labels,
+        test_size=0.3,
+        random_state=probe_seed,
+        stratify=gender_labels,
     )
 
     # Convert back to tensors
@@ -475,26 +506,44 @@ def evaluate_bias_in_bios(
     print(f"Train split: {train_acts.shape[0]} samples")
     print(f"Test split: {test_acts.shape[0]} samples")
 
-    # Compute MCC on full dataset
+    # Compute MCC on full dataset (without probing)
+    print("\n" + "=" * 70)
+    print("MCC EVALUATION (MAX CORRELATION FEATURE - NO PROBING)")
+    print("=" * 70)
+
     results = compute_mcc_for_gender(activations, gender_labels, threshold)
 
+    print(f"\n🎯 KEY RESULT - MCC (Max Correlation Feature): {results['mcc_best_feature']:.4f}")
+    print(f"📊 Feature Index: {results['best_feature_idx']}")
+    print(f"📈 Correlation: {results['best_correlation']:.4f}")
+    print(f"✅ Accuracy: {results['accuracy_best_feature']:.4f}")
+
     # Add probing results
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("PROBING EVALUATION")
-    print("="*50)
+    print("=" * 50)
 
     # Sparse probing with top k features
     print(f"\nSparse Probing (top {probe_k} features):")
     sparse_results = train_and_evaluate_probe(
-        train_acts, train_labels, test_acts, test_labels,
-        seed=probe_seed, sparse="correlation", k=probe_k
+        train_acts,
+        train_labels,
+        test_acts,
+        test_labels,
+        seed=probe_seed,
+        sparse="correlation",
+        k=probe_k,
     )
 
     # Dense probing with all features
     print(f"\nDense Probing (all {activations.shape[1]} features):")
     dense_results = train_and_evaluate_probe(
-        train_acts, train_labels, test_acts, test_labels,
-        seed=probe_seed, sparse=None
+        train_acts,
+        train_labels,
+        test_acts,
+        test_labels,
+        seed=probe_seed,
+        sparse=None,
     )
 
     # Add probing results to main results
@@ -503,20 +552,112 @@ def evaluate_bias_in_bios(
             "k": probe_k,
             "top_neurons": sparse_results["top_neurons"],
             "train_accuracy": sparse_results["train_accuracy"],
-            "test_accuracy": sparse_results["test_accuracy"]
+            "test_accuracy": sparse_results["test_accuracy"],
         },
         "dense": {
             "train_accuracy": dense_results["train_accuracy"],
-            "test_accuracy": dense_results["test_accuracy"]
+            "test_accuracy": dense_results["test_accuracy"],
         },
         "data_split": {
             "train_samples": len(train_labels),
             "test_samples": len(test_labels),
-            "seed": probe_seed
-        }
+            "seed": probe_seed,
+        },
     }
 
     return results
+
+
+def evaluate_bias_in_bios_comparison(
+    model_path: Path,
+    threshold: float = 0.1,
+    max_samples: int = None,
+    probe_k: int = 10,
+    probe_seed: int = 42,
+    compare_models: bool = True,
+) -> Dict[str, Any]:
+    """
+    Compare MCC performance across different embedding models.
+
+    Args:
+        model_path: Path to trained SSAE model
+        threshold: Activation threshold for binarization
+        max_samples: Max test samples to evaluate
+        probe_k: Number of top features for sparse probing
+        probe_seed: Random seed for probing
+        compare_models: Whether to compare across embedding models
+
+    Returns:
+        Dictionary with comparison results
+    """
+    print("=" * 70)
+    print("BIAS-IN-BIOS MCC COMPARISON ACROSS EMBEDDING MODELS")
+    print("=" * 70)
+
+    comparison_results = {}
+
+    # Models to compare
+    models_to_compare = ["pythia", "gemma"] if compare_models else ["gemma"]
+
+    for embedding_model in models_to_compare:
+        print(f"\n{'='*50}")
+        print(f"EVALUATING WITH {embedding_model.upper()} EMBEDDINGS")
+        print(f"{'='*50}")
+
+        try:
+            results = evaluate_bias_in_bios_single_model(
+                model_path,
+                threshold,
+                embedding_model,
+                max_samples,
+                probe_k,
+                probe_seed,
+            )
+            comparison_results[embedding_model] = results
+
+        except Exception as e:
+            print(f"Error evaluating {embedding_model}: {e}")
+            comparison_results[embedding_model] = {"error": str(e)}
+
+    # Print comparison summary
+    if compare_models and len(comparison_results) > 1:
+        print("\n" + "=" * 70)
+        print("MCC COMPARISON SUMMARY")
+        print("=" * 70)
+
+        for model_name, results in comparison_results.items():
+            if "error" not in results:
+                mcc = results["mcc_best_feature"]
+                feature_idx = results["best_feature_idx"]
+                correlation = results["best_correlation"]
+                accuracy = results["accuracy_best_feature"]
+
+                print(f"\n🔬 {model_name.upper()} Embeddings:")
+                print(f"   MCC (Max Correlation Feature): {mcc:.4f}")
+                print(f"   Best Feature Index: {feature_idx}")
+                print(f"   Correlation: {correlation:.4f}")
+                print(f"   Accuracy: {accuracy:.4f}")
+            else:
+                print(f"\n❌ {model_name.upper()}: {results['error']}")
+
+        # Compare MCCs if both models succeeded
+        valid_results = {k: v for k, v in comparison_results.items() if "error" not in v}
+        if len(valid_results) >= 2:
+            mccs = {model: results["mcc_best_feature"] for model, results in valid_results.items()}
+            best_model = max(mccs, key=mccs.get)
+            worst_model = min(mccs, key=mccs.get)
+
+            print(f"\n🏆 WINNER: {best_model.upper()} (MCC: {mccs[best_model]:.4f})")
+            print(f"📊 MCC Difference: {mccs[best_model] - mccs[worst_model]:.4f}")
+
+            # Detailed comparison table
+            print(f"\n📋 DETAILED COMPARISON:")
+            print(f"{'Model':<10} {'MCC':<8} {'Feature':<8} {'Correlation':<12} {'Accuracy':<10}")
+            print("-" * 50)
+            for model, results in valid_results.items():
+                print(f"{model:<10} {results['mcc_best_feature']:<8.4f} {results['best_feature_idx']:<8} {results['best_correlation']:<12.4f} {results['accuracy_best_feature']:<10.4f}")
+
+    return comparison_results
 
 
 def main():
@@ -557,6 +698,11 @@ def main():
         help="Random seed for probing train/test split (default: 42)",
     )
     parser.add_argument("--output", type=Path, help="Output file for results")
+    parser.add_argument(
+        "--compare",
+        action="store_true",
+        help="Compare MCC across different embedding models (Pythia vs Gemma)",
+    )
 
     args = parser.parse_args()
 
@@ -564,90 +710,140 @@ def main():
         print(f"Error: Model path {args.model_path} does not exist")
         sys.exit(1)
 
-    print("=" * 70)
-    print("BIAS-IN-BIOS GENDER DETECTION EVALUATION")
-    print("=" * 70)
-    print(f"Model path: {args.model_path}")
-    print(f"Embedding model: {args.embedding_model}")
-    print(f"Activation threshold: {args.threshold}")
-    print(f"Max samples: {args.max_samples}")
-    print(f"Probe k: {args.probe_k}")
-    print(f"Probe seed: {args.probe_seed}")
+    if args.compare:
+        print("=" * 70)
+        print("BIAS-IN-BIOS MCC COMPARISON MODE")
+        print("=" * 70)
+        print(f"Model path: {args.model_path}")
+        print(f"Activation threshold: {args.threshold}")
+        print(f"Max samples: {args.max_samples}")
+        print(f"Probe k: {args.probe_k}")
+        print(f"Probe seed: {args.probe_seed}")
 
-    # Evaluate model
-    try:
-        results = evaluate_bias_in_bios(
-            args.model_path,
-            args.threshold,
-            args.embedding_model,
-            args.max_samples,
-            args.probe_k,
-            args.probe_seed
-        )
-    except Exception as e:
-        print(f"Error during evaluation: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+        # Evaluate with comparison
+        try:
+            results = evaluate_bias_in_bios_comparison(
+                args.model_path,
+                args.threshold,
+                args.max_samples,
+                args.probe_k,
+                args.probe_seed,
+                compare_models=True,
+            )
+        except Exception as e:
+            print(f"Error during comparison evaluation: {e}")
+            import traceback
 
-    # Print results
-    print("\n" + "=" * 70)
-    print("RESULTS")
-    print("=" * 70)
-    print(f"Best feature index: {results['best_feature_idx']}")
-    print(f"Best correlation: {results['best_correlation']:.4f}")
-    print(f"Max absolute correlation: {results['max_abs_correlation']:.4f}")
-    print(f"Mean absolute correlation: {results['mean_abs_correlation']:.4f}")
-    print(f"MCC (best feature): {results['mcc_best_feature']:.4f}")
-    print(f"Accuracy (best feature): {results['accuracy_best_feature']:.4f}")
+            traceback.print_exc()
+            sys.exit(1)
 
-    print(f"\nConfusion Matrix (best feature):")
-    cm = results['confusion_matrix']
-    print(f"  True Positives (Female correctly detected):  {cm['tp']}")
-    print(f"  True Negatives (Male correctly detected):    {cm['tn']}")
-    print(f"  False Positives (Male misclassified):        {cm['fp']}")
-    print(f"  False Negatives (Female misclassified):      {cm['fn']}")
+    else:
+        print("=" * 70)
+        print("BIAS-IN-BIOS GENDER DETECTION EVALUATION")
+        print("=" * 70)
+        print(f"Model path: {args.model_path}")
+        print(f"Embedding model: {args.embedding_model}")
+        print(f"Activation threshold: {args.threshold}")
+        print(f"Max samples: {args.max_samples}")
+        print(f"Probe k: {args.probe_k}")
+        print(f"Probe seed: {args.probe_seed}")
 
-    # Print probing results
-    if "probing" in results:
-        print(f"\n" + "=" * 70)
-        print("PROBING RESULTS")
+        # Evaluate single model
+        try:
+            results = evaluate_bias_in_bios_single_model(
+                args.model_path,
+                args.threshold,
+                args.embedding_model,
+                args.max_samples,
+                args.probe_k,
+                args.probe_seed,
+            )
+        except Exception as e:
+            print(f"Error during evaluation: {e}")
+            import traceback
+
+            traceback.print_exc()
+            sys.exit(1)
+
+    # Print final summary (only for single model evaluation)
+    if not args.compare:
+        print("\n" + "=" * 70)
+        print("FINAL SUMMARY")
         print("=" * 70)
 
-        probe_results = results["probing"]
+        print(f"\n🏆 PRIMARY METRIC - MCC (MAX CORRELATION FEATURE): {results['mcc_best_feature']:.4f}")
+        print(f"   Feature Index: {results['best_feature_idx']}")
+        print(f"   Correlation: {results['best_correlation']:.4f}")
+        print(f"   Accuracy: {results['accuracy_best_feature']:.4f}")
 
-        print(f"Data split: {probe_results['data_split']['train_samples']} train, {probe_results['data_split']['test_samples']} test")
+        print(f"\n📊 CORRELATION STATISTICS:")
+        print(f"   Max absolute correlation: {results['max_abs_correlation']:.4f}")
+        print(f"   Mean absolute correlation: {results['mean_abs_correlation']:.4f}")
 
-        # Sparse probing results
-        sparse = probe_results["sparse"]
-        print(f"\nSparse Probing (top {sparse['k']} features):")
-        print(f"  Top neurons: {sparse['top_neurons']}")
-        print(f"  Train accuracy: {sparse['train_accuracy']:.4f}")
-        print(f"  Test accuracy: {sparse['test_accuracy']:.4f}")
+        print(f"\n🔢 CONFUSION MATRIX (Max Correlation Feature):")
+        cm = results["confusion_matrix"]
+        print(f"   True Positives (Female correctly detected):  {cm['tp']}")
+        print(f"   True Negatives (Male correctly detected):    {cm['tn']}")
+        print(f"   False Positives (Male misclassified):        {cm['fp']}")
+        print(f"   False Negatives (Female misclassified):      {cm['fn']}")
 
-        # Dense probing results
-        dense = probe_results["dense"]
-        print(f"\nDense Probing (all features):")
-        print(f"  Train accuracy: {dense['train_accuracy']:.4f}")
-        print(f"  Test accuracy: {dense['test_accuracy']:.4f}")
+        # Print probing results
+        if "probing" in results:
+            print(f"\n" + "=" * 70)
+            print("PROBING RESULTS")
+            print("=" * 70)
 
-        print(f"\nProbing Summary:")
-        print(f"  Best sparse test accuracy: {sparse['test_accuracy']:.4f}")
-        print(f"  Dense test accuracy: {dense['test_accuracy']:.4f}")
-        print(f"  Sparse vs Dense difference: {sparse['test_accuracy'] - dense['test_accuracy']:.4f}")
+            probe_results = results["probing"]
+
+            print(
+                f"Data split: {probe_results['data_split']['train_samples']} train, {probe_results['data_split']['test_samples']} test"
+            )
+
+            # Sparse probing results
+            sparse = probe_results["sparse"]
+            print(f"\nSparse Probing (top {sparse['k']} features):")
+            print(f"  Top neurons: {sparse['top_neurons']}")
+            print(f"  Train accuracy: {sparse['train_accuracy']:.4f}")
+            print(f"  Test accuracy: {sparse['test_accuracy']:.4f}")
+
+            # Dense probing results
+            dense = probe_results["dense"]
+            print(f"\nDense Probing (all features):")
+            print(f"  Train accuracy: {dense['train_accuracy']:.4f}")
+            print(f"  Test accuracy: {dense['test_accuracy']:.4f}")
+
+            print(f"\nProbing Summary:")
+            print(f"  Best sparse test accuracy: {sparse['test_accuracy']:.4f}")
+            print(f"  Dense test accuracy: {dense['test_accuracy']:.4f}")
+            print(
+                f"  Sparse vs Dense difference: {sparse['test_accuracy'] - dense['test_accuracy']:.4f}"
+            )
 
     # Save results if output specified
     if args.output:
-        save_results = {
-            "dataset": "bias-in-bios",
-            "model_path": str(args.model_path),
-            "embedding_model": args.embedding_model,
-            "threshold": args.threshold,
-            "max_samples": args.max_samples,
-            "probe_k": args.probe_k,
-            "probe_seed": args.probe_seed,
-            "results": results
-        }
+        if args.compare:
+            save_results = {
+                "dataset": "bias-in-bios",
+                "model_path": str(args.model_path),
+                "evaluation_type": "comparison",
+                "threshold": args.threshold,
+                "max_samples": args.max_samples,
+                "probe_k": args.probe_k,
+                "probe_seed": args.probe_seed,
+                "results": results,
+            }
+        else:
+            save_results = {
+                "dataset": "bias-in-bios",
+                "model_path": str(args.model_path),
+                "embedding_model": args.embedding_model,
+                "evaluation_type": "single",
+                "threshold": args.threshold,
+                "max_samples": args.max_samples,
+                "probe_k": args.probe_k,
+                "probe_seed": args.probe_seed,
+                "results": results,
+            }
 
         with open(args.output, "w") as f:
             json.dump(save_results, f, indent=2)
