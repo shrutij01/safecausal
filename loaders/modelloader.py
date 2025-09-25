@@ -96,15 +96,17 @@ def load_ssae_models(modeldirs):
     )
 
 
-def load_pythia_sae_checkpoint(layer: int = 5):
+def load_pythia_sae_checkpoint(layer: int = 5, hf_token: str = None):
     """Load Pythia SAE checkpoint from Hugging Face hub."""
     model_id = "EleutherAI/sae-pythia-70m-32k"
     filename = f"layers.{layer}/sae.safetensors"
+
     filepath = hf_hub_download(
         repo_id=model_id,
         filename=filename,
         local_dir="checkpoints",
         local_dir_use_symlinks=False,
+        token=hf_token,
     )
     print(f"Downloaded Pythia SAE checkpoint to: {filepath}")
 
