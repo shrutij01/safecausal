@@ -32,6 +32,29 @@ def load_llamascope_checkpoint():
     return (decoder_weight, decoder_bias, encoder_weight, encoder_bias)
 
 
+def load_gemmascope_checkpoint():
+    """Load Gemmascope checkpoint for Gemma model embeddings."""
+    model_id = "google/gemma-scope-2b-pt-res"
+    filename = "layer_25/width_16k/average_l0_55/params.npz"
+    filepath = hf_hub_download(
+        repo_id=model_id,
+        filename=filename,
+        local_dir="checkpoints",
+        local_dir_use_symlinks=False,
+    )
+    print(f"Downloaded Gemmascope checkpoint to: {filepath}")
+    # Load the npz file
+    import numpy as np
+
+    data = np.load(filepath)
+    decoder_weight = torch.from_numpy(data["W_dec"])
+    decoder_bias = torch.from_numpy(data["b_dec"])
+    encoder_weight = torch.from_numpy(data["W_enc"])
+    encoder_bias = torch.from_numpy(data["b_enc"])
+    print(f"Gemmascope decoder.weight shape: {decoder_weight.shape}")
+    return (decoder_weight, decoder_bias, encoder_weight, encoder_bias)
+
+
 def load_ssae_models(modeldirs):
     """Load SSAE models from multiple directories."""
     decoder_weight_matrices = []
