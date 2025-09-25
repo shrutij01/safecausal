@@ -1,6 +1,4 @@
-	modified:   ../loaders/modelloader.py"""
-Model loading utilities.
-"""
+"""Model loading utilities."""
 
 import os
 import torch
