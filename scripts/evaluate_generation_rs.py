@@ -11,7 +11,16 @@ import transformers
 from box import Box
 import json
 
-from loaders import TestDataLoader, load_ssae_models, load_gemmascope_checkpoint
+try:
+    from loaders.modelloader import load_gemmascope_checkpoint, load_ssae_models
+except ImportError:
+    # Fallback for direct import
+    import sys
+    import os
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(current_dir)
+    sys.path.insert(0, parent_dir)
+    from loaders.modelloader import load_gemmascope_checkpoint, load_ssae_models
 import utils.data_utils as data_utils
 import numpy as np
 from scripts.evaluate_labeled_sentences import get_sentence_embeddings
