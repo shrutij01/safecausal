@@ -189,6 +189,12 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
     dataset_data = data_utils.load_json(data_path)
     print(f"Loaded {len(dataset_data)} {dataset_name} samples")
 
+    # Limit test samples for faster processing
+    max_samples = getattr(args, 'max_test_samples', 100)
+    if len(dataset_data) > max_samples:
+        dataset_data = dataset_data[:max_samples]
+        print(f"Limited to {max_samples} samples for faster processing")
+
     # Load SSAE model config to get the embedding layer
     config_path = os.path.join(args.modeldir, "cfg.yaml")
     with open(config_path, "r") as f:
@@ -732,6 +738,12 @@ if __name__ == "__main__":
         "--output-json",
         type=str,
         help="Save MCC comparison results to JSON file",
+    )
+    parser.add_argument(
+        "--max-test-samples",
+        type=int,
+        default=100,
+        help="Maximum number of test samples to process (default: 100)",
     )
     args = parser.parse_args()
     generate_configs = [
