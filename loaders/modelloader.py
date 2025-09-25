@@ -1,4 +1,4 @@
-"""
+	modified:   ../loaders/modelloader.py"""
 Model loading utilities.
 """
 
@@ -8,6 +8,8 @@ import yaml
 from box import Box
 from safetensors.torch import load_file
 from huggingface_hub import hf_hub_download
+
+HF_TOKEN = "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"
 
 
 def load_llamascope_checkpoint():
@@ -41,6 +43,7 @@ def load_gemmascope_checkpoint():
         filename=filename,
         local_dir="checkpoints",
         local_dir_use_symlinks=False,
+        token=HF_TOKEN,
     )
     print(f"Downloaded Gemmascope checkpoint to: {filepath}")
     # Load the npz file
@@ -106,7 +109,7 @@ def load_pythia_sae_checkpoint(layer: int = 5, hf_token: str = None):
         filename=filename,
         local_dir="checkpoints",
         local_dir_use_symlinks=False,
-        token=hf_token,
+        token=HF_TOKEN,
     )
     print(f"Downloaded Pythia SAE checkpoint to: {filepath}")
 
@@ -115,17 +118,29 @@ def load_pythia_sae_checkpoint(layer: int = 5, hf_token: str = None):
 
     # Pythia SAE uses W_enc and W_dec naming convention
     if "W_enc" in state_dict:
-        encoder_weight = state_dict["W_enc"].T  # Transpose to match our convention
+        encoder_weight = state_dict[
+            "W_enc"
+        ].T  # Transpose to match our convention
         decoder_weight = state_dict["W_dec"]
-        encoder_bias = state_dict.get("b_enc", torch.zeros(encoder_weight.shape[0]))
-        decoder_bias = state_dict.get("b_dec", torch.zeros(decoder_weight.shape[1]))
+        encoder_bias = state_dict.get(
+            "b_enc", torch.zeros(encoder_weight.shape[0])
+        )
+        decoder_bias = state_dict.get(
+            "b_dec", torch.zeros(decoder_weight.shape[1])
+        )
     elif "encoder.weight" in state_dict:
         encoder_weight = state_dict["encoder.weight"]
         decoder_weight = state_dict["decoder.weight"]
-        encoder_bias = state_dict.get("encoder.bias", torch.zeros(encoder_weight.shape[0]))
-        decoder_bias = state_dict.get("decoder.bias", torch.zeros(decoder_weight.shape[1]))
+        encoder_bias = state_dict.get(
+            "encoder.bias", torch.zeros(encoder_weight.shape[0])
+        )
+        decoder_bias = state_dict.get(
+            "decoder.bias", torch.zeros(decoder_weight.shape[1])
+        )
     else:
-        raise KeyError(f"Could not find encoder/decoder weights in SAE file. Available keys: {list(state_dict.keys())}")
+        raise KeyError(
+            f"Could not find encoder/decoder weights in SAE file. Available keys: {list(state_dict.keys())}"
+        )
 
     print(f"Pythia SAE encoder.weight shape: {encoder_weight.shape}")
     return (decoder_weight, decoder_bias, encoder_weight, encoder_bias)
