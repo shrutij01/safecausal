@@ -312,19 +312,101 @@ def compute_gender_steering_vector(
     return steering_vector.cpu()
 
 
+def compute_gemmascope_steering_vector(
+    embedding_model, tokenizer, layer: int = 25
+):
+    """
+    Compute steering vector based on gender differences in Gemmascope activations.
+    Uses the same logic as SSAE steering but with Gemmascope model.
+    """
+    print("Computing Gemmascope gender steering vector...")
+
+    # For demonstration, create example male/female prompts
+    male_prompts = [
+        "He is a successful businessman who",
+        "The male engineer worked on",
+        "He became the CEO because",
+    ]
+
+    female_prompts = [
+        "She is a successful businesswoman who",
+        "The female engineer worked on",
+        "She became the CEO because",
+    ]
+
+    # Load Gemmascope model
+    (
+        decoder_weight,
+        decoder_bias,
+        encoder_weight,
+        encoder_bias,
+    ) = load_gemmascope_checkpoint()
+
+    gemmascope_model = ExternalSAEModel(
+        decoder_weight,
+        decoder_bias,
+        encoder_weight,
+        encoder_bias,
+        "Gemmascope",
+    )
+
+    # Get embeddings for male and female examples
+    male_embeddings = []
+    female_embeddings = []
+
+    device = embedding_model.device
+
+    for prompt in male_prompts:
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True).to(
+            device
+        )
+        with t.no_grad():
+            outputs = embedding_model(**inputs, output_hidden_states=True)
+            # Get last token embedding from specified layer (25 for Gemmascope)
+            embedding = outputs.hidden_states[layer][0, -1, :].cpu()
+            male_embeddings.append(embedding)
+
+    for prompt in female_prompts:
+        inputs = tokenizer(prompt, return_tensors="pt", truncation=True).to(
+            device
+        )
+        with t.no_grad():
+            outputs = embedding_model(**inputs, output_hidden_states=True)
+            embedding = outputs.hidden_states[layer][0, -1, :].cpu()
+            female_embeddings.append(embedding)
+
+    # Compute mean embeddings
+    male_mean = t.stack(male_embeddings).mean(dim=0)
+    female_mean = t.stack(female_embeddings).mean(dim=0)
+
+    with t.no_grad():
+        # Get Gemmascope activations for male/female embeddings
+        male_acts = gemmascope_model.encoder(male_mean.unsqueeze(0))
+        female_acts = gemmascope_model.encoder(female_mean.unsqueeze(0))
+
+        # Steering vector in Gemmascope activation space
+        steering_vector = female_acts - male_acts
+        steering_vector = steering_vector.squeeze(0)
+
+    print(f"Computed Gemmascope steering vector with shape: {steering_vector.shape}")
+    return steering_vector.cpu(), gemmascope_model
+
+
 def generate_with_steering(
     model,
     tokenizer,
     prompt: str,
-    ssae_model,
+    sae_model,
     steering_vector: t.Tensor,
     layer: int,
     steering_strength: float = 1.0,
     max_new_tokens: int = 50,
     temperature: float = 0.7,
+    sae_type: str = "ssae",
 ):
     """
-    Generate text with SSAE-based steering applied at specified layer.
+    Generate text with SAE-based steering applied at specified layer.
+    Supports both SSAE and Gemmascope models.
     """
     device = model.device
     inputs = tokenizer(prompt, return_tensors="pt").to(device)
@@ -339,16 +421,23 @@ def generate_with_steering(
         # Get the last token's embedding
         last_token_embedding = hidden_states[0, -1, :].cpu()
 
-        # Get SSAE activation and apply steering
+        # Get SAE activation and apply steering
         with t.no_grad():
-            _, ssae_activation = ssae_model(last_token_embedding.unsqueeze(0))
+            if sae_type == "ssae":
+                _, sae_activation = sae_model(last_token_embedding.unsqueeze(0))
+            else:  # gemmascope or other external SAE
+                sae_activation = sae_model.encoder(last_token_embedding.unsqueeze(0))
+
             steered_activation = (
-                ssae_activation
+                sae_activation
                 + steering_strength * steering_vector.unsqueeze(0)
             )
 
-            # Decode back to embedding space (approximate)
-            steered_embedding = ssae_model.decoder(steered_activation)
+            # Decode back to embedding space
+            if sae_type == "ssae":
+                steered_embedding = sae_model.decoder(steered_activation)
+            else:  # gemmascope or other external SAE
+                steered_embedding = sae_model.decoder(steered_activation)
 
             # Apply the steered embedding back to the hidden states
             hidden_states[0, -1, :] = steered_embedding.squeeze(0).to(device)
@@ -523,13 +612,29 @@ def evaluate_generation_bias(
     tokenizer = AutoTokenizer.from_pretrained(embedding_model)
     tokenizer.pad_token = tokenizer.eos_token
 
-    print(f"Loading SSAE model: {ssae_model_path}")
-    ssae_model = load_ssae_model(ssae_model_path)
+    # Determine SAE type and load appropriate model
+    use_gemmascope = "gemma" in embedding_model.lower()
+    sae_type = "gemmascope" if use_gemmascope else "ssae"
 
-    # Compute steering vector
-    steering_vector = compute_gender_steering_vector(
-        ssae_model, model, tokenizer, layer
-    )
+    if use_gemmascope:
+        print("Using Gemmascope for Gemma model")
+        # Use layer 25 for Gemmascope by default
+        if layer == 16:
+            layer = 25
+            print(f"Adjusted layer to {layer} for Gemmascope")
+
+        # Compute Gemmascope steering vector
+        steering_vector, sae_model = compute_gemmascope_steering_vector(
+            model, tokenizer, layer
+        )
+    else:
+        print(f"Loading SSAE model: {ssae_model_path}")
+        sae_model = load_ssae_model(ssae_model_path)
+
+        # Compute SSAE steering vector
+        steering_vector = compute_gender_steering_vector(
+            sae_model, model, tokenizer, layer
+        )
 
     # Get test prompts
     test_prompts = get_bias_steering_prompts()
@@ -537,7 +642,8 @@ def evaluate_generation_bias(
     results = {
         "model": embedding_model,
         "layer": layer,
-        "ssae_model_path": str(ssae_model_path),
+        "sae_type": sae_type,
+        "ssae_model_path": str(ssae_model_path) if not use_gemmascope else None,
         "steering_strengths": steering_strengths,
         "num_generations": num_generations,
         "prompt_results": {},
@@ -585,11 +691,12 @@ def evaluate_generation_bias(
                     model,
                     tokenizer,
                     prompt,
-                    ssae_model,
+                    sae_model,
                     steering_vector,
                     layer,
                     steering_strength=strength,
                     max_new_tokens=max_new_tokens,
+                    sae_type=sae_type,
                 )
                 gender_stats = detect_gender_in_text(generated)
 
