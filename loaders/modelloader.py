@@ -96,6 +96,39 @@ def load_ssae_models(modeldirs):
     )
 
 
+def load_pythia_sae_checkpoint(layer: int = 5):
+    """Load Pythia SAE checkpoint from Hugging Face hub."""
+    model_id = "EleutherAI/sae-pythia-70m-32k"
+    filename = f"layers.{layer}/sae.safetensors"
+    filepath = hf_hub_download(
+        repo_id=model_id,
+        filename=filename,
+        local_dir="checkpoints",
+        local_dir_use_symlinks=False,
+    )
+    print(f"Downloaded Pythia SAE checkpoint to: {filepath}")
+
+    # Load the safetensor
+    state_dict = load_file(filepath)
+
+    # Pythia SAE uses W_enc and W_dec naming convention
+    if "W_enc" in state_dict:
+        encoder_weight = state_dict["W_enc"].T  # Transpose to match our convention
+        decoder_weight = state_dict["W_dec"]
+        encoder_bias = state_dict.get("b_enc", torch.zeros(encoder_weight.shape[0]))
+        decoder_bias = state_dict.get("b_dec", torch.zeros(decoder_weight.shape[1]))
+    elif "encoder.weight" in state_dict:
+        encoder_weight = state_dict["encoder.weight"]
+        decoder_weight = state_dict["decoder.weight"]
+        encoder_bias = state_dict.get("encoder.bias", torch.zeros(encoder_weight.shape[0]))
+        decoder_bias = state_dict.get("decoder.bias", torch.zeros(decoder_weight.shape[1]))
+    else:
+        raise KeyError(f"Could not find encoder/decoder weights in SAE file. Available keys: {list(state_dict.keys())}")
+
+    print(f"Pythia SAE encoder.weight shape: {encoder_weight.shape}")
+    return (decoder_weight, decoder_bias, encoder_weight, encoder_bias)
+
+
 def load_model_config(modeldir: str) -> Box:
     """Load model configuration from YAML file."""
     config_path = os.path.join(modeldir, "cfg.yaml")
