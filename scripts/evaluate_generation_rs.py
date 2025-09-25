@@ -14,6 +14,7 @@ import json
 try:
     from loaders.modelloader import (
         load_gemmascope_checkpoint,
+        load_pythia_sae_checkpoint,
         load_ssae_models,
     )
 except ImportError:
@@ -26,6 +27,7 @@ except ImportError:
     sys.path.insert(0, parent_dir)
     from loaders.modelloader import (
         load_gemmascope_checkpoint,
+        load_pythia_sae_checkpoint,
         load_ssae_models,
     )
 
@@ -80,44 +82,6 @@ class ExternalSAEModel:
         pass
 
 
-def load_pythia_sae_checkpoint(layer=5):
-    """Load Pythia SAE checkpoint from HuggingFace."""
-    model_id = "jbloom/sae-pythia-70m-32k"
-    filename = f"layers.{layer}/sae.safetensors"
-
-    try:
-        filepath = hf_hub_download(
-            repo_id=model_id,
-            filename=filename,
-            local_dir="checkpoints/pythia_sae",
-            local_dir_use_symlinks=False,
-        )
-        print(f"Downloaded Pythia SAE checkpoint to: {filepath}")
-
-        # Load the safetensor
-        state_dict = load_file(filepath)
-
-        # Extract weights and biases
-        decoder_weight = state_dict["W_dec"]  # shape: (d_sae, d_model)
-        decoder_bias = state_dict["b_dec"]  # shape: (d_model,)
-        encoder_weight = state_dict["W_enc"]  # shape: (d_model, d_sae)
-        encoder_bias = state_dict["b_enc"]  # shape: (d_sae,)
-
-        print(
-            f"Pythia SAE layer {layer} - decoder.weight shape: {decoder_weight.shape}"
-        )
-        print(
-            f"Pythia SAE layer {layer} - encoder.weight shape: {encoder_weight.shape}"
-        )
-
-        return (decoder_weight, decoder_bias, encoder_weight, encoder_bias)
-
-    except Exception as e:
-        print(f"Error loading Pythia SAE: {e}")
-        print(
-            f"Available layers might be different. Check {model_id} for available layers."
-        )
-        raise
 
 
 def _generate_base(
@@ -281,15 +245,17 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
         questions.extend([not_matching_pair, matching_pair])
         labels.extend([0, 1])
 
-    # Get embeddings
+    # Get embeddings with smaller batch size to avoid OOM
+    print(f"Extracting embeddings for {len(questions)} questions in batches...")
     embeddings = get_sentence_embeddings(
-        questions, model_name=args.llm, layer=embedding_layer
+        questions, model_name=args.llm, layer=embedding_layer, batch_size=8  # Reduced batch size
     )
     if isinstance(embeddings, list):
         embeddings = np.array(embeddings)
 
     embeddings_tensor = torch.tensor(embeddings, dtype=torch.float32)
     labels_tensor = torch.tensor(labels, dtype=torch.float32).unsqueeze(1)
+    print(f"Embeddings shape: {embeddings_tensor.shape}, Labels shape: {labels_tensor.shape}")
 
     # Load and evaluate SSAE
     from ssae import DictLinearAE
@@ -304,18 +270,32 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
     ssae_model.load_state_dict(state_dict)
     ssae_model.eval()
 
+    # Process SSAE activations in batches to avoid OOM
+    batch_size = getattr(args, 'batch_size', 32)
+    ssae_acts_list = []
+    print(f"Processing SSAE activations in batches of {batch_size}...")
+
     with torch.no_grad():
-        ssae_acts = ssae_model.encoder(embeddings_tensor)
+        for i in range(0, len(embeddings_tensor), batch_size):
+            batch = embeddings_tensor[i:i + batch_size]
+            batch_acts = ssae_model.encoder(batch)
+            ssae_acts_list.append(batch_acts.cpu())
+
+    ssae_acts = torch.cat(ssae_acts_list, dim=0)
+    print(f"SSAE activations shape: {ssae_acts.shape}")
 
     ssae_corr_vector = compute_correlations(ssae_acts, labels_tensor)
     ssae_max_mcc = ssae_corr_vector.abs().max().item()
 
-    # Load and evaluate appropriate external SAE
+    # Load and evaluate appropriate external SAE based on LLM model
     external_name = ""
     external_max_mcc = 0.0
 
+    print(f"\nDetermining appropriate external SAE for LLM: {args.llm}")
+
     if "pythia" in args.llm.lower():
-        # Load Pythia SAE
+        # Load Pythia SAE for Pythia models
+        print("→ Using Pythia SAE (matches Pythia embedding model)")
         try:
             (
                 pythia_decoder_weight,
@@ -330,8 +310,18 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
                 pythia_encoder_bias,
             )
 
+            # Process Pythia SAE activations in batches
+            pythia_acts_list = []
+            print(f"Processing Pythia SAE activations in batches of {batch_size}...")
+
             with torch.no_grad():
-                pythia_acts = pythia_model.encoder(embeddings_tensor)
+                for i in range(0, len(embeddings_tensor), batch_size):
+                    batch = embeddings_tensor[i:i + batch_size]
+                    batch_acts = pythia_model.encoder(batch)
+                    pythia_acts_list.append(batch_acts.cpu())
+
+            pythia_acts = torch.cat(pythia_acts_list, dim=0)
+            print(f"Pythia SAE activations shape: {pythia_acts.shape}")
 
             pythia_corr_vector = compute_correlations(
                 pythia_acts, labels_tensor
@@ -341,8 +331,9 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
         except Exception as e:
             print(f"Failed to load Pythia SAE: {e}")
             external_name = "Failed"
-    else:
-        # Load Gemma Scope
+    elif "gemma" in args.llm.lower():
+        # Load Gemma Scope for Gemma models
+        print("→ Using Gemma Scope (matches Gemma embedding model)")
         try:
             (
                 gemma_decoder_weight,
@@ -357,8 +348,18 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
                 gemma_encoder_bias,
             )
 
+            # Process Gemma Scope activations in batches
+            gemma_acts_list = []
+            print(f"Processing Gemma Scope activations in batches of {batch_size}...")
+
             with torch.no_grad():
-                gemma_acts = gemma_model.encoder(embeddings_tensor)
+                for i in range(0, len(embeddings_tensor), batch_size):
+                    batch = embeddings_tensor[i:i + batch_size]
+                    batch_acts = gemma_model.encoder(batch)
+                    gemma_acts_list.append(batch_acts.cpu())
+
+            gemma_acts = torch.cat(gemma_acts_list, dim=0)
+            print(f"Gemma Scope activations shape: {gemma_acts.shape}")
 
             gemma_corr_vector = compute_correlations(gemma_acts, labels_tensor)
             external_max_mcc = gemma_corr_vector.abs().max().item()
@@ -366,13 +367,30 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
         except Exception as e:
             print(f"Failed to load Gemma Scope: {e}")
             external_name = "Failed"
+    else:
+        # Unsupported model
+        print(f"→ No matching external SAE found for model: {args.llm}")
+        print("→ Supported models: pythia (uses Pythia SAE), gemma (uses Gemma Scope)")
+        external_name = "Unsupported"
 
     # Print simple results
-    print(f"\nMCC Comparison Results for {dataset_name}:")
-    print(f"SSAE Max MCC: {ssae_max_mcc:.4f}")
-    if external_name != "Failed":
+    print(f"\n{'='*50}")
+    print(f"MCC COMPARISON RESULTS FOR {dataset_name.upper()}")
+    print(f"{'='*50}")
+    print(f"LLM Model: {args.llm}")
+    print(f"Dataset Samples: {len(labels)}")
+    print(f"\nSSAE Max MCC: {ssae_max_mcc:.4f}")
+
+    if external_name not in ["Failed", "Unsupported"]:
         print(f"{external_name} Max MCC: {external_max_mcc:.4f}")
-        print(f"Difference: {external_max_mcc - ssae_max_mcc:+.4f}")
+        print(f"Difference ({external_name} - SSAE): {external_max_mcc - ssae_max_mcc:+.4f}")
+
+        if external_max_mcc > ssae_max_mcc:
+            print(f"→ {external_name} performs better")
+        elif external_max_mcc < ssae_max_mcc:
+            print(f"→ SSAE performs better")
+        else:
+            print(f"→ Similar performance")
     else:
         print(f"{external_name}: Unable to load external SAE")
 
@@ -753,6 +771,12 @@ if __name__ == "__main__":
         type=int,
         default=100,
         help="Maximum number of test samples to process (default: 100)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=32,
+        help="Batch size for processing activations (default: 32, reduce if OOM)",
     )
     args = parser.parse_args()
     generate_configs = [
