@@ -287,9 +287,16 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
     ssae_corr_vector = compute_correlations(ssae_acts, labels_tensor)
     ssae_max_mcc = ssae_corr_vector.abs().max().item()
 
+    # Compute mean and std error for SSAE
+    ssae_abs_corrs = ssae_corr_vector.abs()
+    ssae_mean_mcc = ssae_abs_corrs.mean().item()
+    ssae_std_error = (ssae_abs_corrs.std() / (len(ssae_abs_corrs) ** 0.5)).item()
+
     # Load and evaluate appropriate external SAE based on LLM model
     external_name = ""
     external_max_mcc = 0.0
+    external_mean_mcc = 0.0
+    external_std_error = 0.0
 
     print(f"\nDetermining appropriate external SAE for LLM: {args.llm}")
 
@@ -327,6 +334,11 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
                 pythia_acts, labels_tensor
             )
             external_max_mcc = pythia_corr_vector.abs().max().item()
+
+            # Compute mean and std error for Pythia SAE
+            pythia_abs_corrs = pythia_corr_vector.abs()
+            external_mean_mcc = pythia_abs_corrs.mean().item()
+            external_std_error = (pythia_abs_corrs.std() / (len(pythia_abs_corrs) ** 0.5)).item()
             external_name = "Pythia SAE"
         except Exception as e:
             print(f"Failed to load Pythia SAE: {e}")
@@ -363,6 +375,11 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
 
             gemma_corr_vector = compute_correlations(gemma_acts, labels_tensor)
             external_max_mcc = gemma_corr_vector.abs().max().item()
+
+            # Compute mean and std error for Gemma Scope
+            gemma_abs_corrs = gemma_corr_vector.abs()
+            external_mean_mcc = gemma_abs_corrs.mean().item()
+            external_std_error = (gemma_abs_corrs.std() / (len(gemma_abs_corrs) ** 0.5)).item()
             external_name = "Gemma Scope"
         except Exception as e:
             print(f"Failed to load Gemma Scope: {e}")
@@ -379,28 +396,43 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
     print(f"{'='*50}")
     print(f"LLM Model: {args.llm}")
     print(f"Dataset Samples: {len(labels)}")
-    print(f"\nSSAE Max MCC: {ssae_max_mcc:.4f}")
+    print(f"\nSSAE Statistics:")
+    print(f"  Max MCC: {ssae_max_mcc:.4f}")
+    print(f"  Mean MCC: {ssae_mean_mcc:.4f} ± {ssae_std_error:.4f}")
 
     if external_name not in ["Failed", "Unsupported"]:
-        print(f"{external_name} Max MCC: {external_max_mcc:.4f}")
-        print(f"Difference ({external_name} - SSAE): {external_max_mcc - ssae_max_mcc:+.4f}")
+        print(f"\n{external_name} Statistics:")
+        print(f"  Max MCC: {external_max_mcc:.4f}")
+        print(f"  Mean MCC: {external_mean_mcc:.4f} ± {external_std_error:.4f}")
 
-        if external_max_mcc > ssae_max_mcc:
-            print(f"→ {external_name} performs better")
-        elif external_max_mcc < ssae_max_mcc:
-            print(f"→ SSAE performs better")
+        print(f"\nComparison:")
+        max_diff = external_max_mcc - ssae_max_mcc
+        mean_diff = external_mean_mcc - ssae_mean_mcc
+        print(f"  Max MCC difference ({external_name} - SSAE): {max_diff:+.4f}")
+        print(f"  Mean MCC difference ({external_name} - SSAE): {mean_diff:+.4f}")
+
+        if abs(mean_diff) < 0.001:
+            print(f"→ Similar mean performance")
+        elif mean_diff > 0:
+            print(f"→ {external_name} has better mean performance")
         else:
-            print(f"→ Similar performance")
+            print(f"→ SSAE has better mean performance")
     else:
-        print(f"{external_name}: Unable to load external SAE")
+        print(f"\n{external_name}: Unable to load external SAE")
 
     return {
         "dataset": dataset_name,
-        "ssae_max_mcc": ssae_max_mcc,
-        "external_name": external_name,
-        "external_max_mcc": (
-            external_max_mcc if external_name != "Failed" else None
-        ),
+        "ssae": {
+            "max_mcc": ssae_max_mcc,
+            "mean_mcc": ssae_mean_mcc,
+            "std_error": ssae_std_error
+        },
+        "external_sae": {
+            "name": external_name,
+            "max_mcc": external_max_mcc if external_name not in ["Failed", "Unsupported"] else None,
+            "mean_mcc": external_mean_mcc if external_name not in ["Failed", "Unsupported"] else None,
+            "std_error": external_std_error if external_name not in ["Failed", "Unsupported"] else None
+        }
     }
 
 
