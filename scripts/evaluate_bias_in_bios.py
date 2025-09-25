@@ -265,7 +265,9 @@ def load_pythia_sae_model(layer: int = 5):
     from loaders import load_pythia_sae_checkpoint
 
     # Load checkpoint from hub
-    decoder_weight, decoder_bias, encoder_weight, encoder_bias = load_pythia_sae_checkpoint(layer)
+    decoder_weight, decoder_bias, encoder_weight, encoder_bias = (
+        load_pythia_sae_checkpoint(layer)
+    )
 
     rep_dim = encoder_weight.shape[1]  # input dimension
     hid_dim = encoder_weight.shape[0]  # hidden dimension
@@ -273,7 +275,9 @@ def load_pythia_sae_model(layer: int = 5):
     print(f"Pythia SAE dimensions: input={rep_dim}, hidden={hid_dim}")
 
     # Create model with ReLU activation (standard for Pythia SAE)
-    model = DictLinearAE(rep_dim, hid_dim, "none")  # No normalization for standard SAE
+    model = DictLinearAE(
+        rep_dim, hid_dim, "none"
+    )  # No normalization for standard SAE
 
     # Set weights
     model.encoder.weight.data = encoder_weight
@@ -393,7 +397,9 @@ def compute_mcc_for_gender(
     Returns:
         dict: Results including MCC for max correlation feature
     """
-    print("Computing MCC for gender detection (max correlation feature, no probing)...")
+    print(
+        "Computing MCC for gender detection (max correlation feature, no probing)..."
+    )
 
     # Convert to tensors
     activations = activations.float()
@@ -433,7 +439,9 @@ def compute_mcc_for_gender(
     mean_abs_correlation = abs_correlations.mean().item()
     max_abs_correlation = abs_correlations.max().item()
 
-    print(f"Max correlation feature: {best_feature_idx} (correlation: {best_correlation:.4f})")
+    print(
+        f"Max correlation feature: {best_feature_idx} (correlation: {best_correlation:.4f})"
+    )
     print(f"Max absolute correlation: {max_abs_correlation:.4f}")
     print(f"Mean absolute correlation: {mean_abs_correlation:.4f}")
 
@@ -539,7 +547,9 @@ def evaluate_bias_in_bios_single_model(
 
     results = compute_mcc_for_gender(activations, gender_labels, threshold)
 
-    print(f"\n🎯 KEY RESULT - MCC (Max Correlation Feature): {results['mcc_best_feature']:.4f}")
+    print(
+        f"\n🎯 KEY RESULT - MCC (Max Correlation Feature): {results['mcc_best_feature']:.4f}"
+    )
     print(f"📊 Feature Index: {results['best_feature_idx']}")
     print(f"📈 Correlation: {results['best_correlation']:.4f}")
     print(f"✅ Accuracy: {results['accuracy_best_feature']:.4f}")
@@ -632,7 +642,9 @@ def evaluate_bias_in_bios_with_pythia_sae(
     else:
         raise ValueError(f"Unknown embedding_model: {embedding_model}")
 
-    print(f"Loading {embedding_model} embeddings ({model_name}, layer {layer})...")
+    print(
+        f"Loading {embedding_model} embeddings ({model_name}, layer {layer})..."
+    )
     embeddings, gender_labels = get_bias_in_bios_embeddings_and_labels(
         model_name=model_name,
         layer=layer,
@@ -646,10 +658,17 @@ def evaluate_bias_in_bios_with_pythia_sae(
     print(f"\nEvaluating Custom SSAE...")
     try:
         custom_model = load_ssae_model(custom_ssae_path)
-        custom_activations = get_ssae_activations(custom_model, embeddings, batch_size=256)  # Reduced batch size
-        custom_mcc_results = compute_mcc_for_gender(custom_activations, gender_labels, threshold)
-        custom_mcc = custom_mcc_results['mcc_best_feature']
-        results["custom_ssae"] = {"mcc": custom_mcc, "details": custom_mcc_results}
+        custom_activations = get_ssae_activations(
+            custom_model, embeddings, batch_size=256
+        )  # Reduced batch size
+        custom_mcc_results = compute_mcc_for_gender(
+            custom_activations, gender_labels, threshold
+        )
+        custom_mcc = custom_mcc_results["mcc_best_feature"]
+        results["custom_ssae"] = {
+            "mcc": custom_mcc,
+            "details": custom_mcc_results,
+        }
         print(f"✅ Custom SSAE MCC: {custom_mcc:.4f}")
     except Exception as e:
         print(f"❌ Custom SSAE Error: {e}")
@@ -659,10 +678,17 @@ def evaluate_bias_in_bios_with_pythia_sae(
     print(f"\nEvaluating Pythia SAE (layer {pythia_sae_layer})...")
     try:
         pythia_model = load_pythia_sae_model(pythia_sae_layer)
-        pythia_activations = get_ssae_activations(pythia_model, embeddings, batch_size=256)  # Reduced batch size
-        pythia_mcc_results = compute_mcc_for_gender(pythia_activations, gender_labels, threshold)
-        pythia_mcc = pythia_mcc_results['mcc_best_feature']
-        results["pythia_sae"] = {"mcc": pythia_mcc, "details": pythia_mcc_results}
+        pythia_activations = get_ssae_activations(
+            pythia_model, embeddings, batch_size=256
+        )  # Reduced batch size
+        pythia_mcc_results = compute_mcc_for_gender(
+            pythia_activations, gender_labels, threshold
+        )
+        pythia_mcc = pythia_mcc_results["mcc_best_feature"]
+        results["pythia_sae"] = {
+            "mcc": pythia_mcc,
+            "details": pythia_mcc_results,
+        }
         print(f"✅ Pythia SAE MCC: {pythia_mcc:.4f}")
     except Exception as e:
         print(f"❌ Pythia SAE Error: {e}")
@@ -673,7 +699,9 @@ def evaluate_bias_in_bios_with_pythia_sae(
     print("🏆 FINAL MCC COMPARISON")
     print("=" * 60)
 
-    if "error" not in results.get("custom_ssae", {}) and "error" not in results.get("pythia_sae", {}):
+    if "error" not in results.get(
+        "custom_ssae", {}
+    ) and "error" not in results.get("pythia_sae", {}):
         custom_mcc = results["custom_ssae"]["mcc"]
         pythia_mcc = results["pythia_sae"]["mcc"]
 
@@ -766,21 +794,34 @@ def evaluate_bias_in_bios_comparison(
                 print(f"\n❌ {model_name.upper()}: {results['error']}")
 
         # Compare MCCs if both models succeeded
-        valid_results = {k: v for k, v in comparison_results.items() if "error" not in v}
+        valid_results = {
+            k: v for k, v in comparison_results.items() if "error" not in v
+        }
         if len(valid_results) >= 2:
-            mccs = {model: results["mcc_best_feature"] for model, results in valid_results.items()}
+            mccs = {
+                model: results["mcc_best_feature"]
+                for model, results in valid_results.items()
+            }
             best_model = max(mccs, key=mccs.get)
             worst_model = min(mccs, key=mccs.get)
 
-            print(f"\n🏆 WINNER: {best_model.upper()} (MCC: {mccs[best_model]:.4f})")
-            print(f"📊 MCC Difference: {mccs[best_model] - mccs[worst_model]:.4f}")
+            print(
+                f"\n🏆 WINNER: {best_model.upper()} (MCC: {mccs[best_model]:.4f})"
+            )
+            print(
+                f"📊 MCC Difference: {mccs[best_model] - mccs[worst_model]:.4f}"
+            )
 
             # Detailed comparison table
             print(f"\n📋 DETAILED COMPARISON:")
-            print(f"{'Model':<10} {'MCC':<8} {'Feature':<8} {'Correlation':<12} {'Accuracy':<10}")
+            print(
+                f"{'Model':<10} {'MCC':<8} {'Feature':<8} {'Correlation':<12} {'Accuracy':<10}"
+            )
             print("-" * 50)
             for model, results in valid_results.items():
-                print(f"{model:<10} {results['mcc_best_feature']:<8.4f} {results['best_feature_idx']:<8} {results['best_correlation']:<12.4f} {results['accuracy_best_feature']:<10.4f}")
+                print(
+                    f"{model:<10} {results['mcc_best_feature']:<8.4f} {results['best_feature_idx']:<8} {results['best_correlation']:<12.4f} {results['accuracy_best_feature']:<10.4f}"
+                )
 
     return comparison_results
 
@@ -933,14 +974,20 @@ def main():
         print("FINAL SUMMARY")
         print("=" * 70)
 
-        print(f"\n🏆 PRIMARY METRIC - MCC (MAX CORRELATION FEATURE): {results['mcc_best_feature']:.4f}")
+        print(
+            f"\n🏆 PRIMARY METRIC - MCC (MAX CORRELATION FEATURE): {results['mcc_best_feature']:.4f}"
+        )
         print(f"   Feature Index: {results['best_feature_idx']}")
         print(f"   Correlation: {results['best_correlation']:.4f}")
         print(f"   Accuracy: {results['accuracy_best_feature']:.4f}")
 
         print(f"\n📊 CORRELATION STATISTICS:")
-        print(f"   Max absolute correlation: {results['max_abs_correlation']:.4f}")
-        print(f"   Mean absolute correlation: {results['mean_abs_correlation']:.4f}")
+        print(
+            f"   Max absolute correlation: {results['max_abs_correlation']:.4f}"
+        )
+        print(
+            f"   Mean absolute correlation: {results['mean_abs_correlation']:.4f}"
+        )
 
         print(f"\n🔢 CONFUSION MATRIX (Max Correlation Feature):")
         cm = results["confusion_matrix"]
@@ -975,7 +1022,9 @@ def main():
             print(f"  Test accuracy: {dense['test_accuracy']:.4f}")
 
             print(f"\nProbing Summary:")
-            print(f"  Best sparse test accuracy: {sparse['test_accuracy']:.4f}")
+            print(
+                f"  Best sparse test accuracy: {sparse['test_accuracy']:.4f}"
+            )
             print(f"  Dense test accuracy: {dense['test_accuracy']:.4f}")
             print(
                 f"  Sparse vs Dense difference: {sparse['test_accuracy'] - dense['test_accuracy']:.4f}"
@@ -1027,4 +1076,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-evaluate_bias_in_bios.py
