@@ -60,6 +60,10 @@ def load_reference_sae(embedding_model: str, layer: int = None, hf_token: str = 
     rep_dim = encoder_weight.shape[1]
     hid_dim = encoder_weight.shape[0]
 
+    print(f"SAE dimensions: input={rep_dim}, hidden={hid_dim}")
+    print(f"Encoder weight shape: {encoder_weight.shape}")
+    print(f"Decoder weight shape: {decoder_weight.shape}")
+
     model = DictLinearAE(rep_dim, hid_dim, "none")
     model.encoder.weight.data = encoder_weight
     model.encoder.bias.data = encoder_bias
@@ -83,7 +87,7 @@ def extract_embeddings(texts, embedding_model: str, max_samples: int = None):
     elif embedding_model == "gemma":
         from transformers import AutoTokenizer, AutoModelForCausalLM
         model_name = "google/gemma-2-2b-it"
-        layer = 16
+        layer = 25  # Changed to match Gemmascope layer 25
         batch_size = 16
     else:
         raise ValueError(f"Unknown embedding model: {embedding_model}")

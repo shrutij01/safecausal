@@ -48,9 +48,9 @@ def load_gemmascope_checkpoint():
     import numpy as np
 
     data = np.load(filepath)
-    decoder_weight = torch.from_numpy(data["W_dec"])
+    decoder_weight = torch.from_numpy(data["W_dec"]).T  # Transpose for DictLinearAE
     decoder_bias = torch.from_numpy(data["b_dec"])
-    encoder_weight = torch.from_numpy(data["W_enc"])
+    encoder_weight = torch.from_numpy(data["W_enc"]).T  # Transpose for DictLinearAE
     encoder_bias = torch.from_numpy(data["b_enc"])
     print(f"Gemmascope decoder.weight shape: {decoder_weight.shape}")
     return (decoder_weight, decoder_bias, encoder_weight, encoder_bias)
