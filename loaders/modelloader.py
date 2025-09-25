@@ -114,27 +114,20 @@ def load_pythia_sae_checkpoint(layer: int = 5, hf_token: str = None):
     # Load the safetensor
     state_dict = load_file(filepath)
 
+    # Debug: print available keys
+    print(f"Available keys in Pythia SAE: {list(state_dict.keys())}")
+
     # Pythia SAE uses W_enc and W_dec naming convention
     if "W_enc" in state_dict:
-        encoder_weight = state_dict[
-            "W_enc"
-        ].T  # Transpose to match our convention
-        decoder_weight = state_dict["W_dec"]
-        encoder_bias = state_dict.get(
-            "b_enc", torch.zeros(encoder_weight.shape[0])
-        )
-        decoder_bias = state_dict.get(
-            "b_dec", torch.zeros(decoder_weight.shape[1])
-        )
+        encoder_weight = state_dict["W_enc"].T  # Transpose to match our convention
+        decoder_weight = state_dict["W_dec"].T  # Transpose to match our convention
+        encoder_bias = state_dict.get("b_enc", torch.zeros(encoder_weight.shape[0]))
+        decoder_bias = state_dict.get("b_dec", torch.zeros(decoder_weight.shape[1]))
     elif "encoder.weight" in state_dict:
         encoder_weight = state_dict["encoder.weight"]
         decoder_weight = state_dict["decoder.weight"]
-        encoder_bias = state_dict.get(
-            "encoder.bias", torch.zeros(encoder_weight.shape[0])
-        )
-        decoder_bias = state_dict.get(
-            "decoder.bias", torch.zeros(decoder_weight.shape[1])
-        )
+        encoder_bias = state_dict.get("encoder.bias", torch.zeros(encoder_weight.shape[0]))
+        decoder_bias = state_dict.get("decoder.bias", torch.zeros(decoder_weight.shape[1]))
     else:
         raise KeyError(
             f"Could not find encoder/decoder weights in SAE file. Available keys: {list(state_dict.keys())}"
