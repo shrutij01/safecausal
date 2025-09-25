@@ -616,7 +616,8 @@ def evaluate_bias_in_bios_with_pythia_sae(
         Dictionary with MCC results
     """
     print("=" * 60)
-    print(f"BIAS-IN-BIOS: SSAE vs PYTHIA SAE MCC COMPARISON ({embedding_model.upper()} EMBEDDINGS)")
+    print(f"BIAS-IN-BIOS: CUSTOM SSAE vs PYTHIA SAE MCC COMPARISON")
+    print(f"Using {embedding_model.upper()} embeddings for both models")
     print("=" * 60)
 
     # Choose embedding model and parameters
@@ -1026,3 +1027,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+evaluate_bias_in_bios.py
