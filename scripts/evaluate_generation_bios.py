@@ -14,12 +14,131 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any
 import re
+import numpy as np
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 # Add parent directory to path to import modules
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
+
+try:
+    from loaders.modelloader import (
+        load_gemmascope_checkpoint,
+        load_pythia_sae_checkpoint,
+        load_ssae_models,
+    )
+except ImportError:
+    # Fallback for direct import
+    import sys
+    import os
+
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(current_dir)
+    sys.path.insert(0, parent_dir)
+    from loaders.modelloader import (
+        load_gemmascope_checkpoint,
+        load_pythia_sae_checkpoint,
+        load_ssae_models,
+    )
+
+from scripts.evaluate_labeled_sentences import get_sentence_embeddings
+import utils.data_utils as data_utils
+
+
+class ExternalSAEModel:
+    """Wrapper for external SAE models (Gemma Scope, Pythia SAE) to match SSAE interface."""
+
+    def __init__(
+        self,
+        decoder_weight,
+        decoder_bias,
+        encoder_weight,
+        encoder_bias,
+        model_name="External SAE",
+    ):
+        self.decoder_weight = decoder_weight
+        self.decoder_bias = decoder_bias
+        self.encoder_weight = encoder_weight
+        self.encoder_bias = encoder_bias
+        self.model_name = model_name
+
+    def encoder(self, x):
+        """Apply encoder transformation."""
+        return t.nn.functional.relu(
+            t.matmul(x, self.encoder_weight.T) + self.encoder_bias
+        )
+
+    def decoder(self, x):
+        """Apply decoder transformation."""
+        return t.matmul(x, self.decoder_weight.T) + self.decoder_bias
+
+    def forward(self, x):
+        """Full forward pass."""
+        encoded = self.encoder(x)
+        decoded = self.decoder(encoded)
+        return decoded, encoded
+
+    def eval(self):
+        """Set to eval mode (no-op for this implementation)."""
+        pass
+
+
+def compute_correlations(activations, labels):
+    """Compute correlations between activations and labels."""
+    # Center the data
+    acts_centered = activations - activations.mean(dim=0, keepdim=True)
+    acts_std = acts_centered.norm(dim=0, keepdim=True)
+
+    label_centered = labels - labels.mean(dim=0, keepdim=True)
+    label_std = label_centered.norm(dim=0, keepdim=True)
+
+    # Correlation computation
+    numerator = acts_centered.T @ label_centered  # F × 1
+    denominator = acts_std.T * label_std  # F × 1
+
+    mask = denominator != 0
+    corr_vector = t.zeros_like(numerator)
+    corr_vector[mask] = numerator[mask] / denominator[mask]
+
+    return corr_vector.squeeze()
+
+
+def compute_mcc_over_samples(predictions, labels, n_bootstrap=100):
+    """
+    Compute MCC mean and std error over bootstrap samples.
+
+    Args:
+        predictions: Binary predictions for the best feature [N]
+        labels: Binary labels [N]
+        n_bootstrap: Number of bootstrap samples
+
+    Returns:
+        mean_mcc, std_error
+    """
+    from sklearn.metrics import matthews_corrcoef
+
+    n_samples = len(predictions)
+    predictions_np = predictions.numpy()
+    labels_np = labels.numpy()
+
+    # Bootstrap sampling to get MCC distribution
+    mcc_scores = []
+    for _ in range(n_bootstrap):
+        # Sample with replacement
+        indices = np.random.choice(n_samples, n_samples, replace=True)
+        boot_preds = predictions_np[indices]
+        boot_labels = labels_np[indices]
+
+        # Compute MCC for this bootstrap sample
+        mcc = matthews_corrcoef(boot_labels, boot_preds)
+        mcc_scores.append(mcc)
+
+    mcc_scores = np.array(mcc_scores)
+    mean_mcc = np.mean(mcc_scores)
+    std_error = np.std(mcc_scores) / np.sqrt(n_bootstrap)
+
+    return mean_mcc, std_error
 
 
 def load_ssae_model(model_path: Path):
@@ -573,6 +692,237 @@ def summarize_results(results: Dict[str, Any]) -> Dict[str, Any]:
     return summary
 
 
+def compute_bios_mcc_comparison(ssae_model_path: Path, embedding_model: str = "google/gemma-2-2b-it", layer: int = 16, max_test_samples: int = 100, batch_size: int = 32):
+    """
+    Compute MCC comparison between SSAE and appropriate external SAE model for bias-in-bios.
+    Uses male vs female profession bias as the concept to evaluate.
+    """
+    # Create test data for gender bias detection
+    print("Creating gender bias test data...")
+
+    # Get profession prompts that are typically male-biased
+    male_biased_prompts = [
+        "The CEO announced", "The engineer designed", "The surgeon operated",
+        "The programmer coded", "The scientist discovered", "The lawyer argued",
+        "The doctor prescribed", "The architect planned", "The professor taught",
+        "The manager decided", "The executive presented", "The analyst predicted"
+    ]
+
+    # Create paired samples (male vs female context)
+    questions = []
+    labels = []
+
+    for prompt in male_biased_prompts[:max_test_samples//2]:  # Limit samples
+        # Male-biased version (label 0)
+        male_context = f"{prompt} something. He was"
+        questions.append(male_context)
+        labels.append(0)
+
+        # Female-oriented version (label 1)
+        female_context = f"{prompt} something. She was"
+        questions.append(female_context)
+        labels.append(1)
+
+    print(f"Created {len(questions)} gender-context pairs")
+    print(f"Label distribution: {sum(labels)} female contexts, {len(labels) - sum(labels)} male contexts")
+
+    # Get embeddings with smaller batch size to avoid OOM
+    print(f"Extracting embeddings for {len(questions)} questions in batches...")
+    embeddings = get_sentence_embeddings(
+        questions, model_name=embedding_model, layer=layer, batch_size=8  # Reduced batch size
+    )
+    if isinstance(embeddings, list):
+        embeddings = np.array(embeddings)
+
+    embeddings_tensor = t.tensor(embeddings, dtype=t.float32)
+    labels_tensor = t.tensor(labels, dtype=t.float32).unsqueeze(1)
+    print(f"Embeddings shape: {embeddings_tensor.shape}, Labels shape: {labels_tensor.shape}")
+
+    # Load and evaluate SSAE
+    from ssae import DictLinearAE
+    import yaml
+
+    config_path = ssae_model_path / "cfg.yaml"
+    with open(config_path, "r") as f:
+        cfg = yaml.safe_load(f)
+
+    weights_path = ssae_model_path / "weights.pth"
+    state_dict = t.load(weights_path, map_location="cpu")
+
+    rep_dim = state_dict["encoder.weight"].shape[1]
+    hid_dim = state_dict["encoder.weight"].shape[0]
+
+    ssae_model = DictLinearAE(rep_dim, hid_dim, cfg.get("norm", "ln"))
+    ssae_model.load_state_dict(state_dict)
+    ssae_model.eval()
+
+    # Process SSAE activations in batches to avoid OOM
+    ssae_acts_list = []
+    print(f"Processing SSAE activations in batches of {batch_size}...")
+
+    with t.no_grad():
+        for i in range(0, len(embeddings_tensor), batch_size):
+            batch = embeddings_tensor[i:i + batch_size]
+            batch_acts = ssae_model.encoder(batch)
+            ssae_acts_list.append(batch_acts.cpu())
+
+    ssae_acts = t.cat(ssae_acts_list, dim=0)
+    print(f"SSAE activations shape: {ssae_acts.shape}")
+
+    ssae_corr_vector = compute_correlations(ssae_acts, labels_tensor)
+
+    # Find best feature (max absolute correlation)
+    best_feature_idx = ssae_corr_vector.abs().argmax().item()
+    ssae_max_mcc = ssae_corr_vector.abs().max().item()
+
+    # Compute MCC for best feature over samples
+    best_feature_acts = (ssae_acts[:, best_feature_idx] > 0.1).float()  # Binarize activations
+    ssae_mean_mcc, ssae_std_error = compute_mcc_over_samples(best_feature_acts, labels_tensor.squeeze())
+
+    # Load and evaluate appropriate external SAE based on LLM model
+    external_name = ""
+    external_max_mcc = 0.0
+    external_mean_mcc = 0.0
+    external_std_error = 0.0
+
+    print(f"\nDetermining appropriate external SAE for LLM: {embedding_model}")
+
+    if "pythia" in embedding_model.lower():
+        # Load Pythia SAE for Pythia models
+        print("→ Using Pythia SAE (matches Pythia embedding model)")
+        try:
+            (
+                pythia_decoder_weight,
+                pythia_decoder_bias,
+                pythia_encoder_weight,
+                pythia_encoder_bias,
+            ) = load_pythia_sae_checkpoint(layer)
+            pythia_model = ExternalSAEModel(
+                pythia_decoder_weight,
+                pythia_decoder_bias,
+                pythia_encoder_weight,
+                pythia_encoder_bias,
+            )
+
+            # Process Pythia SAE activations in batches
+            pythia_acts_list = []
+            print(f"Processing Pythia SAE activations in batches of {batch_size}...")
+
+            with t.no_grad():
+                for i in range(0, len(embeddings_tensor), batch_size):
+                    batch = embeddings_tensor[i:i + batch_size]
+                    batch_acts = pythia_model.encoder(batch)
+                    pythia_acts_list.append(batch_acts.cpu())
+
+            pythia_acts = t.cat(pythia_acts_list, dim=0)
+            print(f"Pythia SAE activations shape: {pythia_acts.shape}")
+
+            pythia_corr_vector = compute_correlations(
+                pythia_acts, labels_tensor
+            )
+            external_max_mcc = pythia_corr_vector.abs().max().item()
+
+            # Compute mean and std error for Pythia SAE
+            pythia_abs_corrs = pythia_corr_vector.abs()
+            external_mean_mcc = pythia_abs_corrs.mean().item()
+            external_std_error = (pythia_abs_corrs.std() / (len(pythia_abs_corrs) ** 0.5)).item()
+            external_name = "Pythia SAE"
+        except Exception as e:
+            print(f"Failed to load Pythia SAE: {e}")
+            external_name = "Failed"
+    elif "gemma" in embedding_model.lower():
+        # Load Gemma Scope for Gemma models
+        print("→ Using Gemma Scope (matches Gemma embedding model)")
+        try:
+            (
+                gemma_decoder_weight,
+                gemma_decoder_bias,
+                gemma_encoder_weight,
+                gemma_encoder_bias,
+            ) = load_gemmascope_checkpoint()
+            gemma_model = ExternalSAEModel(
+                gemma_decoder_weight,
+                gemma_decoder_bias,
+                gemma_encoder_weight,
+                gemma_encoder_bias,
+            )
+
+            # Process Gemma Scope activations in batches
+            gemma_acts_list = []
+            print(f"Processing Gemma Scope activations in batches of {batch_size}...")
+
+            with t.no_grad():
+                for i in range(0, len(embeddings_tensor), batch_size):
+                    batch = embeddings_tensor[i:i + batch_size]
+                    batch_acts = gemma_model.encoder(batch)
+                    gemma_acts_list.append(batch_acts.cpu())
+
+            gemma_acts = t.cat(gemma_acts_list, dim=0)
+            print(f"Gemma Scope activations shape: {gemma_acts.shape}")
+
+            gemma_corr_vector = compute_correlations(gemma_acts, labels_tensor)
+            external_max_mcc = gemma_corr_vector.abs().max().item()
+
+            # Compute mean and std error for Gemma Scope
+            gemma_abs_corrs = gemma_corr_vector.abs()
+            external_mean_mcc = gemma_abs_corrs.mean().item()
+            external_std_error = (gemma_abs_corrs.std() / (len(gemma_abs_corrs) ** 0.5)).item()
+            external_name = "Gemma Scope"
+        except Exception as e:
+            print(f"Failed to load Gemma Scope: {e}")
+            external_name = "Failed"
+    else:
+        # Unsupported model
+        print(f"→ No matching external SAE found for model: {embedding_model}")
+        print("→ Supported models: pythia (uses Pythia SAE), gemma (uses Gemma Scope)")
+        external_name = "Unsupported"
+
+    # Print results
+    print(f"\n{'='*50}")
+    print(f"MCC COMPARISON RESULTS FOR BIAS-IN-BIOS")
+    print(f"{'='*50}")
+    print(f"LLM Model: {embedding_model}")
+    print(f"Dataset Samples: {len(labels)}")
+    print(f"\nSSAE Statistics:")
+    print(f"  Max MCC: {ssae_max_mcc:.4f}")
+    print(f"  Mean MCC: {ssae_mean_mcc:.4f} ± {ssae_std_error:.4f}")
+
+    if external_name not in ["Failed", "Unsupported"]:
+        print(f"\n{external_name} Statistics:")
+        print(f"  Max MCC: {external_max_mcc:.4f}")
+        print(f"  Mean MCC: {external_mean_mcc:.4f} ± {external_std_error:.4f}")
+
+        print(f"\nComparison:")
+        max_diff = external_max_mcc - ssae_max_mcc
+        mean_diff = external_mean_mcc - ssae_mean_mcc
+        print(f"  Max MCC difference ({external_name} - SSAE): {max_diff:+.4f}")
+        print(f"  Mean MCC difference ({external_name} - SSAE): {mean_diff:+.4f}")
+
+        if abs(mean_diff) < 0.001:
+            print(f"→ Similar mean performance")
+        elif mean_diff > 0:
+            print(f"→ {external_name} has better mean performance")
+        else:
+            print(f"→ SSAE has better mean performance")
+    else:
+        print(f"\n{external_name}: Unable to load external SAE")
+
+    return {
+        "dataset": "bias-in-bios",
+        "ssae": {
+            "max_mcc": ssae_max_mcc,
+            "mean_mcc": ssae_mean_mcc,
+            "std_error": ssae_std_error
+        },
+        "external_sae": {
+            "name": external_name,
+            "max_mcc": external_max_mcc if external_name not in ["Failed", "Unsupported"] else None,
+            "mean_mcc": external_mean_mcc if external_name not in ["Failed", "Unsupported"] else None,
+            "std_error": external_std_error if external_name not in ["Failed", "Unsupported"] else None
+        }
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluate bias steering on professional context prompts"
@@ -618,12 +968,58 @@ def main():
     parser.add_argument(
         "--summary-output", type=Path, help="Output file for summary results"
     )
+    parser.add_argument(
+        "--mcc-only",
+        action="store_true",
+        help="Only compute MCC comparison between SSAE and external SAE, skip generation",
+    )
+    parser.add_argument(
+        "--output-json",
+        type=str,
+        help="Save MCC comparison results to JSON file",
+    )
+    parser.add_argument(
+        "--max-test-samples",
+        type=int,
+        default=100,
+        help="Maximum number of test samples to process for MCC evaluation (default: 100)",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=32,
+        help="Batch size for processing activations (default: 32, reduce if OOM)",
+    )
 
     args = parser.parse_args()
 
     if not args.ssae_model_path.exists():
         print(f"Error: SSAE model path {args.ssae_model_path} does not exist")
         sys.exit(1)
+
+    # Check if MCC-only mode is enabled
+    if args.mcc_only:
+        print("=" * 80)
+        print("MCC COMPARISON MODE - SSAE vs EXTERNAL SAE (BIAS-IN-BIOS)")
+        print("=" * 80)
+
+        # Run MCC comparison only
+        comparison_results = compute_bios_mcc_comparison(
+            args.ssae_model_path,
+            args.embedding_model,
+            args.layer,
+            args.max_test_samples,
+            args.batch_size
+        )
+
+        # Save results if output file specified
+        if args.output_json:
+            import json
+            with open(args.output_json, 'w') as f:
+                json.dump(comparison_results, f, indent=2)
+            print(f"\nResults saved to {args.output_json}")
+
+        return comparison_results
 
     print("=" * 80)
     print("BIAS-IN-BIOS GENERATION EVALUATION WITH STEERING")
