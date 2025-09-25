@@ -259,6 +259,59 @@ def load_ssae_model(model_path: Path):
     return model
 
 
+def load_pythia_sae_model(sae_path: str = "sae-pythia-70m-32k/layers.5"):
+    """Load Pythia SAE model from safetensors."""
+    from safetensors import safe_open
+    from ssae import DictLinearAE
+    import os
+
+    # Construct full path to SAE
+    sae_file = os.path.join(sae_path, "sae.safetensors")
+
+    if not os.path.exists(sae_file):
+        raise FileNotFoundError(f"Pythia SAE file not found: {sae_file}")
+
+    print(f"Loading Pythia SAE from: {sae_file}")
+
+    # Load safetensors
+    state_dict = {}
+    with safe_open(sae_file, framework="pt", device="cpu") as f:
+        for key in f.keys():
+            state_dict[key] = f.get_tensor(key)
+
+    # Get dimensions
+    # Pythia SAE typically uses W_enc and W_dec naming convention
+    if "W_enc" in state_dict:
+        encoder_weight = state_dict["W_enc"].T  # Transpose to match our convention
+        decoder_weight = state_dict["W_dec"]
+        encoder_bias = state_dict.get("b_enc", t.zeros(encoder_weight.shape[0]))
+        decoder_bias = state_dict.get("b_dec", t.zeros(decoder_weight.shape[1]))
+    elif "encoder.weight" in state_dict:
+        encoder_weight = state_dict["encoder.weight"]
+        decoder_weight = state_dict["decoder.weight"]
+        encoder_bias = state_dict.get("encoder.bias", t.zeros(encoder_weight.shape[0]))
+        decoder_bias = state_dict.get("decoder.bias", t.zeros(decoder_weight.shape[1]))
+    else:
+        raise KeyError(f"Could not find encoder/decoder weights in SAE file. Available keys: {list(state_dict.keys())}")
+
+    rep_dim = encoder_weight.shape[1]  # input dimension
+    hid_dim = encoder_weight.shape[0]  # hidden dimension
+
+    print(f"Pythia SAE dimensions: input={rep_dim}, hidden={hid_dim}")
+
+    # Create model with ReLU activation (standard for Pythia SAE)
+    model = DictLinearAE(rep_dim, hid_dim, "none")  # No normalization for standard SAE
+
+    # Set weights manually
+    model.encoder.weight.data = encoder_weight
+    model.encoder.bias.data = encoder_bias
+    model.decoder.weight.data = decoder_weight
+    model.decoder.bias.data = decoder_bias
+
+    model.eval()
+    return model
+
+
 def get_bias_in_bios_embeddings_and_labels(
     model_name="google/gemma-2-2b-it",
     layer=16,
@@ -456,11 +509,11 @@ def evaluate_bias_in_bios_single_model(
     if embedding_model == "pythia":
         model_name = "EleutherAI/pythia-70m-deduped"
         layer = 5
-        batch_size = 128
+        batch_size = 32  # Reduced to avoid OOM
     elif embedding_model == "gemma":
         model_name = "google/gemma-2-2b-it"
         layer = 16
-        batch_size = 64
+        batch_size = 16  # Reduced to avoid OOM
     else:
         raise ValueError(
             f"Unknown embedding_model: {embedding_model}. Choose 'pythia' or 'gemma'"
@@ -484,9 +537,9 @@ def evaluate_bias_in_bios_single_model(
     model = load_ssae_model(model_path)
     print(f"Loaded SSAE model from {model_path}")
 
-    # Get SSAE activations
+    # Get SSAE activations (reduced batch size to avoid OOM)
     print("Getting SSAE activations...")
-    activations = get_ssae_activations(model, embeddings)
+    activations = get_ssae_activations(model, embeddings, batch_size=256)
     print(f"Activations shape: {activations.shape}")
 
     # Split data for probing evaluation
@@ -564,6 +617,95 @@ def evaluate_bias_in_bios_single_model(
             "seed": probe_seed,
         },
     }
+
+    return results
+
+
+def evaluate_bias_in_bios_with_pythia_sae(
+    custom_ssae_path: Path,
+    pythia_sae_path: str = "sae-pythia-70m-32k/layers.5",
+    threshold: float = 0.1,
+    max_samples: int = None,
+) -> Dict[str, Any]:
+    """
+    Simple comparison: Custom SSAE vs Pythia SAE on Pythia embeddings.
+    Just prints max MCC values for both models.
+
+    Args:
+        custom_ssae_path: Path to trained custom SSAE model
+        pythia_sae_path: Path to Pythia SAE directory
+        threshold: Activation threshold for binarization
+        max_samples: Max test samples to evaluate
+
+    Returns:
+        Dictionary with MCC results
+    """
+    print("=" * 60)
+    print("BIAS-IN-BIOS: SSAE vs PYTHIA SAE MCC COMPARISON")
+    print("=" * 60)
+
+    # Get Pythia embeddings (reduced batch size to avoid OOM)
+    model_name = "EleutherAI/pythia-70m-deduped"
+    layer = 5
+    batch_size = 32  # Reduced from 128 to avoid OOM
+
+    print(f"Loading Pythia embeddings ({model_name}, layer {layer})...")
+    embeddings, gender_labels = get_bias_in_bios_embeddings_and_labels(
+        model_name=model_name,
+        layer=layer,
+        batch_size=batch_size,
+        max_samples=max_samples,
+    )
+
+    results = {}
+
+    # Evaluate custom SSAE
+    print(f"\nEvaluating Custom SSAE...")
+    try:
+        custom_model = load_ssae_model(custom_ssae_path)
+        custom_activations = get_ssae_activations(custom_model, embeddings, batch_size=256)  # Reduced batch size
+        custom_mcc_results = compute_mcc_for_gender(custom_activations, gender_labels, threshold)
+        custom_mcc = custom_mcc_results['mcc_best_feature']
+        results["custom_ssae"] = {"mcc": custom_mcc, "details": custom_mcc_results}
+        print(f"✅ Custom SSAE MCC: {custom_mcc:.4f}")
+    except Exception as e:
+        print(f"❌ Custom SSAE Error: {e}")
+        results["custom_ssae"] = {"error": str(e)}
+
+    # Evaluate Pythia SAE
+    print(f"\nEvaluating Pythia SAE...")
+    try:
+        pythia_model = load_pythia_sae_model(pythia_sae_path)
+        pythia_activations = get_ssae_activations(pythia_model, embeddings, batch_size=256)  # Reduced batch size
+        pythia_mcc_results = compute_mcc_for_gender(pythia_activations, gender_labels, threshold)
+        pythia_mcc = pythia_mcc_results['mcc_best_feature']
+        results["pythia_sae"] = {"mcc": pythia_mcc, "details": pythia_mcc_results}
+        print(f"✅ Pythia SAE MCC: {pythia_mcc:.4f}")
+    except Exception as e:
+        print(f"❌ Pythia SAE Error: {e}")
+        results["pythia_sae"] = {"error": str(e)}
+
+    # Print final comparison
+    print("\n" + "=" * 60)
+    print("🏆 FINAL MCC COMPARISON")
+    print("=" * 60)
+
+    if "error" not in results.get("custom_ssae", {}) and "error" not in results.get("pythia_sae", {}):
+        custom_mcc = results["custom_ssae"]["mcc"]
+        pythia_mcc = results["pythia_sae"]["mcc"]
+
+        print(f"Custom SSAE MCC:  {custom_mcc:.4f}")
+        print(f"Pythia SAE MCC:   {pythia_mcc:.4f}")
+        print(f"Difference:       {abs(custom_mcc - pythia_mcc):.4f}")
+
+        if custom_mcc > pythia_mcc:
+            print(f"🥇 WINNER: Custom SSAE (+{custom_mcc - pythia_mcc:.4f})")
+        elif pythia_mcc > custom_mcc:
+            print(f"🥇 WINNER: Pythia SAE (+{pythia_mcc - custom_mcc:.4f})")
+        else:
+            print("🤝 TIE!")
+    else:
+        print("⚠️  Cannot compare due to errors")
 
     return results
 
@@ -703,6 +845,17 @@ def main():
         action="store_true",
         help="Compare MCC across different embedding models (Pythia vs Gemma)",
     )
+    parser.add_argument(
+        "--compare-sae",
+        action="store_true",
+        help="Compare custom SSAE vs Pythia SAE on Pythia embeddings",
+    )
+    parser.add_argument(
+        "--pythia-sae-path",
+        type=str,
+        default="sae-pythia-70m-32k/layers.5",
+        help="Path to Pythia SAE directory (default: sae-pythia-70m-32k/layers.5)",
+    )
 
     args = parser.parse_args()
 
@@ -710,7 +863,33 @@ def main():
         print(f"Error: Model path {args.model_path} does not exist")
         sys.exit(1)
 
-    if args.compare:
+    if args.compare_sae:
+        print("=" * 70)
+        print("BIAS-IN-BIOS SAE COMPARISON MODE")
+        print("=" * 70)
+        print(f"Model path: {args.model_path}")
+        print(f"Pythia SAE path: {args.pythia_sae_path}")
+        print(f"Activation threshold: {args.threshold}")
+        print(f"Max samples: {args.max_samples}")
+        print(f"Probe k: {args.probe_k}")
+        print(f"Probe seed: {args.probe_seed}")
+
+        # Evaluate with SAE comparison
+        try:
+            results = evaluate_bias_in_bios_with_pythia_sae(
+                args.model_path,
+                args.pythia_sae_path,
+                args.threshold,
+                args.max_samples,
+            )
+        except Exception as e:
+            print(f"Error during SAE comparison evaluation: {e}")
+            import traceback
+
+            traceback.print_exc()
+            sys.exit(1)
+
+    elif args.compare:
         print("=" * 70)
         print("BIAS-IN-BIOS MCC COMPARISON MODE")
         print("=" * 70)
@@ -766,7 +945,7 @@ def main():
             sys.exit(1)
 
     # Print final summary (only for single model evaluation)
-    if not args.compare:
+    if not args.compare and not args.compare_sae:
         print("\n" + "=" * 70)
         print("FINAL SUMMARY")
         print("=" * 70)
@@ -821,11 +1000,23 @@ def main():
 
     # Save results if output specified
     if args.output:
-        if args.compare:
+        if args.compare_sae:
             save_results = {
                 "dataset": "bias-in-bios",
                 "model_path": str(args.model_path),
-                "evaluation_type": "comparison",
+                "pythia_sae_path": args.pythia_sae_path,
+                "evaluation_type": "sae_comparison",
+                "threshold": args.threshold,
+                "max_samples": args.max_samples,
+                "probe_k": args.probe_k,
+                "probe_seed": args.probe_seed,
+                "results": results,
+            }
+        elif args.compare:
+            save_results = {
+                "dataset": "bias-in-bios",
+                "model_path": str(args.model_path),
+                "evaluation_type": "embedding_comparison",
                 "threshold": args.threshold,
                 "max_samples": args.max_samples,
                 "probe_k": args.probe_k,
