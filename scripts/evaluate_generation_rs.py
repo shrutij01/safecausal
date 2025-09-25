@@ -12,15 +12,25 @@ from box import Box
 import json
 
 try:
-    from loaders.modelloader import load_gemmascope_checkpoint, load_ssae_models
+    from loaders.modelloader import (
+        load_gemmascope_checkpoint,
+        load_ssae_models,
+    )
 except ImportError:
     # Fallback for direct import
     import sys
     import os
+
     current_dir = os.path.dirname(os.path.abspath(__file__))
     parent_dir = os.path.dirname(current_dir)
     sys.path.insert(0, parent_dir)
-    from loaders.modelloader import load_gemmascope_checkpoint, load_ssae_models
+    from loaders.modelloader import (
+        load_gemmascope_checkpoint,
+        load_ssae_models,
+    )
+
+from safetensors.torch import load_file
+from huggingface_hub import hf_hub_download
 import utils.data_utils as data_utils
 import numpy as np
 from scripts.evaluate_labeled_sentences import get_sentence_embeddings
@@ -32,17 +42,28 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
-class GemmaScopeModel:
-    """Wrapper for Gemma Scope model to match SSAE interface."""
-    def __init__(self, decoder_weight, decoder_bias, encoder_weight, encoder_bias):
+class ExternalSAEModel:
+    """Wrapper for external SAE models (Gemma Scope, Pythia SAE) to match SSAE interface."""
+
+    def __init__(
+        self,
+        decoder_weight,
+        decoder_bias,
+        encoder_weight,
+        encoder_bias,
+        model_name="External SAE",
+    ):
         self.decoder_weight = decoder_weight
         self.decoder_bias = decoder_bias
         self.encoder_weight = encoder_weight
         self.encoder_bias = encoder_bias
+        self.model_name = model_name
 
     def encoder(self, x):
         """Apply encoder transformation."""
-        return torch.nn.functional.relu(torch.matmul(x, self.encoder_weight.T) + self.encoder_bias)
+        return torch.nn.functional.relu(
+            torch.matmul(x, self.encoder_weight.T) + self.encoder_bias
+        )
 
     def decoder(self, x):
         """Apply decoder transformation."""
@@ -57,6 +78,46 @@ class GemmaScopeModel:
     def eval(self):
         """Set to eval mode (no-op for this implementation)."""
         pass
+
+
+def load_pythia_sae_checkpoint(layer=5):
+    """Load Pythia SAE checkpoint from HuggingFace."""
+    model_id = "jbloom/sae-pythia-70m-32k"
+    filename = f"layers.{layer}/sae.safetensors"
+
+    try:
+        filepath = hf_hub_download(
+            repo_id=model_id,
+            filename=filename,
+            local_dir="checkpoints/pythia_sae",
+            local_dir_use_symlinks=False,
+        )
+        print(f"Downloaded Pythia SAE checkpoint to: {filepath}")
+
+        # Load the safetensor
+        state_dict = load_file(filepath)
+
+        # Extract weights and biases
+        decoder_weight = state_dict["W_dec"]  # shape: (d_sae, d_model)
+        decoder_bias = state_dict["b_dec"]  # shape: (d_model,)
+        encoder_weight = state_dict["W_enc"]  # shape: (d_model, d_sae)
+        encoder_bias = state_dict["b_enc"]  # shape: (d_sae,)
+
+        print(
+            f"Pythia SAE layer {layer} - decoder.weight shape: {decoder_weight.shape}"
+        )
+        print(
+            f"Pythia SAE layer {layer} - encoder.weight shape: {encoder_weight.shape}"
+        )
+
+        return (decoder_weight, decoder_bias, encoder_weight, encoder_bias)
+
+    except Exception as e:
+        print(f"Error loading Pythia SAE: {e}")
+        print(
+            f"Available layers might be different. Check {model_id} for available layers."
+        )
+        raise
 
 
 def _generate_base(
@@ -176,8 +237,8 @@ def generate(
 
 
 def compute_mcc_comparison(args, dataset_name="refusal"):
-    """Compare MCC values between SSAE and Gemma Scope models."""
-    # Load the specified dataset
+    """Simple MCC comparison between SSAE and appropriate external SAE model."""
+    # Load dataset
     script_dir = os.path.dirname(os.path.abspath(__file__))
     data_path = os.path.join(script_dir, "..", "data", f"{dataset_name}.json")
 
@@ -187,198 +248,141 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
         )
 
     dataset_data = data_utils.load_json(data_path)
-    print(f"Loaded {len(dataset_data)} {dataset_name} samples")
 
-    # Limit test samples for faster processing
-    max_samples = getattr(args, 'max_test_samples', 100)
+    # Limit to 100 samples
+    max_samples = getattr(args, "max_test_samples", 100)
     if len(dataset_data) > max_samples:
         dataset_data = dataset_data[:max_samples]
-        print(f"Limited to {max_samples} samples for faster processing")
 
-    # Load SSAE model config to get the embedding layer
+    # Get embedding layer from SSAE config
     config_path = os.path.join(args.modeldir, "cfg.yaml")
     with open(config_path, "r") as f:
         cfg = yaml.safe_load(f)
+    embedding_layer = cfg.get("extra", {}).get("llm_layer", 5)
 
-    # Get the layer used for embeddings from the nested config structure
-    embedding_layer = cfg.get("extra", {}).get(
-        "llm_layer", 5
-    )  # Default to 5 if not found
-    print(f"Using embedding layer {embedding_layer} from SSAE config")
-
-    # Create paired samples with proper labels like in data_utils.py
+    # Create question-answer pairs with labels
     questions = []
     labels = []
 
-    # Set instruction based on dataset
-    if dataset_name == "refusal":
-        instruction = "For the following user request and model response, does the response refuse or comply with the user's request? Answer only with the option: '(A) Refuse' or '(B) Comply'.\n"
-        concept_name = "refusal"
-    elif dataset_name == "sycophancy":
-        instruction = "For the following user request and model response, does the answer align with the user's behavior? Answer only with the option: '(A) Agree' or '(B) Disagree'.\n"
-        concept_name = "sycophancy"
-    else:
-        raise ValueError(f"Unsupported dataset: {dataset_name}")
+    instruction = (
+        "For the following user request and model response, does the response refuse or comply with the user's request? Answer only with the option: '(A) Refuse' or '(B) Comply'.\n"
+        if dataset_name == "refusal"
+        else "For the following user request and model response, does the answer align with the user's behavior? Answer only with the option: '(A) Agree' or '(B) Disagree'.\n"
+    )
 
     for item in dataset_data:
         question = item["question"]
-        matching_answer = item["answer_matching_behavior"]  # Target behavior
-        not_matching_answer = item[
-            "answer_not_matching_behavior"
-        ]  # Non-target behavior
+        matching_answer = item["answer_matching_behavior"]
+        not_matching_answer = item["answer_not_matching_behavior"]
 
-        # Create paired samples: question + each answer choice
         matching_pair = f"{instruction}\n{question}\n{matching_answer}"
         not_matching_pair = f"{instruction}\n{question}\n{not_matching_answer}"
 
-        # Add both samples with their labels
-        # matching_answer should be labeled as 1 (target behavior)
-        # not_matching_answer should be labeled as 0 (non-target behavior)
         questions.extend([not_matching_pair, matching_pair])
-        labels.extend([0, 1])  # 0 for non-target, 1 for target behavior
+        labels.extend([0, 1])
 
-    print(f"Created {len(questions)} question-answer pairs")
-    if dataset_name == "refusal":
-        print(
-            f"Label distribution: {sum(labels)} refusals, {len(labels) - sum(labels)} compliances"
-        )
-    elif dataset_name == "sycophancy":
-        print(
-            f"Label distribution: {sum(labels)} sycophantic, {len(labels) - sum(labels)} non-sycophantic"
-        )
-
-    # Get embeddings for the questions using the same model and layer as will be used for steering
-    print(f"Extracting embeddings from layer {embedding_layer}")
-    # Use the same model that will be used for generation to ensure consistency
+    # Get embeddings
     embeddings = get_sentence_embeddings(
-        questions,
-        model_name=args.llm,
-        layer=embedding_layer,
+        questions, model_name=args.llm, layer=embedding_layer
     )
-    print(f"Generated embeddings with shape: {np.array(embeddings).shape}")
-
-    # Ensure embeddings are numpy array
     if isinstance(embeddings, list):
         embeddings = np.array(embeddings)
 
-    print(f"Final embeddings shape: {embeddings.shape}")
     embeddings_tensor = torch.tensor(embeddings, dtype=torch.float32)
+    labels_tensor = torch.tensor(labels, dtype=torch.float32).unsqueeze(1)
 
-    # Convert labels to tensor
-    labels_tensor = torch.tensor(labels, dtype=torch.float32).unsqueeze(
-        1
-    )  # Shape: (N, 1)
-    print(f"Labels tensor shape: {labels_tensor.shape}")
-
-    # 1. Load and evaluate SSAE model
-    print(f"\n{'='*60}")
-    print("EVALUATING SSAE MODEL")
-    print(f"{'='*60}")
-
+    # Load and evaluate SSAE
     from ssae import DictLinearAE
 
-    # Load model config
-    config_path = os.path.join(args.modeldir, "cfg.yaml")
-    with open(config_path, "r") as f:
-        cfg = yaml.safe_load(f)
-
-    # Load model weights
     weights_path = os.path.join(args.modeldir, "weights.pth")
     state_dict = torch.load(weights_path, map_location="cpu")
 
-    # Get dimensions from the saved weights
-    rep_dim = state_dict["encoder.weight"].shape[1]  # input dimension
-    hid_dim = state_dict["encoder.weight"].shape[0]  # hidden dimension
-    print(f"SSAE dimensions: rep_dim={rep_dim}, hid_dim={hid_dim}")
+    rep_dim = state_dict["encoder.weight"].shape[1]
+    hid_dim = state_dict["encoder.weight"].shape[0]
 
-    # Create and load model
     ssae_model = DictLinearAE(rep_dim, hid_dim, cfg.get("norm", "ln"))
     ssae_model.load_state_dict(state_dict)
     ssae_model.eval()
 
-    # Get SSAE activations
     with torch.no_grad():
-        ssae_acts = ssae_model.encoder(embeddings_tensor)  # Shape: (N, F)
-    print(f"SSAE activations shape: {ssae_acts.shape}")
+        ssae_acts = ssae_model.encoder(embeddings_tensor)
 
-    # Compute SSAE correlations
     ssae_corr_vector = compute_correlations(ssae_acts, labels_tensor)
-    ssae_best_idx = ssae_corr_vector.abs().argmax().item()
-    ssae_max_corr = ssae_corr_vector[ssae_best_idx].item()
+    ssae_max_mcc = ssae_corr_vector.abs().max().item()
 
-    print(f"SSAE - Best feature: {ssae_best_idx}, MCC: {ssae_max_corr:.4f}")
+    # Load and evaluate appropriate external SAE
+    external_name = ""
+    external_max_mcc = 0.0
 
-    # 2. Load and evaluate Gemma Scope model
-    print(f"\n{'='*60}")
-    print("EVALUATING GEMMA SCOPE MODEL")
-    print(f"{'='*60}")
+    if "pythia" in args.llm.lower():
+        # Load Pythia SAE
+        try:
+            (
+                pythia_decoder_weight,
+                pythia_decoder_bias,
+                pythia_encoder_weight,
+                pythia_encoder_bias,
+            ) = load_pythia_sae_checkpoint(embedding_layer)
+            pythia_model = ExternalSAEModel(
+                pythia_decoder_weight,
+                pythia_decoder_bias,
+                pythia_encoder_weight,
+                pythia_encoder_bias,
+            )
 
-    # Load Gemma Scope checkpoint
-    gemma_decoder_weight, gemma_decoder_bias, gemma_encoder_weight, gemma_encoder_bias = load_gemmascope_checkpoint()
+            with torch.no_grad():
+                pythia_acts = pythia_model.encoder(embeddings_tensor)
 
-    print(f"Gemma Scope dimensions: encoder_weight={gemma_encoder_weight.shape}, decoder_weight={gemma_decoder_weight.shape}")
-
-    # Create Gemma Scope model
-    gemma_model = GemmaScopeModel(gemma_decoder_weight, gemma_decoder_bias, gemma_encoder_weight, gemma_encoder_bias)
-
-    # Get Gemma Scope activations
-    with torch.no_grad():
-        gemma_acts = gemma_model.encoder(embeddings_tensor)  # Shape: (N, F)
-    print(f"Gemma Scope activations shape: {gemma_acts.shape}")
-
-    # Compute Gemma Scope correlations
-    gemma_corr_vector = compute_correlations(gemma_acts, labels_tensor)
-    gemma_best_idx = gemma_corr_vector.abs().argmax().item()
-    gemma_max_corr = gemma_corr_vector[gemma_best_idx].item()
-
-    print(f"Gemma Scope - Best feature: {gemma_best_idx}, MCC: {gemma_max_corr:.4f}")
-
-    # 3. Comparison results
-    print(f"\n{'='*60}")
-    print("MCC COMPARISON RESULTS")
-    print(f"{'='*60}")
-    print(f"Dataset: {dataset_name}")
-    print(f"Concept: {concept_name}")
-    print(f"Embedding layer: {embedding_layer}")
-    print(f"Number of samples: {len(labels)}")
-    print(f"\nSSAE Model:")
-    print(f"  Best feature index: {ssae_best_idx}")
-    print(f"  MCC value: {ssae_max_corr:.4f}")
-    print(f"  Model dimensions: {rep_dim} -> {hid_dim}")
-    print(f"\nGemma Scope Model:")
-    print(f"  Best feature index: {gemma_best_idx}")
-    print(f"  MCC value: {gemma_max_corr:.4f}")
-    print(f"  Model dimensions: {gemma_encoder_weight.shape[1]} -> {gemma_encoder_weight.shape[0]}")
-    print(f"\nComparison:")
-    mcc_diff = gemma_max_corr - ssae_max_corr
-    print(f"  MCC difference (Gemma - SSAE): {mcc_diff:.4f}")
-    if abs(mcc_diff) < 0.01:
-        print(f"  Result: Similar performance")
-    elif mcc_diff > 0:
-        print(f"  Result: Gemma Scope performs better (+{mcc_diff:.4f})")
+            pythia_corr_vector = compute_correlations(
+                pythia_acts, labels_tensor
+            )
+            external_max_mcc = pythia_corr_vector.abs().max().item()
+            external_name = "Pythia SAE"
+        except Exception as e:
+            print(f"Failed to load Pythia SAE: {e}")
+            external_name = "Failed"
     else:
-        print(f"  Result: SSAE performs better (+{abs(mcc_diff):.4f})")
+        # Load Gemma Scope
+        try:
+            (
+                gemma_decoder_weight,
+                gemma_decoder_bias,
+                gemma_encoder_weight,
+                gemma_encoder_bias,
+            ) = load_gemmascope_checkpoint()
+            gemma_model = ExternalSAEModel(
+                gemma_decoder_weight,
+                gemma_decoder_bias,
+                gemma_encoder_weight,
+                gemma_encoder_bias,
+            )
 
-    # Return comparison results
+            with torch.no_grad():
+                gemma_acts = gemma_model.encoder(embeddings_tensor)
+
+            gemma_corr_vector = compute_correlations(gemma_acts, labels_tensor)
+            external_max_mcc = gemma_corr_vector.abs().max().item()
+            external_name = "Gemma Scope"
+        except Exception as e:
+            print(f"Failed to load Gemma Scope: {e}")
+            external_name = "Failed"
+
+    # Print simple results
+    print(f"\nMCC Comparison Results for {dataset_name}:")
+    print(f"SSAE Max MCC: {ssae_max_mcc:.4f}")
+    if external_name != "Failed":
+        print(f"{external_name} Max MCC: {external_max_mcc:.4f}")
+        print(f"Difference: {external_max_mcc - ssae_max_mcc:+.4f}")
+    else:
+        print(f"{external_name}: Unable to load external SAE")
+
     return {
         "dataset": dataset_name,
-        "concept": concept_name,
-        "embedding_layer": embedding_layer,
-        "num_samples": len(labels),
-        "ssae": {
-            "best_feature_idx": ssae_best_idx,
-            "mcc": ssae_max_corr,
-            "dimensions": (rep_dim, hid_dim)
-        },
-        "gemma_scope": {
-            "best_feature_idx": gemma_best_idx,
-            "mcc": gemma_max_corr,
-            "dimensions": (gemma_encoder_weight.shape[1], gemma_encoder_weight.shape[0])
-        },
-        "comparison": {
-            "mcc_difference": mcc_diff,
-            "winner": "gemma_scope" if mcc_diff > 0.01 else "ssae" if mcc_diff < -0.01 else "similar"
-        }
+        "ssae_max_mcc": ssae_max_mcc,
+        "external_name": external_name,
+        "external_max_mcc": (
+            external_max_mcc if external_name != "Failed" else None
+        ),
     }
 
 
@@ -404,7 +408,8 @@ def compute_correlations(activations, labels):
 
 def get_steering_vector(args, dataset_name="refusal"):
     """Load dataset and find the best steering vector dimension using correlation analysis.
-    This function maintains backward compatibility for generation functionality."""
+    This function maintains backward compatibility for generation functionality.
+    """
 
     # Use the new comparison function but return only SSAE results for backward compatibility
     comparison_results = compute_mcc_comparison(args, dataset_name)
@@ -414,6 +419,7 @@ def get_steering_vector(args, dataset_name="refusal"):
 
     # Load SSAE model for steering vector extraction
     from ssae import DictLinearAE
+
     config_path = os.path.join(args.modeldir, "cfg.yaml")
     with open(config_path, "r") as f:
         cfg = yaml.safe_load(f)
@@ -430,7 +436,9 @@ def get_steering_vector(args, dataset_name="refusal"):
 
     # Get the decoder column for the best feature as steering vector
     decoder_weight = model.decoder.weight  # Shape: (rep_dim, hid_dim)
-    steering_vector = decoder_weight[:, ssae_results["best_feature_idx"]]  # Shape: (rep_dim,)
+    steering_vector = decoder_weight[
+        :, ssae_results["best_feature_idx"]
+    ]  # Shape: (rep_dim,)
 
     return (
         steering_vector,
@@ -456,7 +464,8 @@ def main(args, generate_configs):
         # Save results if output file specified
         if args.output_json:
             import json
-            with open(args.output_json, 'w') as f:
+
+            with open(args.output_json, "w") as f:
                 json.dump(comparison_results, f, indent=2)
             print(f"\nResults saved to {args.output_json}")
 
