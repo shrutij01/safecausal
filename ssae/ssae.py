@@ -362,7 +362,14 @@ def _hash_cfg(cfg) -> str:
             cfg_dict[k] = str(v)
         elif isinstance(v, SimpleNamespace):
             cfg_dict[k] = vars(v)  # Convert SimpleNamespace to dict
-    blob = json.dumps(cfg_dict, sort_keys=True).encode()
+
+    # Use only KEYS for hashing
+    filtered_dict = {k: cfg_dict.get(k) for k in KEYS if k in cfg_dict}
+    # Add model from extra if it exists
+    if hasattr(cfg, 'extra') and hasattr(cfg.extra, 'model'):
+        filtered_dict['model'] = cfg.extra.model
+
+    blob = json.dumps(filtered_dict, sort_keys=True).encode()
     return hashlib.sha1(blob).hexdigest()[:6]  # short & stable
 
 
@@ -396,8 +403,9 @@ def dump_run(root: Path, model: torch.nn.Module, cfg) -> Path:
     if "/" in model_name:
         model_name = model_name.split("/")[-1]
 
-    # Build directory name: dataset_model_seed
-    run = root / f"{dataset_name}_{model_name}_seed{cfg.seed}"
+    # Build directory name using hash of KEYS
+    cfg_hash = _hash_cfg(cfg)
+    run = root / f"{dataset_name}_{model_name}_seed{cfg.seed}_{cfg_hash}"
     run.mkdir(
         parents=True, exist_ok=True
     )  # Allow multiple runs with same config

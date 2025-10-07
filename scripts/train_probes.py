@@ -234,7 +234,7 @@ def score_identification(
 
 
 def load_model(model_path: Path):
-    """Load trained SSAE model."""
+    """Load trained SSAE model and return model with config info."""
     from ssae import DictLinearAE
 
     # Load model config
@@ -251,10 +251,19 @@ def load_model(model_path: Path):
     rep_dim = state_dict["encoder.weight"].shape[1]  # input dimension
     hid_dim = state_dict["encoder.weight"].shape[0]  # hidden dimension
 
+    # Extract model name and layer from config
+    model_name = cfg.get("extra", {}).get("model", "EleutherAI/pythia-70m-deduped")
+    layer = cfg.get("extra", {}).get("llm_layer", 5)
+
     # Create model (assume layer norm)
     model = DictLinearAE(rep_dim, hid_dim, cfg.get("norm", "ln"))
     model.load_state_dict(state_dict)
     model.eval()
+
+    # Store config info as attributes for easy access
+    model.model_name = model_name
+    model.layer = layer
+    model.rep_dim = rep_dim
 
     return model
 
@@ -317,9 +326,12 @@ def get_activations(
     model.eval()
     all_activations = []
 
+    # Get model device
+    model_device = next(model.parameters()).device
+
     with t.no_grad():
         for i in range(0, len(embeddings), batch_size):
-            batch = embeddings[i : i + batch_size]
+            batch = embeddings[i : i + batch_size].to(model_device)
             _, activations = model(batch)  # Get hidden activations
             all_activations.append(activations.cpu())
 
@@ -755,14 +767,15 @@ def evaluate_sentence_labels(
     print(f"Loaded {len(sentences)} test sentences")
     print(f"Available labels: {list(labels.keys())}")
 
-    # Get sentence embeddings
-    print("Extracting sentence embeddings...")
-    embeddings = get_sentence_embeddings(sentences)
-    print(f"Embeddings shape: {embeddings.shape}")
-
-    # Load model
+    # Load model first to get config
     model = load_model(model_path)
     print(f"Loaded model from {model_path}")
+    print(f"Model: {model.model_name}, Layer: {model.layer}, Rep dim: {model.rep_dim}")
+
+    # Get sentence embeddings using model's config
+    print("Extracting sentence embeddings...")
+    embeddings = get_sentence_embeddings(sentences, model.model_name, model.layer)
+    print(f"Embeddings shape: {embeddings.shape}")
 
     # Get SSAE activations
     print("Getting SSAE activations...")
