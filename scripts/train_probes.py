@@ -824,6 +824,7 @@ def evaluate_sentence_labels(
     model_path: Path,
     threshold: float = 0.1,
     metrics: list = ["accuracy", "macrof1", "mcc"],
+    batch_size: int = 128,
 ) -> Dict[str, Any]:
     """Evaluate SSAE on individual sentence labels."""
 
@@ -842,7 +843,7 @@ def evaluate_sentence_labels(
     # Get sentence embeddings using model's config
     print("Extracting sentence embeddings...")
     embeddings = get_sentence_embeddings(
-        sentences, model.model_name, model.layer
+        sentences, model.model_name, model.layer, batch_size
     )
     print(f"Embeddings shape: {embeddings.shape}")
 
@@ -937,12 +938,18 @@ def main():
         default=10,
         help="Number of top features to use when --sparse is set",
     )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=128,
+        help="Batch size for embedding extraction (default: 128)",
+    )
 
     args = parser.parse_args()
 
     # Evaluate model
     results = evaluate_sentence_labels(
-        args.model_path, args.threshold, args.metrics
+        args.model_path, args.threshold, args.metrics, args.batch_size
     )
 
     # Print results
