@@ -13,6 +13,8 @@ from scipy.stats import pearsonr
 import pickle
 from tqdm import tqdm
 
+ACCESS_TOKEN = "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"
+
 
 def load_jsonl(filepath: str):
     with open(filepath, "r", encoding="utf-8") as f:
@@ -252,7 +254,9 @@ def load_model(model_path: Path):
     hid_dim = state_dict["encoder.weight"].shape[0]  # hidden dimension
 
     # Extract model name and layer from config
-    model_name = cfg.get("extra", {}).get("model", "EleutherAI/pythia-70m-deduped")
+    model_name = cfg.get("extra", {}).get(
+        "model", "EleutherAI/pythia-70m-deduped"
+    )
     layer = cfg.get("extra", {}).get("llm_layer", 5)
 
     # Create model (assume layer norm)
@@ -284,7 +288,11 @@ def get_sentence_embeddings(
 
     from ssae.store_embeddings import extract_embeddings
     import torch
-    from transformers import GPTNeoXForCausalLM, AutoTokenizer, AutoModelForCausalLM
+    from transformers import (
+        GPTNeoXForCausalLM,
+        AutoTokenizer,
+        AutoModelForCausalLM,
+    )
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -294,11 +302,13 @@ def get_sentence_embeddings(
             "EleutherAI/pythia-70m-deduped",
             revision="step3000",
             cache_dir="./pythia-70m-deduped/step3000",
+            token=ACCESS_TOKEN,
         ).to(device)
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-70m-deduped",
             revision="step3000",
             cache_dir="./pythia-70m-deduped/step3000",
+            token=ACCESS_TOKEN,
         )
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
@@ -306,10 +316,12 @@ def get_sentence_embeddings(
         model = AutoModelForCausalLM.from_pretrained(
             "google/gemma-2-2b-it",
             cache_dir="./gemma-2-2b-it",
+            token=ACCESS_TOKEN,
         ).to(device)
         tokenizer = AutoTokenizer.from_pretrained(
             "google/gemma-2-2b-it",
             cache_dir="./gemma-2-2b-it",
+            token=ACCESS_TOKEN,
         )
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
@@ -354,7 +366,9 @@ def heuristic_feature_ranking_binary(X, y, method="max_mean_diff"):
     if method == "max_mean_diff":
         pos_class = y == 1
         neg_class = y == 0
-        mean_diff = abs(X[pos_class, :].mean(axis=0) - X[neg_class, :].mean(axis=0))
+        mean_diff = abs(
+            X[pos_class, :].mean(axis=0) - X[neg_class, :].mean(axis=0)
+        )
         sorted_idxs = np.argsort(mean_diff)
     elif method == "lr":
         lr = LogisticRegression(
@@ -381,7 +395,13 @@ def train_probe_on_top_features(X, y, sorted_idxs, k=10, seed=42):
 
 
 def train_probes_binary(
-    train_activations, train_labels, test_activations, test_labels, seed=42, sparse=None, k=10
+    train_activations,
+    train_labels,
+    test_activations,
+    test_labels,
+    seed=42,
+    sparse=None,
+    k=10,
 ):
     """Train binary logistic regression probe."""
     if sparse is not None:
@@ -395,8 +415,12 @@ def train_probes_binary(
         )
 
         # Evaluate on top features only
-        train_acc = classifier.score(train_activations[:, top_neurons], train_labels)
-        test_acc = classifier.score(test_activations[:, top_neurons], test_labels)
+        train_acc = classifier.score(
+            train_activations[:, top_neurons], train_labels
+        )
+        test_acc = classifier.score(
+            test_activations[:, top_neurons], test_labels
+        )
 
         print(f"Train Accuracy: {train_acc:.2f}")
         print(f"Test Accuracy: {test_acc:.2f}")
@@ -421,7 +445,13 @@ def train_probes_binary(
 
 
 def train_probes_multiclass(
-    train_activations, train_labels, test_activations, test_labels, seed=42, sparse=None, k=10
+    train_activations,
+    train_labels,
+    test_activations,
+    test_labels,
+    seed=42,
+    sparse=None,
+    k=10,
 ):
     """Train multiclass logistic regression probe."""
     if sparse is not None:
@@ -443,8 +473,12 @@ def train_probes_multiclass(
         classifier.fit(X_sub, train_labels)
 
         # Evaluate on top features only
-        train_acc = classifier.score(train_activations[:, top_neurons], train_labels)
-        test_acc = classifier.score(test_activations[:, top_neurons], test_labels)
+        train_acc = classifier.score(
+            train_activations[:, top_neurons], train_labels
+        )
+        test_acc = classifier.score(
+            test_activations[:, top_neurons], test_labels
+        )
 
         print(f"Train Accuracy: {train_acc:.2f}")
         print(f"Test Accuracy: {test_acc:.2f}")
@@ -591,8 +625,7 @@ def extract_activations_with_multi_intervention(
     """Multi-concept steering - intervene on multiple features simultaneously."""
     x_int_list = []
     feature_maxes = {
-        c: f_list_orig[:, top_feature_idxs[c]].max().item()
-        for c in steer_list
+        c: f_list_orig[:, top_feature_idxs[c]].max().item() for c in steer_list
     }
 
     # Coefficient distribution logic
@@ -601,7 +634,9 @@ def extract_activations_with_multi_intervention(
     elif len(steer_list) == 2:
         per_feature_coef = coef
     else:
-        raise NotImplementedError("Coefficient distribution for > 2 concepts not yet supported.")
+        raise NotImplementedError(
+            "Coefficient distribution for > 2 concepts not yet supported."
+        )
 
     for idx, x in enumerate(x_list):
         x = t.tensor(x, dtype=t.float32).to("cuda")
@@ -612,7 +647,9 @@ def extract_activations_with_multi_intervention(
         # Apply multi-concept intervention
         f_new = f_orig.clone()
         for concept in steer_list:
-            f_new[:, top_feature_idxs[concept]] = per_feature_coef * feature_maxes[concept]
+            f_new[:, top_feature_idxs[concept]] = (
+                per_feature_coef * feature_maxes[concept]
+            )
 
         # Decode and compute delta
         x_hat_int = dictionary.decode(f_new)
@@ -632,7 +669,7 @@ def compute_mcc(
     concept_value,
     layer_num,
     sparse=None,
-    verbose=False
+    verbose=False,
 ):
     """Compute Matthews Correlation Coefficient for probe quality."""
     if sparse is not None:
@@ -649,7 +686,9 @@ def compute_mcc(
 
     if not os.path.exists(probe_path):
         if verbose:
-            print(f"Probe file not found for {concept_key}_{concept_value}. Skipping.")
+            print(
+                f"Probe file not found for {concept_key}_{concept_value}. Skipping."
+            )
         return None
 
     probe = joblib.load(probe_path)
@@ -671,7 +710,7 @@ def test_all_with_interventions(
     top_features,
     sae_acts,
     output_dir,
-    verbose=False
+    verbose=False,
 ):
     """
     Test all concept interventions on all probes.
@@ -723,7 +762,9 @@ def test_all_with_interventions(
 
             for test_concept_key, test_values in features.items():
                 for test_concept_value in test_values:
-                    test_concept_str = f"{test_concept_key}-{test_concept_value}"
+                    test_concept_str = (
+                        f"{test_concept_key}-{test_concept_value}"
+                    )
 
                     if test_concept_str not in test_activations_dict:
                         continue
@@ -732,7 +773,9 @@ def test_all_with_interventions(
                         print(f"{train_concept_str} -> {test_concept_str}")
 
                     # Load probe
-                    probe_filename = f"{test_concept_key}_{test_concept_value}.joblib"
+                    probe_filename = (
+                        f"{test_concept_key}_{test_concept_value}.joblib"
+                    )
                     probe_path = os.path.join(output_dir, probe_filename)
 
                     if not os.path.exists(probe_path):
@@ -743,25 +786,36 @@ def test_all_with_interventions(
                     probe = joblib.load(probe_path)
 
                     # Get test activations
-                    test_activations_org = test_activations_dict[test_concept_str]
+                    test_activations_org = test_activations_dict[
+                        test_concept_str
+                    ]
                     test_labels = test_labels_dict[test_concept_str]
 
                     # Apply intervention
                     with t.no_grad():
-                        test_activations_int = extract_activations_with_intervention(
-                            test_activations_org, sae_acts, dictionary, top_feature
+                        test_activations_int = (
+                            extract_activations_with_intervention(
+                                test_activations_org,
+                                sae_acts,
+                                dictionary,
+                                top_feature,
+                            )
                         )
 
                     # Compute probe response difference
                     scores_org = probe.decision_function(test_activations_org)
-                    scores_int = probe.decision_function(test_activations_int.detach().cpu().numpy())
+                    scores_int = probe.decision_function(
+                        test_activations_int.detach().cpu().numpy()
+                    )
                     scores_delta = scores_int - scores_org
                     mean_delta = scores_delta.mean()
 
                     if verbose:
                         print(f"  Delta: {mean_delta:.4f}")
 
-                    score_matrix[IDX[train_concept_str]][IDX[test_concept_str]] = mean_delta
+                    score_matrix[IDX[train_concept_str]][
+                        IDX[test_concept_str]
+                    ] = mean_delta
 
     return score_matrix, IDX
 
@@ -781,11 +835,15 @@ def evaluate_sentence_labels(
     # Load model first to get config
     model = load_model(model_path)
     print(f"Loaded model from {model_path}")
-    print(f"Model: {model.model_name}, Layer: {model.layer}, Rep dim: {model.rep_dim}")
+    print(
+        f"Model: {model.model_name}, Layer: {model.layer}, Rep dim: {model.rep_dim}"
+    )
 
     # Get sentence embeddings using model's config
     print("Extracting sentence embeddings...")
-    embeddings = get_sentence_embeddings(sentences, model.model_name, model.layer)
+    embeddings = get_sentence_embeddings(
+        sentences, model.model_name, model.layer
+    )
     print(f"Embeddings shape: {embeddings.shape}")
 
     # Get SSAE activations
@@ -903,10 +961,14 @@ def main():
             print("\nMax Correlation (MCC) for each concept:")
             print("-" * 50)
             for i, label in enumerate(list(top_features.keys())):
-                print(f"  {label}: {top_scores[i]:.4f} (feature {top_features[label]})")
+                print(
+                    f"  {label}: {top_scores[i]:.4f} (feature {top_features[label]})"
+                )
 
             print(f"\nAverage MCC: {mcc:.4f}")
-            print(f"Correlation matrix shape: {data['correlation_matrix'].shape}")
+            print(
+                f"Correlation matrix shape: {data['correlation_matrix'].shape}"
+            )
         else:
             scores = data["scores"]
             top_features = data["top_features"]
