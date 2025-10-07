@@ -284,7 +284,7 @@ def get_sentence_embeddings(
 
     from ssae.store_embeddings import extract_embeddings
     import torch
-    from transformers import GPTNeoXForCausalLM, AutoTokenizer
+    from transformers import GPTNeoXForCausalLM, AutoTokenizer, AutoModelForCausalLM
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -299,6 +299,17 @@ def get_sentence_embeddings(
             "EleutherAI/pythia-70m-deduped",
             revision="step3000",
             cache_dir="./pythia-70m-deduped/step3000",
+        )
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+    elif model_name == "google/gemma-2-2b-it":
+        model = AutoModelForCausalLM.from_pretrained(
+            "google/gemma-2-2b-it",
+            cache_dir="./gemma-2-2b-it",
+        ).to(device)
+        tokenizer = AutoTokenizer.from_pretrained(
+            "google/gemma-2-2b-it",
+            cache_dir="./gemma-2-2b-it",
         )
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
