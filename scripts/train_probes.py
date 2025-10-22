@@ -1411,8 +1411,13 @@ def get_probe_logits_with_intervention(
         probe: Trained sklearn probe
         sentences: List of sentences
         intervention_indices: Indices of SAE features to intervene on (None = no intervention)
-        intervention_type: Type of intervention - "zero", "amplify", or "ablate"
-        intervention_strength: Strength of intervention (for amplify)
+                             For "add_decoder", uses only the first index (top feature)
+        intervention_type: Type of intervention:
+                          - "zero": Set features to 0
+                          - "amplify": Multiply features by intervention_strength
+                          - "ablate": Same as zero
+                          - "add_decoder": Add decoder direction to residual stream
+        intervention_strength: Strength of intervention (for amplify/add_decoder, default: 2.0)
         use_sparsemax: Whether SAE uses sparsemax
         batch_size: Batch size for processing
         scaler: Optional StandardScaler for normalizing activations
@@ -1454,7 +1459,7 @@ def get_probe_logits_with_intervention(
             else:
                 x_hat, f = dictionary(resid_stream)
 
-            # INTERVENTION: Modify SAE features
+            # INTERVENTION: Modify SAE features or add steering vectors
             if intervention_indices is not None:
                 if intervention_type == "zero":
                     # Zero out specific features
@@ -1465,6 +1470,21 @@ def get_probe_logits_with_intervention(
                 elif intervention_type == "ablate":
                     # Same as zero
                     f[:, :, intervention_indices] = 0.0
+                elif intervention_type == "add_decoder":
+                    # Add decoder direction: take top feature and add its decoder column
+                    # intervention_indices should be a single feature index for this mode
+                    if isinstance(intervention_indices, list):
+                        top_feature_idx = intervention_indices[0]  # Use first/top feature
+                    else:
+                        top_feature_idx = intervention_indices
+
+                    # Get the decoder column (direction) for this feature
+                    # dictionary.decoder.weight shape: (rep_dim, hid_dim)
+                    # We want column top_feature_idx: (rep_dim,)
+                    decoder_direction = dictionary.decoder.weight[:, top_feature_idx]  # (rep_dim,)
+
+                    # Don't modify f, will add steering to reconstruction directly
+                    pass
 
             # Reconstruct with intervened features
             if use_sparsemax:
@@ -1472,6 +1492,19 @@ def get_probe_logits_with_intervention(
                 x_recon = x_recon_flat.view(resid_stream.shape[0], resid_stream.shape[1], -1)
             else:
                 x_recon = dictionary.decoder(f) + dictionary.decoder.bias
+
+            # Add steering vector if using add_decoder intervention
+            if intervention_indices is not None and intervention_type == "add_decoder":
+                if isinstance(intervention_indices, list):
+                    top_feature_idx = intervention_indices[0]
+                else:
+                    top_feature_idx = intervention_indices
+                decoder_direction = dictionary.decoder.weight[:, top_feature_idx]
+
+                # Add steering: x_recon = x_hat + intervention_strength * decoder_direction
+                # Broadcast across batch and sequence dimensions
+                steering_vector = intervention_strength * decoder_direction  # (rep_dim,)
+                x_recon = x_recon + steering_vector.unsqueeze(0).unsqueeze(0)  # (1, 1, rep_dim)
 
             if isinstance(_output, tuple):
                 _output = (_output[0].clone(),) + _output[1:]
@@ -1553,8 +1586,8 @@ def compute_causal_intervention_matrix(
         top_features_dict: Dict mapping concept name -> top-k feature indices
         sentences: List of sentences to evaluate
         labels_dict: Optional dict of labels for filtering/analysis
-        intervention_type: "zero", "amplify", or "ablate"
-        intervention_strength: Strength for amplify intervention
+        intervention_type: "zero", "amplify", "ablate", or "add_decoder" (default: "add_decoder")
+        intervention_strength: Strength for amplify/add_decoder intervention (default: 2.0)
         use_sparsemax: Whether SAE uses sparsemax
         batch_size: Batch size
         scaler: Optional StandardScaler
@@ -1820,6 +1853,14 @@ def run_k_sweep_attribution(args):
     sentences, labels = load_labeled_sentences_test()
     print(f"\nLoaded {len(sentences)} sentences")
 
+    # Limit number of samples if specified (useful for faster debugging/testing with large models)
+    if args.max_samples is not None and args.max_samples < len(sentences):
+        print(f"Limiting to {args.max_samples} samples (from {len(sentences)})")
+        indices = np.random.RandomState(args.seed).choice(len(sentences), args.max_samples, replace=False)
+        sentences = [sentences[i] for i in indices]
+        labels = {k: [v[i] for i in indices] for k, v in labels.items()}
+        print(f"Using {len(sentences)} sentences")
+
     # Filter concepts if specified
     if args.concepts:
         labels = {k: v for k, v in labels.items() if k in args.concepts}
@@ -1917,7 +1958,8 @@ def run_k_sweep_attribution(args):
             _ = lm_model(**batch_tokenized)
 
     hook.remove()
-    residual_acts_train = t.cat(residual_acts_list, dim=0).numpy()
+    # Convert to float32 before numpy (bfloat16 not supported by numpy)
+    residual_acts_train = t.cat(residual_acts_list, dim=0).float().numpy()
     print(f"Residual stream activations shape: {residual_acts_train.shape}")
 
     # Normalize activations to prevent ill-conditioning from large magnitude differences
@@ -2181,21 +2223,27 @@ def main():
     parser.add_argument(
         "--intervention-type",
         type=str,
-        choices=["zero", "amplify", "ablate"],
-        default="zero",
-        help="Type of intervention to perform (default: zero)",
+        choices=["zero", "amplify", "ablate", "add_decoder"],
+        default="add_decoder",
+        help="Type of intervention to perform (default: add_decoder)",
     )
     parser.add_argument(
         "--intervention-strength",
         type=float,
         default=2.0,
-        help="Strength for amplify intervention (default: 2.0)",
+        help="Strength for amplify/add_decoder intervention (default: 2.0)",
     )
     parser.add_argument(
         "--intervention-output",
         type=Path,
         default=None,
         help="Path to save causal intervention matrix plot (e.g., intervention_matrix.png)",
+    )
+    parser.add_argument(
+        "--max-samples",
+        type=int,
+        default=None,
+        help="Limit number of samples for faster processing (useful for large models like Gemma)",
     )
 
     args = parser.parse_args()
