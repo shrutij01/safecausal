@@ -1866,7 +1866,14 @@ def run_k_sweep_attribution(args):
 
     # Load language model
     print(f"\nLoading language model: {args.lm_model_name}")
-    lm_model = AutoModelForCausalLM.from_pretrained(args.lm_model_name, token=ACCESS_TOKEN).to("cuda")
+    # Load in bfloat16 to save memory and speed up loading
+    lm_model = AutoModelForCausalLM.from_pretrained(
+        args.lm_model_name,
+        token=ACCESS_TOKEN,
+        torch_dtype=t.bfloat16,  # Use bfloat16 for faster loading and less memory
+        device_map="cuda",  # Directly load to GPU instead of CPU->GPU transfer
+        low_cpu_mem_usage=True,  # Reduce CPU memory usage during loading
+    )
     tokenizer = AutoTokenizer.from_pretrained(args.lm_model_name, token=ACCESS_TOKEN)
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
