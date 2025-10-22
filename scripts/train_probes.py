@@ -893,10 +893,14 @@ def get_attributions_w_hooks(
 
     # Process probe activations
     submod_acts = cache["x"].sum(dim=1).squeeze(dim=-1)
-    logits = probe.decision_function(submod_acts.detach().cpu().numpy())
-    logits = t.tensor(logits, dtype=t.float32, requires_grad=True).to(
-        model.device
-    )
+
+    # Apply probe weights in PyTorch to maintain gradient flow
+    # probe is a sklearn LogisticRegression, extract weights
+    probe_weights = t.tensor(probe.coef_.flatten(), dtype=t.float32).to(model.device)
+    probe_bias = t.tensor(probe.intercept_[0], dtype=t.float32).to(model.device)
+
+    # Compute logits maintaining gradients
+    logits = submod_acts @ probe_weights + probe_bias
 
     # Backpropagate from probe logits
     metric = t.sum(logits)
