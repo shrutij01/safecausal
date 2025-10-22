@@ -936,16 +936,18 @@ def get_attributions_w_hooks(
     # Use differentiable PyTorch operations instead of sklearn transform
     if scaler is not None:
         # Extract mean and scale from fitted scaler
-        scaler_mean = t.tensor(scaler.mean_, dtype=t.float32).to(model.device)
-        scaler_scale = t.tensor(scaler.scale_, dtype=t.float32).to(model.device)
+        # Use same dtype as model activations
+        scaler_mean = t.tensor(scaler.mean_, dtype=submod_acts.dtype).to(model.device)
+        scaler_scale = t.tensor(scaler.scale_, dtype=submod_acts.dtype).to(model.device)
         # Apply standardization: (x - mean) / scale
         submod_acts = (submod_acts - scaler_mean) / scaler_scale
 
     # Apply probe weights in PyTorch to maintain gradient flow
     # probe is a sklearn LogisticRegression, extract weights
     # For binary classification: coef_ shape is (1, n_features), we need (n_features,)
-    probe_weights = t.tensor(probe.coef_.squeeze(), dtype=t.float32).to(model.device)
-    probe_bias = t.tensor(probe.intercept_[0], dtype=t.float32).to(model.device)
+    # Use same dtype as model activations
+    probe_weights = t.tensor(probe.coef_.squeeze(), dtype=submod_acts.dtype).to(model.device)
+    probe_bias = t.tensor(probe.intercept_[0], dtype=submod_acts.dtype).to(model.device)
 
     # Compute logits maintaining gradients
     # submod_acts: (batch, n_features), probe_weights: (n_features,)
@@ -1540,12 +1542,13 @@ def get_probe_logits_with_intervention(
 
         # Normalize if scaler is provided
         if scaler is not None:
-            submod_acts_np = submod_acts.cpu().numpy()
+            original_dtype = submod_acts.dtype
+            submod_acts_np = submod_acts.cpu().float().numpy()  # Convert to float32 for sklearn
             submod_acts_np = scaler.transform(submod_acts_np)
-            submod_acts = t.tensor(submod_acts_np, dtype=t.float32).to(model.device)
+            submod_acts = t.tensor(submod_acts_np, dtype=original_dtype).to(model.device)  # Restore original dtype
 
-        # Get probe logits
-        logits = probe.decision_function(submod_acts.cpu().numpy())
+        # Get probe logits (sklearn needs float32/float64)
+        logits = probe.decision_function(submod_acts.cpu().float().numpy())
         all_logits.append(logits)
 
     return np.concatenate(all_logits, axis=0)
@@ -1921,6 +1924,8 @@ def run_k_sweep_attribution(args):
 
     # Load SAE dictionary
     sae_model = load_model(args.model_path).to("cuda")
+    # Convert SAE to bfloat16 to match LLM dtype
+    sae_model = sae_model.bfloat16()
 
     # Determine submodule names
     if args.submodule_steer is None:
