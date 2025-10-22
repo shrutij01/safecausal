@@ -17,8 +17,8 @@ import tempfile
 import shutil
 
 # Set HuggingFace cache to scratch directory to avoid disk quota issues
+# HF_HOME is the main cache directory (replaces deprecated TRANSFORMERS_CACHE)
 os.environ["HF_HOME"] = os.environ.get("HF_HOME", "/network/scratch/j/joshi.shruti/hf_cache")
-os.environ["TRANSFORMERS_CACHE"] = os.environ.get("TRANSFORMERS_CACHE", "/network/scratch/j/joshi.shruti/hf_cache/transformers")
 os.environ["HF_DATASETS_CACHE"] = os.environ.get("HF_DATASETS_CACHE", "/network/scratch/j/joshi.shruti/hf_cache/datasets")
 
 ACCESS_TOKEN = "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"
