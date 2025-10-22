@@ -12,6 +12,9 @@ from sklearn.linear_model import LogisticRegression
 from scipy.stats import pearsonr
 import pickle
 from tqdm import tqdm
+import zipfile
+import tempfile
+import shutil
 
 ACCESS_TOKEN = "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"
 
@@ -262,40 +265,69 @@ def score_identification(
 
 
 def load_model(model_path: Path):
-    """Load trained SSAE model and return model with config info."""
+    """Load trained SSAE model and return model with config info.
+
+    Handles both directory paths and zip file paths. If model_path is a zip file,
+    it will be extracted to a temporary directory first.
+    """
     from ssae import DictLinearAE
 
-    # Load model config
-    config_path = model_path / "cfg.yaml"
-    with open(config_path, "r") as f:
-        cfg = yaml.safe_load(f)
+    # Check if model_path is a zip file
+    temp_dir = None
+    if model_path.suffix == '.zip':
+        # Create temporary directory
+        temp_dir = tempfile.mkdtemp()
+        temp_path = Path(temp_dir)
 
-    # We need rep_dim - assume it's available in the config or load from embedding config
-    # For now, we'll get it from the model weights
-    weights_path = model_path / "weights.pth"
-    state_dict = t.load(weights_path, map_location="cpu")
+        # Extract zip file
+        with zipfile.ZipFile(model_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_path)
 
-    # Get dimensions from the saved weights
-    rep_dim = state_dict["encoder.weight"].shape[1]  # input dimension
-    hid_dim = state_dict["encoder.weight"].shape[0]  # hidden dimension
+        # Update model_path to the extracted directory
+        # Assuming the zip contains a single directory or files at root
+        extracted_items = list(temp_path.iterdir())
+        if len(extracted_items) == 1 and extracted_items[0].is_dir():
+            model_path = extracted_items[0]
+        else:
+            model_path = temp_path
 
-    # Extract model name and layer from config
-    model_name = cfg.get("extra", {}).get(
-        "model", "EleutherAI/pythia-70m-deduped"
-    )
-    layer = cfg.get("extra", {}).get("llm_layer", 5)
+    try:
+        # Load model config
+        config_path = model_path / "cfg.yaml"
+        with open(config_path, "r") as f:
+            cfg = yaml.safe_load(f)
 
-    # Create model (assume layer norm)
-    model = DictLinearAE(rep_dim, hid_dim, cfg.get("norm", "ln"))
-    model.load_state_dict(state_dict)
-    model.eval()
+        # We need rep_dim - assume it's available in the config or load from embedding config
+        # For now, we'll get it from the model weights
+        weights_path = model_path / "weights.pth"
+        state_dict = t.load(weights_path, map_location="cpu")
 
-    # Store config info as attributes for easy access
-    model.model_name = model_name
-    model.layer = layer
-    model.rep_dim = rep_dim
+        # Get dimensions from the saved weights
+        rep_dim = state_dict["encoder.weight"].shape[1]  # input dimension
+        hid_dim = state_dict["encoder.weight"].shape[0]  # hidden dimension
 
-    return model
+        # Extract model name and layer from config
+        model_name = cfg.get("extra", {}).get(
+            "model", "EleutherAI/pythia-70m-deduped"
+        )
+        layer = cfg.get("extra", {}).get("llm_layer", 5)
+
+        # Create model (assume layer norm)
+        model = DictLinearAE(rep_dim, hid_dim, cfg.get("norm", "ln"))
+        model.load_state_dict(state_dict)
+        model.eval()
+
+        # Store config info as attributes for easy access
+        model.model_name = model_name
+        model.layer = layer
+        model.rep_dim = rep_dim
+
+        return model
+
+    finally:
+        # Clean up temporary directory if it was created
+        if temp_dir is not None:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def get_sentence_embeddings(
