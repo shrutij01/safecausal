@@ -1660,6 +1660,225 @@ def compute_causal_intervention_matrix(
     return delta_logodds_matrix
 
 
+def run_causal_intervention_experiment(args):
+    """
+    Run standalone causal intervention experiment.
+
+    This computes the intervention matrix showing how steering one concept affects another.
+    """
+    from sklearn.model_selection import train_test_split
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    print("="*70)
+    print("CAUSAL INTERVENTION EXPERIMENT")
+    print("="*70)
+
+    # Load sentences and labels
+    sentences, labels = load_labeled_sentences_test()
+    print(f"\nLoaded {len(sentences)} sentences")
+
+    # Limit number of samples if specified
+    if args.max_samples is not None and args.max_samples < len(sentences):
+        print(f"Limiting to {args.max_samples} samples (from {len(sentences)})")
+        indices = np.random.RandomState(args.seed).choice(len(sentences), args.max_samples, replace=False)
+        sentences = [sentences[i] for i in indices]
+        labels = {k: [v[i] for i in indices] for k, v in labels.items()}
+        print(f"Using {len(sentences)} sentences")
+
+    # Filter concepts if specified
+    if args.concepts:
+        labels = {k: v for k, v in labels.items() if k in args.concepts}
+        print(f"Using concepts: {list(labels.keys())}")
+    else:
+        print(f"Using all {len(labels)} concepts")
+
+    # Load or compute SAE activations (for probe training on residual stream)
+    if args.sae_activations_path:
+        print(f"\nLoading pre-computed SAE activations from {args.sae_activations_path}")
+        if str(args.sae_activations_path).endswith('.npy'):
+            sae_activations = np.load(args.sae_activations_path)
+        else:
+            sae_activations = t.load(args.sae_activations_path).numpy()
+        print(f"SAE activations shape: {sae_activations.shape}")
+
+    # Split train/test
+    print("\nSplitting train/test...")
+    first_concept = list(labels.keys())[0]
+    train_idx, test_idx = train_test_split(
+        np.arange(len(sentences)),
+        test_size=0.2,
+        random_state=args.seed,
+        stratify=labels[first_concept]
+    )
+
+    sentences_train = [sentences[i] for i in train_idx]
+    sentences_test = [sentences[i] for i in test_idx]
+    labels_train_dict = {concept: np.array(label_list)[train_idx] for concept, label_list in labels.items()}
+    labels_test_dict = {concept: np.array(label_list)[test_idx] for concept, label_list in labels.items()}
+
+    print(f"Train: {len(train_idx)}, Test: {len(test_idx)}")
+
+    # Load language model
+    print(f"\nLoading language model: {args.lm_model_name}")
+    lm_model = AutoModelForCausalLM.from_pretrained(
+        args.lm_model_name,
+        token=ACCESS_TOKEN,
+        torch_dtype=t.bfloat16,
+        device_map="cuda",
+        low_cpu_mem_usage=True,
+    )
+    tokenizer = AutoTokenizer.from_pretrained(args.lm_model_name, token=ACCESS_TOKEN)
+    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.padding_side = "left"
+
+    # Load SAE dictionary
+    sae_model = load_model(args.model_path).to("cuda")
+    sae_model = sae_model.bfloat16()
+
+    # Determine submodule names
+    if args.submodule_steer is None:
+        if "pythia" in args.lm_model_name:
+            args.submodule_steer = f"gpt_neox.layers.{sae_model.layer}"
+        elif "gemma" in args.lm_model_name:
+            args.submodule_steer = f"model.layers.{sae_model.layer}"
+        else:
+            raise ValueError("--submodule-steer must be specified for this model")
+
+    if args.submodule_probe is None:
+        args.submodule_probe = args.submodule_steer
+
+    print(f"Submodule steer: {args.submodule_steer}")
+    print(f"Submodule probe: {args.submodule_probe}")
+
+    # Extract residual stream activations for probe training
+    print("\nExtracting residual stream activations from language model...")
+    submodule_probe = get_submodule_with_index(lm_model, args.submodule_probe)
+    residual_acts_list = []
+
+    def _capture_residual(_module, _input, _output):
+        if isinstance(_output, tuple):
+            _output = _output[0]
+        residual_acts_list.append(_output.sum(dim=1).detach().cpu())
+
+    hook = submodule_probe.register_forward_hook(_capture_residual)
+
+    with t.no_grad():
+        for i in tqdm(range(0, len(sentences_train), args.batch_size), desc="Extracting residual activations"):
+            batch = sentences_train[i:i + args.batch_size]
+            batch_tokenized = tokenizer(batch, return_tensors="pt", padding=True).to(lm_model.device)
+            _ = lm_model(**batch_tokenized)
+
+    hook.remove()
+    residual_acts_train = t.cat(residual_acts_list, dim=0).float().numpy()
+    print(f"Residual stream activations shape: {residual_acts_train.shape}")
+
+    # Normalize activations
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    residual_acts_train_normalized = scaler.fit_transform(residual_acts_train)
+    print(f"Normalized residual activations (mean={residual_acts_train_normalized.mean():.4f}, std={residual_acts_train_normalized.std():.4f})")
+
+    # Train probes for each concept
+    print("\nTraining probes on residual stream...")
+    probes_dict = {}
+    for concept in labels_train_dict.keys():
+        probe = LogisticRegression(
+            random_state=args.seed,
+            max_iter=1000,
+            class_weight="balanced",
+            solver="lbfgs",
+            C=1.0
+        )
+        probe.fit(residual_acts_train_normalized, labels_train_dict[concept])
+        probes_dict[concept] = probe
+        print(f"  {concept}: Train acc = {probe.score(residual_acts_train_normalized, labels_train_dict[concept]):.4f}")
+
+    # Get top-1 feature for each concept using gradient attribution
+    print(f"\nComputing gradient attribution to find top-1 feature per concept...")
+    top_features_dict = {}
+
+    for concept in labels_train_dict.keys():
+        print(f"  {concept}...")
+        _, top_indices, all_scores = find_top_k_features_by_attribution(
+            model=lm_model,
+            tokenizer=tokenizer,
+            submodule_steer_name=args.submodule_steer,
+            submodule_probe_name=args.submodule_probe,
+            dictionary=sae_model,
+            probe=probes_dict[concept],
+            sentences=sentences_train,
+            k=1,  # Only need top-1 for intervention
+            use_sparsemax=args.use_sparsemax,
+            batch_size=args.batch_size,
+            scaler=scaler
+        )
+        top_features_dict[concept] = top_indices.item()  # Single integer
+        print(f"    Top feature: {top_indices.item()}")
+
+    # Compute causal intervention matrix
+    delta_logodds_matrix = compute_causal_intervention_matrix(
+        model=lm_model,
+        tokenizer=tokenizer,
+        submodule_steer_name=args.submodule_steer,
+        submodule_probe_name=args.submodule_probe,
+        dictionary=sae_model,
+        probes_dict=probes_dict,
+        top_features_dict=top_features_dict,
+        sentences=sentences_test,
+        labels_dict=labels_test_dict,
+        intervention_type=args.intervention_type,
+        intervention_strength=args.intervention_strength,
+        use_sparsemax=args.use_sparsemax,
+        batch_size=args.batch_size,
+        scaler=scaler,
+    )
+
+    # Print results
+    print("\n" + "="*70)
+    print("INTERVENTION MATRIX (ΔLogOdds)")
+    print("="*70)
+    concept_list = list(labels_train_dict.keys())
+
+    # Print header
+    print(f"{'Steer \\ Eval':20s}", end="")
+    for concept in concept_list:
+        print(f"{concept:>20s}", end="")
+    print()
+    print("-" * (20 + 20 * len(concept_list)))
+
+    # Print matrix rows
+    for i, steer_concept in enumerate(concept_list):
+        print(f"{steer_concept:20s}", end="")
+        for j, eval_concept in enumerate(concept_list):
+            print(f"{delta_logodds_matrix[i, j]:20.4f}", end="")
+        print()
+
+    # Save results if output path provided
+    if args.intervention_output:
+        # Save plot
+        plot_title = f"Causal Intervention ({args.intervention_type}, strength={args.intervention_strength})"
+        plot_causal_intervention_matrix(
+            delta_logodds_matrix,
+            concept_list,
+            output_path=args.intervention_output,
+            title=plot_title
+        )
+
+        # Save raw matrix to JSON
+        matrix_json_path = args.intervention_output.with_suffix('.json')
+        save_data = {
+            "intervention_type": args.intervention_type,
+            "intervention_strength": args.intervention_strength,
+            "concepts": concept_list,
+            "top_features": top_features_dict,
+            "delta_logodds_matrix": delta_logodds_matrix.tolist(),
+        }
+        with open(matrix_json_path, 'w') as f:
+            json.dump(save_data, f, indent=2)
+        print(f"\nIntervention matrix plot saved to {args.intervention_output}")
+        print(f"Intervention matrix data saved to {matrix_json_path}")
+
+
 def plot_causal_intervention_matrix(delta_logodds_matrix, concept_names, output_path=None, title="Causal Intervention Matrix"):
     """
     Plot the causal intervention heatmap.
@@ -2252,6 +2471,11 @@ def main():
     )
 
     args = parser.parse_args()
+
+    # Check if causal intervention experiment is requested
+    if args.causal_intervention:
+        run_causal_intervention_experiment(args)
+        return
 
     # Check if k-sweep with attribution is requested
     if args.sweep_k_attribution:
