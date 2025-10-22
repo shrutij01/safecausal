@@ -928,11 +928,13 @@ def get_attributions_w_hooks(
     submod_acts = cache["x"].sum(dim=1).squeeze(dim=-1)
 
     # Normalize if scaler is provided (must match training normalization)
+    # Use differentiable PyTorch operations instead of sklearn transform
     if scaler is not None:
-        # Convert to numpy, normalize, convert back to tensor
-        submod_acts_np = submod_acts.detach().cpu().numpy()
-        submod_acts_normalized = scaler.transform(submod_acts_np)
-        submod_acts = t.tensor(submod_acts_normalized, dtype=t.float32, requires_grad=True).to(model.device)
+        # Extract mean and scale from fitted scaler
+        scaler_mean = t.tensor(scaler.mean_, dtype=t.float32).to(model.device)
+        scaler_scale = t.tensor(scaler.scale_, dtype=t.float32).to(model.device)
+        # Apply standardization: (x - mean) / scale
+        submod_acts = (submod_acts - scaler_mean) / scaler_scale
 
     # Apply probe weights in PyTorch to maintain gradient flow
     # probe is a sklearn LogisticRegression, extract weights
