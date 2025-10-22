@@ -1723,7 +1723,7 @@ def run_causal_intervention_experiment(args):
     lm_model = AutoModelForCausalLM.from_pretrained(
         args.lm_model_name,
         token=ACCESS_TOKEN,
-        torch_dtype=t.bfloat16,
+        torch_dtype=t.float32,
         device_map="cuda",
         low_cpu_mem_usage=True,
     )
@@ -1733,7 +1733,7 @@ def run_causal_intervention_experiment(args):
 
     # Load SAE dictionary
     sae_model = load_model(args.model_path).to("cuda")
-    sae_model = sae_model.bfloat16()
+    # Keep SAE in float32 for better numerical precision
 
     # Determine submodule names
     if args.submodule_steer is None:
@@ -1769,7 +1769,7 @@ def run_causal_intervention_experiment(args):
             _ = lm_model(**batch_tokenized)
 
     hook.remove()
-    residual_acts_train = t.cat(residual_acts_list, dim=0).float().numpy()
+    residual_acts_train = t.cat(residual_acts_list, dim=0).cpu().numpy()
     print(f"Residual stream activations shape: {residual_acts_train.shape}")
 
     # Normalize activations
@@ -2129,11 +2129,11 @@ def run_k_sweep_attribution(args):
 
     # Load language model
     print(f"\nLoading language model: {args.lm_model_name}")
-    # Load in bfloat16 to save memory and speed up loading
+    # Load in float32 for better numerical precision
     lm_model = AutoModelForCausalLM.from_pretrained(
         args.lm_model_name,
         token=ACCESS_TOKEN,
-        torch_dtype=t.bfloat16,  # Use bfloat16 for faster loading and less memory
+        torch_dtype=t.float32,  # Use float32 for better numerical precision
         device_map="cuda",  # Directly load to GPU instead of CPU->GPU transfer
         low_cpu_mem_usage=True,  # Reduce CPU memory usage during loading
     )
@@ -2143,8 +2143,7 @@ def run_k_sweep_attribution(args):
 
     # Load SAE dictionary
     sae_model = load_model(args.model_path).to("cuda")
-    # Convert SAE to bfloat16 to match LLM dtype
-    sae_model = sae_model.bfloat16()
+    # Keep SAE in float32 for better numerical precision
 
     # Determine submodule names
     if args.submodule_steer is None:
@@ -2182,8 +2181,8 @@ def run_k_sweep_attribution(args):
             _ = lm_model(**batch_tokenized)
 
     hook.remove()
-    # Convert to float32 before numpy (bfloat16 not supported by numpy)
-    residual_acts_train = t.cat(residual_acts_list, dim=0).float().numpy()
+    # Convert to numpy (already in float32)
+    residual_acts_train = t.cat(residual_acts_list, dim=0).cpu().numpy()
     print(f"Residual stream activations shape: {residual_acts_train.shape}")
 
     # Normalize activations to prevent ill-conditioning from large magnitude differences
