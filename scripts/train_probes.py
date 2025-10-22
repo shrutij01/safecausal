@@ -1381,14 +1381,15 @@ def evaluate_sentence_labels(
                 probe_mcc_scores = {}
                 activations_np = activations.numpy()
 
-                for i, (concept, label_list) in enumerate(labels.items()):
+                # Use top_features dict keys to iterate (these match corr_matrix columns)
+                for i, concept in enumerate(top_features.keys()):
                     # Get top-k features for this concept based on correlation
                     top_k_features = (
                         corr_matrix[:, i].abs().topk(k).indices.numpy()
                     )
 
                     # Split data
-                    label_array = np.array(label_list)
+                    label_array = np.array(labels[concept])
                     if len(np.unique(label_array)) < 2:
                         continue
 
