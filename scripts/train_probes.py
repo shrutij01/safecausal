@@ -816,6 +816,7 @@ def get_attributions_w_hooks(
     batch,
     logit_idx=None,
     use_sparsemax=False,
+    scaler=None,
 ):
     """
     Compute feature attributions using hooks instead of nnsight's model.trace().
@@ -926,6 +927,13 @@ def get_attributions_w_hooks(
     # Process probe activations
     submod_acts = cache["x"].sum(dim=1).squeeze(dim=-1)
 
+    # Normalize if scaler is provided (must match training normalization)
+    if scaler is not None:
+        # Convert to numpy, normalize, convert back to tensor
+        submod_acts_np = submod_acts.detach().cpu().numpy()
+        submod_acts_normalized = scaler.transform(submod_acts_np)
+        submod_acts = t.tensor(submod_acts_normalized, dtype=t.float32, requires_grad=True).to(model.device)
+
     # Apply probe weights in PyTorch to maintain gradient flow
     # probe is a sklearn LogisticRegression, extract weights
     # For binary classification: coef_ shape is (1, n_features), we need (n_features,)
@@ -969,6 +977,7 @@ def find_top_k_features_by_attribution(
     k=10,
     use_sparsemax=False,
     batch_size=32,
+    scaler=None,
 ):
     """
     Find top k SAE features using gradient attribution method.
@@ -1025,6 +1034,7 @@ def find_top_k_features_by_attribution(
             batch=batch,
             logit_idx=None,
             use_sparsemax=use_sparsemax,
+            scaler=scaler,
         )
 
         # Sum over sequence dimension: (batch, seq_len, features) -> (batch, features)
@@ -1580,6 +1590,12 @@ def run_k_sweep_attribution(args):
     residual_acts_train = t.cat(residual_acts_list, dim=0).numpy()
     print(f"Residual stream activations shape: {residual_acts_train.shape}")
 
+    # Normalize activations to prevent ill-conditioning from large magnitude differences
+    from sklearn.preprocessing import StandardScaler
+    scaler = StandardScaler()
+    residual_acts_train_normalized = scaler.fit_transform(residual_acts_train)
+    print(f"Normalized residual activations (mean={residual_acts_train_normalized.mean():.4f}, std={residual_acts_train_normalized.std():.4f})")
+
     # Train initial probes for each concept on residual stream activations
     print("\nTraining initial probes for attribution...")
     initial_probes = {}
@@ -1588,11 +1604,12 @@ def run_k_sweep_attribution(args):
             random_state=args.seed,
             max_iter=1000,
             class_weight="balanced",
-            solver="newton-cholesky"
+            solver="lbfgs",  # Use lbfgs instead of newton-cholesky for numerical stability
+            C=1.0  # L2 regularization helps with ill-conditioning
         )
-        probe.fit(residual_acts_train, labels_train_dict[concept])
+        probe.fit(residual_acts_train_normalized, labels_train_dict[concept])
         initial_probes[concept] = probe
-        print(f"  {concept}: Train acc = {probe.score(residual_acts_train, labels_train_dict[concept]):.4f}")
+        print(f"  {concept}: Train acc = {probe.score(residual_acts_train_normalized, labels_train_dict[concept]):.4f}")
 
     # Get attribution scores for each concept
     print(f"\nComputing gradient attribution scores...")
@@ -1611,7 +1628,8 @@ def run_k_sweep_attribution(args):
             sentences=sentences_train,
             k=max_k,
             use_sparsemax=args.use_sparsemax,
-            batch_size=args.batch_size
+            batch_size=args.batch_size,
+            scaler=scaler
         )
         all_scores_dict[concept] = all_scores
 
