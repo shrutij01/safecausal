@@ -928,10 +928,12 @@ def get_attributions_w_hooks(
 
     # Apply probe weights in PyTorch to maintain gradient flow
     # probe is a sklearn LogisticRegression, extract weights
-    probe_weights = t.tensor(probe.coef_.flatten(), dtype=t.float32).to(model.device)
+    # For binary classification: coef_ shape is (1, n_features), we need (n_features,)
+    probe_weights = t.tensor(probe.coef_.squeeze(), dtype=t.float32).to(model.device)
     probe_bias = t.tensor(probe.intercept_[0], dtype=t.float32).to(model.device)
 
     # Compute logits maintaining gradients
+    # submod_acts: (batch, n_features), probe_weights: (n_features,)
     logits = submod_acts @ probe_weights + probe_bias
 
     # Backpropagate from probe logits
@@ -1555,7 +1557,30 @@ def run_k_sweep_attribution(args):
     print(f"Submodule steer: {args.submodule_steer}")
     print(f"Submodule probe: {args.submodule_probe}")
 
-    # Train initial probes for each concept
+    # Extract residual stream activations from language model for probe training
+    print("\nExtracting residual stream activations from language model...")
+    submodule_probe = lm_model.get_submodule(args.submodule_probe)
+    residual_acts_list = []
+
+    def _capture_residual(_module, _input, _output):
+        if isinstance(_output, tuple):
+            _output = _output[0]
+        # Sum over sequence dimension: (batch, seq, hidden) -> (batch, hidden)
+        residual_acts_list.append(_output.sum(dim=1).detach().cpu())
+
+    hook = submodule_probe.register_forward_hook(_capture_residual)
+
+    with t.no_grad():
+        for i in tqdm(range(0, len(sentences_train), args.batch_size), desc="Extracting residual activations"):
+            batch = sentences_train[i:i + args.batch_size]
+            batch_tokenized = tokenizer(batch, return_tensors="pt", padding=True).to(lm_model.device)
+            _ = lm_model(**batch_tokenized)
+
+    hook.remove()
+    residual_acts_train = t.cat(residual_acts_list, dim=0).numpy()
+    print(f"Residual stream activations shape: {residual_acts_train.shape}")
+
+    # Train initial probes for each concept on residual stream activations
     print("\nTraining initial probes for attribution...")
     initial_probes = {}
     for concept in labels_train_dict.keys():
@@ -1565,9 +1590,9 @@ def run_k_sweep_attribution(args):
             class_weight="balanced",
             solver="newton-cholesky"
         )
-        probe.fit(sae_train, labels_train_dict[concept])
+        probe.fit(residual_acts_train, labels_train_dict[concept])
         initial_probes[concept] = probe
-        print(f"  {concept}: Train acc = {probe.score(sae_train, labels_train_dict[concept]):.4f}")
+        print(f"  {concept}: Train acc = {probe.score(residual_acts_train, labels_train_dict[concept]):.4f}")
 
     # Get attribution scores for each concept
     print(f"\nComputing gradient attribution scores...")
