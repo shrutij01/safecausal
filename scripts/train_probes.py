@@ -852,9 +852,9 @@ def get_attributions_w_hooks(
     """
     cache = {"x": None, "f": None, "resid_stream": None, "f_flat": None}
 
-    # Get submodules by name
-    submodule_steer = dict(model.named_modules())[submodule_steer_name]
-    submodule_probe = dict(model.named_modules())[submodule_probe_name]
+    # Get submodules by name (handle ModuleList indexing for Gemma)
+    submodule_steer = get_submodule_with_index(model, submodule_steer_name)
+    submodule_probe = get_submodule_with_index(model, submodule_probe_name)
 
     def _set_sae_activation(_module, _input, _output):
         """Hook to replace activations with SAE reconstruction."""
@@ -1384,6 +1384,289 @@ def _sweep_k_multi_concept(
     return results
 
 
+def get_probe_logits_with_intervention(
+    model,
+    tokenizer,
+    submodule_steer_name,
+    submodule_probe_name,
+    dictionary,
+    probe,
+    sentences,
+    intervention_indices=None,
+    intervention_type="zero",
+    intervention_strength=1.0,
+    use_sparsemax=False,
+    batch_size=32,
+    scaler=None,
+):
+    """
+    Get probe logits with optional intervention on SAE features.
+
+    Args:
+        model: Language model
+        tokenizer: Tokenizer
+        submodule_steer_name: Name of submodule to intervene on
+        submodule_probe_name: Name of submodule to extract probe activations
+        dictionary: SAE model
+        probe: Trained sklearn probe
+        sentences: List of sentences
+        intervention_indices: Indices of SAE features to intervene on (None = no intervention)
+        intervention_type: Type of intervention - "zero", "amplify", or "ablate"
+        intervention_strength: Strength of intervention (for amplify)
+        use_sparsemax: Whether SAE uses sparsemax
+        batch_size: Batch size for processing
+        scaler: Optional StandardScaler for normalizing activations
+
+    Returns:
+        logits: Probe logits (n_samples,)
+    """
+    submodule_steer = get_submodule_with_index(model, submodule_steer_name)
+    submodule_probe = get_submodule_with_index(model, submodule_probe_name)
+
+    all_logits = []
+
+    # Process in batches
+    num_batches = (len(sentences) + batch_size - 1) // batch_size
+
+    for idx in range(num_batches):
+        start_idx = idx * batch_size
+        end_idx = min(start_idx + batch_size, len(sentences))
+        batch = sentences[start_idx:end_idx]
+
+        cache = {}
+
+        def _set_sae_activation_with_intervention(_module, _input, _output):
+            """Hook to replace activations with SAE reconstruction + intervention."""
+            if isinstance(_output, tuple):
+                resid_stream = _output[0]
+            else:
+                resid_stream = _output
+
+            # Process through SAE
+            if use_sparsemax:
+                x_hat_flat, f_flat = dictionary(
+                    resid_stream.flatten(start_dim=0, end_dim=1)
+                )
+                x_hat = x_hat_flat.view(
+                    resid_stream.shape[0], resid_stream.shape[1], -1
+                )
+                f = f_flat.view(resid_stream.shape[0], resid_stream.shape[1], -1)
+            else:
+                x_hat, f = dictionary(resid_stream)
+
+            # INTERVENTION: Modify SAE features
+            if intervention_indices is not None:
+                if intervention_type == "zero":
+                    # Zero out specific features
+                    f[:, :, intervention_indices] = 0.0
+                elif intervention_type == "amplify":
+                    # Amplify specific features
+                    f[:, :, intervention_indices] *= intervention_strength
+                elif intervention_type == "ablate":
+                    # Same as zero
+                    f[:, :, intervention_indices] = 0.0
+
+            # Reconstruct with intervened features
+            if use_sparsemax:
+                x_recon_flat = dictionary.decoder(f.flatten(start_dim=0, end_dim=1)) + dictionary.decoder.bias
+                x_recon = x_recon_flat.view(resid_stream.shape[0], resid_stream.shape[1], -1)
+            else:
+                x_recon = dictionary.decoder(f) + dictionary.decoder.bias
+
+            if isinstance(_output, tuple):
+                _output = (_output[0].clone(),) + _output[1:]
+                _output[0][:] = x_recon
+            else:
+                _output = x_recon
+
+            return _output
+
+        def _get_activations(_module, _input, _output):
+            """Hook to capture activations for the probe."""
+            if isinstance(_output, tuple):
+                assert len(_output) == 1
+                _output = _output[0]
+            cache["x"] = _output
+            return None
+
+        # Register hooks
+        hook_steer = submodule_steer.register_forward_hook(_set_sae_activation_with_intervention)
+        hook_probe = submodule_probe.register_forward_hook(_get_activations)
+
+        # Forward pass (no gradients needed)
+        with t.no_grad():
+            batch_tokenized = tokenizer(batch, return_tensors="pt", padding=True).to(model.device)
+            _ = model(**batch_tokenized)
+
+        # Remove hooks
+        hook_steer.remove()
+        hook_probe.remove()
+
+        # Process probe activations
+        submod_acts = cache["x"].sum(dim=1).squeeze(dim=-1)
+
+        # Normalize if scaler is provided
+        if scaler is not None:
+            submod_acts_np = submod_acts.cpu().numpy()
+            submod_acts_np = scaler.transform(submod_acts_np)
+            submod_acts = t.tensor(submod_acts_np, dtype=t.float32).to(model.device)
+
+        # Get probe logits
+        logits = probe.decision_function(submod_acts.cpu().numpy())
+        all_logits.append(logits)
+
+    return np.concatenate(all_logits, axis=0)
+
+
+def compute_causal_intervention_matrix(
+    model,
+    tokenizer,
+    submodule_steer_name,
+    submodule_probe_name,
+    dictionary,
+    probes_dict,
+    top_features_dict,
+    sentences,
+    labels_dict=None,
+    intervention_type="zero",
+    intervention_strength=1.0,
+    use_sparsemax=False,
+    batch_size=32,
+    scaler=None,
+):
+    """
+    Compute causal intervention matrix showing effect of steering one concept on another.
+
+    For each pair (steer_concept, eval_concept):
+    1. Get baseline logits for eval_concept (no intervention)
+    2. Intervene on steer_concept's top features
+    3. Get new logits for eval_concept
+    4. Compute ΔLogOdds = logits_after - logits_before
+
+    Args:
+        model: Language model
+        tokenizer: Tokenizer
+        submodule_steer_name: Submodule name for steering
+        submodule_probe_name: Submodule name for probe
+        dictionary: SAE model
+        probes_dict: Dict mapping concept name -> trained probe
+        top_features_dict: Dict mapping concept name -> top-k feature indices
+        sentences: List of sentences to evaluate
+        labels_dict: Optional dict of labels for filtering/analysis
+        intervention_type: "zero", "amplify", or "ablate"
+        intervention_strength: Strength for amplify intervention
+        use_sparsemax: Whether SAE uses sparsemax
+        batch_size: Batch size
+        scaler: Optional StandardScaler
+
+    Returns:
+        delta_logodds_matrix: (num_concepts, num_concepts) numpy array
+            delta_logodds_matrix[i, j] = effect of steering concept i on eval concept j
+    """
+    concepts = list(probes_dict.keys())
+    num_concepts = len(concepts)
+    delta_logodds_matrix = np.zeros((num_concepts, num_concepts))
+
+    print("\nComputing causal intervention matrix...")
+    print(f"Intervention type: {intervention_type}")
+    if intervention_type == "amplify":
+        print(f"Intervention strength: {intervention_strength}")
+
+    # First, get baseline logits for all concepts (no intervention)
+    baseline_logits_dict = {}
+    print("\nGetting baseline logits (no intervention)...")
+    for eval_concept in tqdm(concepts, desc="Baseline"):
+        baseline_logits = get_probe_logits_with_intervention(
+            model=model,
+            tokenizer=tokenizer,
+            submodule_steer_name=submodule_steer_name,
+            submodule_probe_name=submodule_probe_name,
+            dictionary=dictionary,
+            probe=probes_dict[eval_concept],
+            sentences=sentences,
+            intervention_indices=None,  # No intervention
+            use_sparsemax=use_sparsemax,
+            batch_size=batch_size,
+            scaler=scaler,
+        )
+        baseline_logits_dict[eval_concept] = baseline_logits
+
+    # Now compute interventions
+    print("\nComputing interventions...")
+    for steer_idx, steer_concept in enumerate(tqdm(concepts, desc="Steer concept")):
+        # Get intervention indices for this steering concept
+        intervention_indices = top_features_dict[steer_concept]
+        if isinstance(intervention_indices, t.Tensor):
+            intervention_indices = intervention_indices.tolist()
+
+        for eval_idx, eval_concept in enumerate(concepts):
+            # Get logits with intervention
+            intervention_logits = get_probe_logits_with_intervention(
+                model=model,
+                tokenizer=tokenizer,
+                submodule_steer_name=submodule_steer_name,
+                submodule_probe_name=submodule_probe_name,
+                dictionary=dictionary,
+                probe=probes_dict[eval_concept],
+                sentences=sentences,
+                intervention_indices=intervention_indices,
+                intervention_type=intervention_type,
+                intervention_strength=intervention_strength,
+                use_sparsemax=use_sparsemax,
+                batch_size=batch_size,
+                scaler=scaler,
+            )
+
+            # Compute ΔLogOdds
+            delta = intervention_logits - baseline_logits_dict[eval_concept]
+            delta_logodds_matrix[steer_idx, eval_idx] = delta.mean()
+
+    return delta_logodds_matrix
+
+
+def plot_causal_intervention_matrix(delta_logodds_matrix, concept_names, output_path=None, title="Causal Intervention Matrix"):
+    """
+    Plot the causal intervention heatmap.
+
+    Args:
+        delta_logodds_matrix: (n_concepts, n_concepts) matrix of ΔLogOdds
+        concept_names: List of concept names
+        output_path: Path to save plot (optional)
+        title: Plot title
+    """
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # Create heatmap
+    sns.heatmap(
+        delta_logodds_matrix,
+        annot=True,
+        fmt=".2f",
+        cmap="RdBu_r",
+        center=0.0,
+        xticklabels=concept_names,
+        yticklabels=concept_names,
+        cbar_kws={'label': 'ΔLogOdds'},
+        ax=ax
+    )
+
+    ax.set_xlabel('Eval Concept', fontsize=12)
+    ax.set_ylabel('Steer Concept', fontsize=12)
+    ax.set_title(title, fontsize=14)
+
+    plt.xticks(rotation=45, ha='right')
+    plt.yticks(rotation=0)
+    plt.tight_layout()
+
+    if output_path:
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        print(f"Saved plot to {output_path}")
+
+    return fig
+
+
 def evaluate_sentence_labels(
     model_path: Path,
     threshold: float = 0.1,
@@ -1493,6 +1776,32 @@ def evaluate_sentence_labels(
     return results
 
 
+def get_submodule_with_index(model, submodule_name):
+    """
+    Get submodule, handling both attribute and index notation.
+
+    This handles ModuleList indexing (e.g., model.layers[25] for Gemma)
+    by parsing strings like "model.layers.25" and using index access when appropriate.
+
+    Args:
+        model: PyTorch model
+        submodule_name: Dot-separated path (e.g., "model.layers.25")
+
+    Returns:
+        The requested submodule
+    """
+    parts = submodule_name.split('.')
+    current = model
+    for part in parts:
+        if part.isdigit():
+            # It's an index into a ModuleList/Sequential
+            current = current[int(part)]
+        else:
+            # It's an attribute
+            current = getattr(current, part)
+    return current
+
+
 def run_k_sweep_attribution(args):
     """
     Run k-sweep using gradient attribution method.
@@ -1583,7 +1892,7 @@ def run_k_sweep_attribution(args):
 
     # Extract residual stream activations from language model for probe training
     print("\nExtracting residual stream activations from language model...")
-    submodule_probe = lm_model.get_submodule(args.submodule_probe)
+    submodule_probe = get_submodule_with_index(lm_model, args.submodule_probe)
     residual_acts_list = []
 
     def _capture_residual(_module, _input, _output):
@@ -1856,6 +2165,30 @@ def main():
         type=Path,
         default=None,
         help="Path to save the k-sweep plots (e.g., mcc_vs_k.png)",
+    )
+    parser.add_argument(
+        "--causal-intervention",
+        action="store_true",
+        help="Run causal intervention experiment (requires --sweep-k-attribution)",
+    )
+    parser.add_argument(
+        "--intervention-type",
+        type=str,
+        choices=["zero", "amplify", "ablate"],
+        default="zero",
+        help="Type of intervention to perform (default: zero)",
+    )
+    parser.add_argument(
+        "--intervention-strength",
+        type=float,
+        default=2.0,
+        help="Strength for amplify intervention (default: 2.0)",
+    )
+    parser.add_argument(
+        "--intervention-output",
+        type=Path,
+        default=None,
+        help="Path to save causal intervention matrix plot (e.g., intervention_matrix.png)",
     )
 
     args = parser.parse_args()
