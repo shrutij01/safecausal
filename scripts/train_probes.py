@@ -833,8 +833,7 @@ def get_attributions_w_hooks(
         if use_sparsemax:
             # Flatten for sparsemax/MP models
             x_hat_flat, f_flat = dictionary(
-                resid_stream.flatten(start_dim=0, end_dim=1),
-                return_hidden=True,
+                resid_stream.flatten(start_dim=0, end_dim=1)
             )
             x_hat = x_hat_flat.view(
                 resid_stream.shape[0], resid_stream.shape[1], -1
@@ -844,7 +843,7 @@ def get_attributions_w_hooks(
             f_flat.retain_grad()
             cache["f_flat"] = f_flat
         else:
-            x_hat, f = dictionary(resid_stream, return_hidden=True)
+            x_hat, f = dictionary(resid_stream)
 
         if not f.requires_grad:
             f.requires_grad_(True)
