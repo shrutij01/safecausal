@@ -952,19 +952,34 @@ def get_attributions_w_hooks(
 
     # Apply probe weights in PyTorch to maintain gradient flow
     # probe is a sklearn LogisticRegression, extract weights
-    # For binary classification: coef_ shape is (1, n_features), we need (n_features,)
-    # For multiclass: coef_ shape is (n_classes, n_features), select specific class
+    # For binary (2 classes): coef_ shape is (1, n_features)
+    #   - Class 0 logit: -coef_[0] - intercept_[0]
+    #   - Class 1 logit: +coef_[0] + intercept_[0]
+    # For multiclass (>2 classes): coef_ shape is (n_classes, n_features)
+    #   - Class i logit: coef_[i] + intercept_[i]
     # Use same dtype as model activations
     if logit_idx is not None:
-        # Multiclass: select specific class weights
-        probe_weights = t.tensor(
-            probe.coef_[logit_idx], dtype=submod_acts.dtype
-        ).to(model.device)
-        probe_bias = t.tensor(probe.intercept_[logit_idx], dtype=submod_acts.dtype).to(
-            model.device
-        )
+        # Check if binary (2 classes) or true multiclass (>2 classes)
+        if probe.coef_.shape[0] == 1:
+            # Binary classification with 2 classes
+            # Class 0: use negative weights, Class 1: use positive weights
+            sign = -1.0 if logit_idx == 0 else 1.0
+            probe_weights = t.tensor(
+                sign * probe.coef_[0], dtype=submod_acts.dtype
+            ).to(model.device)
+            probe_bias = t.tensor(sign * probe.intercept_[0], dtype=submod_acts.dtype).to(
+                model.device
+            )
+        else:
+            # True multiclass: select specific class weights
+            probe_weights = t.tensor(
+                probe.coef_[logit_idx], dtype=submod_acts.dtype
+            ).to(model.device)
+            probe_bias = t.tensor(probe.intercept_[logit_idx], dtype=submod_acts.dtype).to(
+                model.device
+            )
     else:
-        # Binary: squeeze to get (n_features,)
+        # No logit_idx specified: binary case, use positive direction
         probe_weights = t.tensor(
             probe.coef_.squeeze(), dtype=submod_acts.dtype
         ).to(model.device)
@@ -1643,13 +1658,21 @@ def get_probe_logits_with_intervention(
 
         # Get probe logits (sklearn needs float32/float64)
         logits = probe.decision_function(submod_acts.cpu().float().numpy())
+
+        # For binary probes (2 classes), decision_function returns (n_samples,)
+        # When multiclass=True, we need to expand to (n_samples, 2) with both class logits
+        if multiclass and logits.ndim == 1:
+            # Binary probe: expand to 2-class format
+            # Class 0 logit: -logits, Class 1 logit: +logits
+            logits = np.stack([-logits, logits], axis=1)
+
         all_logits.append(logits)
 
     result = np.concatenate(all_logits, axis=0)
 
     # Handle binary vs multiclass output
     if not multiclass and result.ndim > 1:
-        # Binary case: squeeze to (n_samples,)
+        # User wants binary output but probe is multiclass: squeeze
         result = result.squeeze()
 
     return result
