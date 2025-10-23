@@ -2109,6 +2109,38 @@ def run_causal_intervention_experiment(args):
     print(f"Submodule steer: {args.submodule_steer}")
     print(f"Submodule probe: {args.submodule_probe}")
 
+    # Determine which concepts/groups are needed early for optimization
+    concepts_needed = set()
+    if args.intervention_output:
+        # Heatmap needs all concepts
+        for group_name, group_info in multiclass_train.items():
+            for concept_name in group_info["concept_names"]:
+                concepts_needed.add(concept_name)
+    elif args.steering_curves:
+        # Only need concepts in steering curves
+        for pair_str in args.steering_curves.split(';'):
+            concepts = pair_str.strip().split(',')
+            if len(concepts) == 2:
+                concepts_needed.add(concepts[0].strip())
+                concepts_needed.add(concepts[1].strip())
+    else:
+        # Neither specified, need all
+        for group_name, group_info in multiclass_train.items():
+            for concept_name in group_info["concept_names"]:
+                concepts_needed.add(concept_name)
+
+    # Determine which groups we need to train probes for
+    groups_needed = set()
+    for group_name, group_info in multiclass_train.items():
+        for concept_name in group_info["concept_names"]:
+            if concept_name in concepts_needed:
+                groups_needed.add(group_name)
+                break  # Only need to find one match per group
+
+    print(f"\nOptimization: Training probes for {len(groups_needed)}/{len(multiclass_train)} groups")
+    print(f"Groups needed: {sorted(groups_needed)}")
+    print(f"Concepts needed: {sorted(concepts_needed)}")
+
     # Extract residual stream activations for probe training
     print("\nExtracting residual stream activations from language model...")
     submodule_probe = get_submodule_with_index(lm_model, args.submodule_probe)
@@ -2145,10 +2177,15 @@ def run_causal_intervention_experiment(args):
         f"Normalized residual activations (mean={residual_acts_train_normalized.mean():.4f}, std={residual_acts_train_normalized.std():.4f})"
     )
 
-    # Train multiclass probes for each group
+    # Train multiclass probes for each group (only for needed groups)
     print("\nTraining multiclass probes on residual stream...")
     probes_dict = {}  # group_name -> probe
     for group_name, group_info in multiclass_train.items():
+        # Skip groups we don't need
+        if group_name not in groups_needed:
+            print(f"  {group_name}: Skipped (not needed)")
+            continue
+
         probe = LogisticRegression(
             random_state=args.seed,
             max_iter=1000,
@@ -2167,9 +2204,8 @@ def run_causal_intervention_experiment(args):
         )
 
     # Get top-1 feature for each class using gradient attribution
-    print(
-        f"\nComputing gradient attribution to find top-1 feature per class..."
-    )
+    print(f"\nComputing gradient attribution for {len(concepts_needed)} concepts...")
+    print(f"Concepts: {sorted(concepts_needed)}")
     top_features_dict = {}  # (group_name, class_idx) -> feature_idx
     feature_signs_dict = {}  # (group_name, class_idx) -> sign (+1 or -1)
 
@@ -2177,6 +2213,11 @@ def run_causal_intervention_experiment(args):
         probe = probes_dict[group_name]
         for class_idx, class_name in enumerate(group_info["class_names"]):
             full_name = group_info["concept_names"][class_idx]
+
+            # Skip if this concept is not needed
+            if full_name not in concepts_needed:
+                continue
+
             print(f"  {full_name} (class {class_idx} of {group_name})...")
 
             _, top_indices, all_scores = find_top_k_features_by_attribution(
