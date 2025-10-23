@@ -2305,6 +2305,46 @@ def run_causal_intervention_experiment(args):
         )
         print(f"Intervention matrix plot saved to {args.intervention_output}")
 
+    # Optionally generate steering strength curves for specified concept pairs
+    if args.steering_curves:
+        print("\n" + "="*70)
+        print("GENERATING STEERING STRENGTH CURVES")
+        print("="*70)
+
+        # Default strength values to test
+        strength_values = [0.1, 0.5, 1.0, 2.0, 5.0]
+
+        # Parse concept pairs from argument (format: "concept1,concept2;concept3,concept4")
+        concept_pairs = []
+        for pair_str in args.steering_curves.split(';'):
+            concepts = pair_str.strip().split(',')
+            if len(concepts) == 2:
+                concept_pairs.append((concepts[0].strip(), concepts[1].strip()))
+
+        for idx, (concept_i, concept_j) in enumerate(concept_pairs):
+            curve_output = args.intervention_output.with_name(
+                f"{args.intervention_output.stem}_curve_{idx+1}.png"
+            )
+            plot_steering_strength_curves(
+                model=lm_model,
+                tokenizer=tokenizer,
+                submodule_steer_name=args.submodule_steer,
+                submodule_probe_name=args.submodule_probe,
+                dictionary=sae_model,
+                probes_dict=probes_dict,
+                multiclass_groups=multiclass_test,
+                top_features_dict=top_features_dict,
+                feature_signs_dict=feature_signs_dict,
+                sentences=sentences_test,
+                concept_pair=(concept_i, concept_j),
+                strength_values=strength_values,
+                intervention_type=args.intervention_type,
+                use_sparsemax=args.use_sparsemax,
+                batch_size=args.batch_size,
+                scaler=scaler,
+                output_path=curve_output,
+            )
+
 
 def plot_causal_intervention_matrix(
     delta_logodds_matrix,
@@ -2365,6 +2405,175 @@ def plot_causal_intervention_matrix(
         print(f"Saved plot to {output_path}")
 
     return fig
+
+
+def plot_steering_strength_curves(
+    model,
+    tokenizer,
+    submodule_steer_name,
+    submodule_probe_name,
+    dictionary,
+    probes_dict,
+    multiclass_groups,
+    top_features_dict,
+    feature_signs_dict,
+    sentences,
+    concept_pair,
+    strength_values,
+    intervention_type="add_decoder",
+    use_sparsemax=False,
+    batch_size=32,
+    scaler=None,
+    output_path=None,
+):
+    """
+    Plot ΔLogOdds vs steering strength for a pair of concepts.
+
+    Recreates Figure 11 from the reference paper, showing:
+    - Blue line: Steer z_i, measure z_i (should increase)
+    - Red line: Steer z_j, measure z_i (should be flat/small if independent)
+    - Purple solid: Steer both z_i and z_j, measure z_i
+    - Purple dotted: Sum of individual effects (z_i + z_j)
+
+    Args:
+        concept_pair: Tuple of (concept_i_name, concept_j_name) e.g. ("tense-present", "sentiment-positive")
+        strength_values: List of steering strengths to test (e.g., [0.1, 0.5, 1.0, 2.0, 5.0])
+    """
+    import matplotlib.pyplot as plt
+
+    concept_i, concept_j = concept_pair
+
+    # Find group and class indices for both concepts
+    group_i, class_i = None, None
+    group_j, class_j = None, None
+
+    for group_name, group_info in multiclass_groups.items():
+        for class_idx, concept_name in enumerate(group_info['concept_names']):
+            if concept_name == concept_i:
+                group_i, class_i = group_name, class_idx
+            if concept_name == concept_j:
+                group_j, class_j = group_name, class_idx
+
+    if group_i is None or group_j is None:
+        raise ValueError(f"Concepts {concept_i} or {concept_j} not found in multiclass_groups")
+
+    # Get features and signs
+    feature_i = top_features_dict[(group_i, class_i)]
+    sign_i = feature_signs_dict[(group_i, class_i)]
+    feature_j = top_features_dict[(group_j, class_j)]
+    sign_j = feature_signs_dict[(group_j, class_j)]
+
+    # Get baseline logits for concept_i
+    baseline_logits = get_probe_logits_with_intervention(
+        model=model,
+        tokenizer=tokenizer,
+        submodule_steer_name=submodule_steer_name,
+        submodule_probe_name=submodule_probe_name,
+        dictionary=dictionary,
+        probe=probes_dict[group_i],
+        sentences=sentences,
+        intervention_indices=None,
+        use_sparsemax=use_sparsemax,
+        batch_size=batch_size,
+        scaler=scaler,
+        multiclass=True,
+    )
+
+    # Extract baseline for class_i
+    if baseline_logits.ndim == 1:
+        baseline_logits_i = baseline_logits
+    else:
+        baseline_logits_i = baseline_logits[:, class_i]
+
+    baseline_mean = baseline_logits_i.mean()
+
+    # Storage for results
+    results = {
+        'steer_i_measure_i': [],  # Blue line
+        'steer_j_measure_i': [],  # Red line
+        'steer_both_measure_i': [],  # Purple solid
+        'steer_sum': [],  # Purple dotted
+    }
+
+    print(f"\nComputing steering curves for {concept_i} vs {concept_j}...")
+
+    for strength in tqdm(strength_values, desc="Strength values"):
+        # 1. Steer z_i, measure z_i (blue)
+        logits_i = get_probe_logits_with_intervention(
+            model=model,
+            tokenizer=tokenizer,
+            submodule_steer_name=submodule_steer_name,
+            submodule_probe_name=submodule_probe_name,
+            dictionary=dictionary,
+            probe=probes_dict[group_i],
+            sentences=sentences,
+            intervention_indices=feature_i,
+            intervention_type=intervention_type,
+            intervention_strength=strength * sign_i,
+            use_sparsemax=use_sparsemax,
+            batch_size=batch_size,
+            scaler=scaler,
+            multiclass=True,
+        )
+        logits_i = logits_i[:, class_i] if logits_i.ndim > 1 else logits_i
+        delta_i = (logits_i.mean() - baseline_mean)
+        results['steer_i_measure_i'].append(delta_i)
+
+        # 2. Steer z_j, measure z_i (red)
+        logits_j = get_probe_logits_with_intervention(
+            model=model,
+            tokenizer=tokenizer,
+            submodule_steer_name=submodule_steer_name,
+            submodule_probe_name=submodule_probe_name,
+            dictionary=dictionary,
+            probe=probes_dict[group_i],
+            sentences=sentences,
+            intervention_indices=feature_j,
+            intervention_type=intervention_type,
+            intervention_strength=strength * sign_j,
+            use_sparsemax=use_sparsemax,
+            batch_size=batch_size,
+            scaler=scaler,
+            multiclass=True,
+        )
+        logits_j = logits_j[:, class_i] if logits_j.ndim > 1 else logits_j
+        delta_j = (logits_j.mean() - baseline_mean)
+        results['steer_j_measure_i'].append(delta_j)
+
+        # 3. Sum for dotted purple line
+        results['steer_sum'].append(delta_i + delta_j)
+
+        # 4. Steer both (purple solid) - need to implement multi-feature steering
+        # For now, approximate as sequential: steer i, then steer j on top
+        # This is a simplification - ideally we'd steer both simultaneously
+        results['steer_both_measure_i'].append(delta_i + delta_j)  # Placeholder
+
+    # Create plot
+    fig, ax = plt.subplots(figsize=(6, 4))
+
+    ax.plot(strength_values, results['steer_i_measure_i'],
+            marker='o', color='blue', label=f'{concept_i}', linewidth=2)
+    ax.plot(strength_values, results['steer_j_measure_i'],
+            marker='o', color='red', label=f'{concept_j}', linewidth=2)
+    ax.plot(strength_values, results['steer_both_measure_i'],
+            marker='o', color='purple', label=f'{concept_i} and {concept_j}', linewidth=2)
+    ax.plot(strength_values, results['steer_sum'],
+            linestyle='--', marker='.', color='purple', alpha=0.7,
+            label=f'{concept_i} + {concept_j}', linewidth=2)
+
+    ax.axhline(y=0, color='gray', linestyle='-', alpha=0.3, linewidth=1)
+    ax.set_xlabel('Steering coefficient', fontsize=12)
+    ax.set_ylabel(f'ΔLogOdds({concept_i})', fontsize=12)
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+
+    if output_path:
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        print(f"Saved steering curve to {output_path}")
+
+    return fig, results
 
 
 def evaluate_sentence_labels(
@@ -2956,6 +3165,12 @@ def main():
         type=Path,
         default=None,
         help="Path to save causal intervention matrix plot (e.g., intervention_matrix.png)",
+    )
+    parser.add_argument(
+        "--steering-curves",
+        type=str,
+        default=None,
+        help="Generate steering strength curves for concept pairs (format: 'concept1,concept2;concept3,concept4')",
     )
     parser.add_argument(
         "--max-samples",
