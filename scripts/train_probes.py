@@ -1099,8 +1099,13 @@ def find_top_k_features_by_attribution(
     # Aggregate across all examples: (num_examples, features) -> (features,)
     all_scores = acts_all.sum(dim=0)
 
-    # Select top k features
-    top_k_scores, top_k_indices = t.topk(all_scores, k=k)
+    # Select top k features by ABSOLUTE magnitude (not just largest)
+    # This is important because gradient attribution can be negative
+    abs_scores = all_scores.abs()
+    _, top_k_indices = t.topk(abs_scores, k=k)
+
+    # Get the actual scores (with sign preserved) for the selected indices
+    top_k_scores = all_scores[top_k_indices]
 
     return top_k_scores, top_k_indices, all_scores
 
