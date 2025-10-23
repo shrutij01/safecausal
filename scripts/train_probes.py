@@ -2210,6 +2210,10 @@ def run_causal_intervention_experiment(args):
     feature_signs_dict = {}  # (group_name, class_idx) -> sign (+1 or -1)
 
     for group_name, group_info in multiclass_train.items():
+        # Skip if we didn't train a probe for this group
+        if group_name not in probes_dict:
+            continue
+
         probe = probes_dict[group_name]
         for class_idx, class_name in enumerate(group_info["class_names"]):
             full_name = group_info["concept_names"][class_idx]
