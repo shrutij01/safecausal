@@ -967,17 +967,17 @@ def get_attributions_w_hooks(
             probe_weights = t.tensor(
                 sign * probe.coef_[0], dtype=submod_acts.dtype
             ).to(model.device)
-            probe_bias = t.tensor(sign * probe.intercept_[0], dtype=submod_acts.dtype).to(
-                model.device
-            )
+            probe_bias = t.tensor(
+                sign * probe.intercept_[0], dtype=submod_acts.dtype
+            ).to(model.device)
         else:
             # True multiclass: select specific class weights
             probe_weights = t.tensor(
                 probe.coef_[logit_idx], dtype=submod_acts.dtype
             ).to(model.device)
-            probe_bias = t.tensor(probe.intercept_[logit_idx], dtype=submod_acts.dtype).to(
-                model.device
-            )
+            probe_bias = t.tensor(
+                probe.intercept_[logit_idx], dtype=submod_acts.dtype
+            ).to(model.device)
     else:
         # No logit_idx specified: binary case, use positive direction
         probe_weights = t.tensor(
@@ -2198,18 +2198,27 @@ def run_causal_intervention_experiment(args):
 
             # Determine sign: does adding decoder direction increase this class's logit?
             # Method: compute dot product of decoder direction with probe weights for this class
-            decoder_vec = sae_model.decoder.weight[:, top_feature_idx].detach().cpu().numpy()
+            decoder_vec = (
+                sae_model.decoder.weight[:, top_feature_idx]
+                .detach()
+                .cpu()
+                .numpy()
+            )
 
             if probe.coef_.shape[0] == 1:
                 # Binary probe: class 0 uses -coef_[0], class 1 uses +coef_[0]
-                probe_weights_for_class = probe.coef_[0] if class_idx == 1 else -probe.coef_[0]
+                probe_weights_for_class = (
+                    probe.coef_[0] if class_idx == 1 else -probe.coef_[0]
+                )
             else:
                 # Multiclass probe: class i uses coef_[i]
                 probe_weights_for_class = probe.coef_[class_idx]
 
             # Sign: positive if decoder direction aligns with probe weights
             dot_product = np.dot(decoder_vec, probe_weights_for_class)
-            feature_signs_dict[(group_name, class_idx)] = 1.0 if dot_product > 0 else -1.0
+            feature_signs_dict[(group_name, class_idx)] = (
+                1.0 if dot_product > 0 else -1.0
+            )
 
             print(
                 f"    Top feature: {top_feature_idx} (sign: {feature_signs_dict[(group_name, class_idx)]:+.0f}, dot={dot_product:.2f})"
@@ -2287,7 +2296,7 @@ def run_causal_intervention_experiment(args):
         print(f"\nIntervention matrix data saved to {matrix_json_path}")
 
         # Save plot
-        plot_title = f"Causal Intervention ({args.intervention_type}, strength={args.intervention_strength})"
+        # plot_title = f"Causal Intervention ({args.intervention_type}, strength={args.intervention_strength})"
         plot_causal_intervention_matrix(
             delta_logodds_matrix,
             class_names_flat,
@@ -2340,11 +2349,11 @@ def plot_causal_intervention_matrix(
         cbar_kws={"label": "ΔLogOdds"},
         ax=ax,
         linewidths=0.5,  # Add gridlines
-        linecolor='black',
+        linecolor="black",
     )
 
-    ax.set_xlabel("Eval Concept", fontsize=12)
-    ax.set_ylabel("Steer Concept", fontsize=12)
+    # ax.set_xlabel("Eval Concept", fontsize=12)
+    # ax.set_ylabel("Steer Concept", fontsize=12)
     ax.set_title(title, fontsize=14)
 
     plt.xticks(rotation=45, ha="right")
