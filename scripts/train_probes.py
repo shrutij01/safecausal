@@ -2328,18 +2328,27 @@ def run_causal_intervention_experiment(args):
             if len(concepts) == 2:
                 concept_pairs.append((concepts[0].strip(), concepts[1].strip()))
 
+        # Extract model name from model path (e.g., "labeled-sentences_seed0" from path)
+        model_name = args.model_path.name
+
         # Determine base output path for curves
         if args.intervention_output:
             base_output = args.intervention_output
         else:
             # Default to outputs/steering_curve if no intervention output specified
-            base_output = Path("outputs/steering_curve.png")
+            base_output = Path(f"outputs/steering_curve_{model_name}.png")
             base_output.parent.mkdir(parents=True, exist_ok=True)
 
         for idx, (concept_i, concept_j) in enumerate(concept_pairs):
-            curve_output = base_output.with_name(
-                f"{base_output.stem}_curve_{idx+1}.png"
-            )
+            # Include model name in curve filename
+            if args.intervention_output:
+                curve_output = base_output.with_name(
+                    f"{base_output.stem}_{model_name}_curve_{idx+1}.png"
+                )
+            else:
+                curve_output = base_output.with_name(
+                    f"{base_output.stem}_curve_{idx+1}.png"
+                )
             plot_steering_strength_curves(
                 model=lm_model,
                 tokenizer=tokenizer,
