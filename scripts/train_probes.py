@@ -2685,6 +2685,28 @@ def evaluate_sentence_labels(
     return results
 
 
+def infer_submodule_name(model_name, layer):
+    """
+    Infer the submodule name from model name and layer number.
+
+    Args:
+        model_name: HuggingFace model name (e.g., "EleutherAI/pythia-70m-deduped")
+        layer: Layer number (int)
+
+    Returns:
+        Submodule name string (e.g., "gpt_neox.layers.5" or "model.layers.25")
+    """
+    if "pythia" in model_name.lower():
+        return f"gpt_neox.layers.{layer}"
+    elif "gemma" in model_name.lower():
+        return f"model.layers.{layer}"
+    else:
+        raise ValueError(
+            f"Unknown model architecture for {model_name}. "
+            f"Please specify --submodule-steer and --submodule-probe manually."
+        )
+
+
 def get_submodule_with_index(model, submodule_name):
     """
     Get submodule, handling both attribute and index notation.
@@ -2793,6 +2815,15 @@ def run_k_sweep_attribution(args):
 
     print(f"Train: {len(train_idx)}, Test: {len(test_idx)}")
 
+    # Load SAE dictionary first to get model config
+    sae_model = load_model(args.model_path).to("cuda")
+    # Keep SAE in float32 for better numerical precision
+
+    # Infer LM model name from SAE config if not provided
+    if args.lm_model_name is None:
+        args.lm_model_name = sae_model.model_name
+        print(f"Inferred LM model from SAE config: {args.lm_model_name}")
+
     # Load language model
     print(f"\nLoading language model: {args.lm_model_name}")
     # Load in float32 for better numerical precision
@@ -2809,21 +2840,15 @@ def run_k_sweep_attribution(args):
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
-    # Load SAE dictionary
-    sae_model = load_model(args.model_path).to("cuda")
-    # Keep SAE in float32 for better numerical precision
-
-    # Determine submodule names
+    # Determine submodule names - infer from SAE config if not provided
     if args.submodule_steer is None:
-        # Infer from model
-        if "pythia" in args.lm_model_name:
-            args.submodule_steer = f"gpt_neox.layers.{sae_model.layer}"
-        elif "gemma" in args.lm_model_name:
-            args.submodule_steer = f"model.layers.{sae_model.layer}"
-        else:
-            raise ValueError(
-                "--submodule-steer must be specified for this model"
-            )
+        args.submodule_steer = infer_submodule_name(
+            sae_model.model_name, sae_model.layer
+        )
+        print(
+            f"Inferred submodule from SAE config: {args.submodule_steer} "
+            f"(model: {sae_model.model_name}, layer: {sae_model.layer})"
+        )
 
     if args.submodule_probe is None:
         args.submodule_probe = args.submodule_steer
@@ -3116,20 +3141,20 @@ def main():
     parser.add_argument(
         "--lm-model-name",
         type=str,
-        default="EleutherAI/pythia-70m-deduped",
-        help="Language model name for gradient attribution (default: pythia-70m-deduped)",
+        default=None,
+        help="Language model name for gradient attribution. If not provided, automatically inferred from SAE config.",
     )
     parser.add_argument(
         "--submodule-steer",
         type=str,
         default=None,
-        help="Submodule name for SAE steering (e.g., gpt_neox.layers.5)",
+        help="Submodule name for SAE steering (e.g., gpt_neox.layers.5). If not provided, automatically inferred from SAE config.",
     )
     parser.add_argument(
         "--submodule-probe",
         type=str,
         default=None,
-        help="Submodule name for probe (e.g., gpt_neox.layers.5)",
+        help="Submodule name for probe (e.g., gpt_neox.layers.5). If not provided, defaults to same as --submodule-steer.",
     )
     parser.add_argument(
         "--use-sparsemax",
