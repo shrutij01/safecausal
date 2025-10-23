@@ -2301,7 +2301,7 @@ def run_causal_intervention_experiment(args):
             delta_logodds_matrix,
             class_names_flat,
             output_path=args.intervention_output,
-            title=plot_title,
+            # title=plot_title,
         )
         print(f"Intervention matrix plot saved to {args.intervention_output}")
 
@@ -2354,7 +2354,7 @@ def plot_causal_intervention_matrix(
 
     # ax.set_xlabel("Eval Concept", fontsize=12)
     # ax.set_ylabel("Steer Concept", fontsize=12)
-    ax.set_title(title, fontsize=14)
+    # ax.set_title(title, fontsize=14)
 
     plt.xticks(rotation=45, ha="right")
     plt.yticks(rotation=0)
