@@ -2224,45 +2224,52 @@ def run_causal_intervention_experiment(args):
                 f"    Top feature: {top_feature_idx} (sign: {feature_signs_dict[(group_name, class_idx)]:+.0f}, dot={dot_product:.2f})"
             )
 
-    # Compute causal intervention matrix (multiclass version)
-    delta_logodds_matrix, class_names_flat = (
-        compute_causal_intervention_matrix_multiclass(
-            model=lm_model,
-            tokenizer=tokenizer,
-            submodule_steer_name=args.submodule_steer,
-            submodule_probe_name=args.submodule_probe,
-            dictionary=sae_model,
-            probes_dict=probes_dict,
-            multiclass_groups=multiclass_test,
-            top_features_dict=top_features_dict,
-            feature_signs_dict=feature_signs_dict,
-            sentences=sentences_test,
-            intervention_type=args.intervention_type,
-            intervention_strength=args.intervention_strength,
-            use_sparsemax=args.use_sparsemax,
-            batch_size=args.batch_size,
-            scaler=scaler,
+    # Compute causal intervention matrix (only if needed for heatmap or if no steering curves requested)
+    # Steering curves compute their own interventions for specific pairs
+    if args.intervention_output or not args.steering_curves:
+        delta_logodds_matrix, class_names_flat = (
+            compute_causal_intervention_matrix_multiclass(
+                model=lm_model,
+                tokenizer=tokenizer,
+                submodule_steer_name=args.submodule_steer,
+                submodule_probe_name=args.submodule_probe,
+                dictionary=sae_model,
+                probes_dict=probes_dict,
+                multiclass_groups=multiclass_test,
+                top_features_dict=top_features_dict,
+                feature_signs_dict=feature_signs_dict,
+                sentences=sentences_test,
+                intervention_type=args.intervention_type,
+                intervention_strength=args.intervention_strength,
+                use_sparsemax=args.use_sparsemax,
+                batch_size=args.batch_size,
+                scaler=scaler,
+            )
         )
-    )
+    else:
+        print("\nSkipping heatmap matrix computation (only generating steering curves)")
+        delta_logodds_matrix = None
+        class_names_flat = None
 
-    # Print results
-    print("\n" + "=" * 70)
-    print("INTERVENTION MATRIX (ΔLogOdds)")
-    print("=" * 70)
+    # Print results (only if matrix was computed)
+    if delta_logodds_matrix is not None:
+        print("\n" + "=" * 70)
+        print("INTERVENTION MATRIX (ΔLogOdds)")
+        print("=" * 70)
 
-    # Print header
-    print(f"{'Steer Eval':20s}", end="")
-    for concept in class_names_flat:
-        print(f"{concept:>20s}", end="")
-    print()
-    print("-" * (20 + 20 * len(class_names_flat)))
-
-    # Print matrix rows
-    for i, steer_concept in enumerate(class_names_flat):
-        print(f"{steer_concept:20s}", end="")
-        for j, eval_concept in enumerate(class_names_flat):
-            print(f"{delta_logodds_matrix[i, j]:20.4f}", end="")
+        # Print header
+        print(f"{'Steer Eval':20s}", end="")
+        for concept in class_names_flat:
+            print(f"{concept:>20s}", end="")
         print()
+        print("-" * (20 + 20 * len(class_names_flat)))
+
+        # Print matrix rows
+        for i, steer_concept in enumerate(class_names_flat):
+            print(f"{steer_concept:20s}", end="")
+            for j, eval_concept in enumerate(class_names_flat):
+                print(f"{delta_logodds_matrix[i, j]:20.4f}", end="")
+            print()
 
     # Save results if output path provided
     if args.intervention_output:
@@ -2572,7 +2579,7 @@ def plot_steering_strength_curves(
     ax.axhline(y=0, color='gray', linestyle='-', alpha=0.3, linewidth=1)
     ax.set_xlabel('Steering coefficient', fontsize=12)
     ax.set_ylabel(f'ΔLogOdds({concept_i})', fontsize=12)
-    ax.legend(fontsize=10)
+    ax.legend(fontsize=10, loc='upper left', bbox_to_anchor=(1.02, 1))
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
