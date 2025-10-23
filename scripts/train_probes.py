@@ -2198,7 +2198,7 @@ def run_causal_intervention_experiment(args):
 
             # Determine sign: does adding decoder direction increase this class's logit?
             # Method: compute dot product of decoder direction with probe weights for this class
-            decoder_vec = sae_model.decoder.weight[:, top_feature_idx].cpu().numpy()
+            decoder_vec = sae_model.decoder.weight[:, top_feature_idx].detach().cpu().numpy()
 
             if probe.coef_.shape[0] == 1:
                 # Binary probe: class 0 uses -coef_[0], class 1 uses +coef_[0]
