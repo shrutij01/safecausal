@@ -2193,13 +2193,26 @@ def run_causal_intervention_experiment(args):
                 scaler=scaler,
                 logit_idx=class_idx,  # Which class logit to compute gradients for
             )
-            top_features_dict[(group_name, class_idx)] = top_indices.item()
-            # Store sign of attribution (positive means increase feature → increase logit)
-            feature_signs_dict[(group_name, class_idx)] = (
-                1.0 if all_scores[top_indices.item()] > 0 else -1.0
-            )
+            top_feature_idx = top_indices.item()
+            top_features_dict[(group_name, class_idx)] = top_feature_idx
+
+            # Determine sign: does adding decoder direction increase this class's logit?
+            # Method: compute dot product of decoder direction with probe weights for this class
+            decoder_vec = sae_model.decoder.weight[:, top_feature_idx].cpu().numpy()
+
+            if probe.coef_.shape[0] == 1:
+                # Binary probe: class 0 uses -coef_[0], class 1 uses +coef_[0]
+                probe_weights_for_class = probe.coef_[0] if class_idx == 1 else -probe.coef_[0]
+            else:
+                # Multiclass probe: class i uses coef_[i]
+                probe_weights_for_class = probe.coef_[class_idx]
+
+            # Sign: positive if decoder direction aligns with probe weights
+            dot_product = np.dot(decoder_vec, probe_weights_for_class)
+            feature_signs_dict[(group_name, class_idx)] = 1.0 if dot_product > 0 else -1.0
+
             print(
-                f"    Top feature: {top_indices.item()} (sign: {feature_signs_dict[(group_name, class_idx)]:+.0f})"
+                f"    Top feature: {top_feature_idx} (sign: {feature_signs_dict[(group_name, class_idx)]:+.0f}, dot={dot_product:.2f})"
             )
 
     # Compute causal intervention matrix (multiclass version)
@@ -2304,17 +2317,18 @@ def plot_causal_intervention_matrix(
 
     fig, ax = plt.subplots(figsize=(10, 8))
 
-    # Create heatmap
+    # Create heatmap (blue=positive, red=negative, no annotations)
     sns.heatmap(
         delta_logodds_matrix,
-        annot=True,
-        fmt=".2f",
-        cmap="RdBu_r",
+        annot=False,  # No numbers on heatmap
+        cmap="RdBu",  # Red for negative, Blue for positive (not reversed)
         center=0.0,
         xticklabels=concept_names,
         yticklabels=concept_names,
         cbar_kws={"label": "ΔLogOdds"},
         ax=ax,
+        linewidths=0.5,  # Add gridlines
+        linecolor='black',
     )
 
     ax.set_xlabel("Eval Concept", fontsize=12)
