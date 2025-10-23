@@ -2579,7 +2579,7 @@ def plot_steering_strength_curves(
     ax.axhline(y=0, color='gray', linestyle='-', alpha=0.3, linewidth=1)
     ax.set_xlabel('Steering coefficient', fontsize=12)
     ax.set_ylabel(f'ΔLogOdds({concept_i})', fontsize=12)
-    ax.legend(fontsize=10, loc='upper left', bbox_to_anchor=(1.02, 1))
+    ax.legend(fontsize=10, loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=2)
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
