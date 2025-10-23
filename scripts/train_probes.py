@@ -2317,12 +2317,24 @@ def plot_causal_intervention_matrix(
 
     fig, ax = plt.subplots(figsize=(10, 8))
 
+    # Robust normalization: clip to ±1.5σ to reveal patterns while preserving relative magnitudes
+    mean_val = delta_logodds_matrix.mean()
+    std_val = delta_logodds_matrix.std()
+    vmax = mean_val + 1.5 * std_val
+    vmin = mean_val - 1.5 * std_val
+
+    # Ensure symmetric around zero for diverging colormap
+    vabs = max(abs(vmin), abs(vmax))
+    vmin, vmax = -vabs, vabs
+
     # Create heatmap (blue=positive, red=negative, no annotations)
     sns.heatmap(
         delta_logodds_matrix,
         annot=False,  # No numbers on heatmap
         cmap="RdBu",  # Red for negative, Blue for positive (not reversed)
         center=0.0,
+        vmin=vmin,  # Clip outliers
+        vmax=vmax,
         xticklabels=concept_names,
         yticklabels=concept_names,
         cbar_kws={"label": "ΔLogOdds"},
