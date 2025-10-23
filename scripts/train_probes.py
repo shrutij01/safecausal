@@ -1855,16 +1855,7 @@ def run_causal_intervention_experiment(args):
 
     # Save results if output path provided
     if args.intervention_output:
-        # Save plot
-        plot_title = f"Causal Intervention ({args.intervention_type}, strength={args.intervention_strength})"
-        plot_causal_intervention_matrix(
-            delta_logodds_matrix,
-            concept_list,
-            output_path=args.intervention_output,
-            title=plot_title
-        )
-
-        # Save raw matrix to JSON
+        # Save raw matrix to JSON first (before plotting)
         matrix_json_path = args.intervention_output.with_suffix('.json')
         save_data = {
             "intervention_type": args.intervention_type,
@@ -1875,8 +1866,17 @@ def run_causal_intervention_experiment(args):
         }
         with open(matrix_json_path, 'w') as f:
             json.dump(save_data, f, indent=2)
-        print(f"\nIntervention matrix plot saved to {args.intervention_output}")
-        print(f"Intervention matrix data saved to {matrix_json_path}")
+        print(f"\nIntervention matrix data saved to {matrix_json_path}")
+
+        # Save plot
+        plot_title = f"Causal Intervention ({args.intervention_type}, strength={args.intervention_strength})"
+        plot_causal_intervention_matrix(
+            delta_logodds_matrix,
+            concept_list,
+            output_path=args.intervention_output,
+            title=plot_title
+        )
+        print(f"Intervention matrix plot saved to {args.intervention_output}")
 
 
 def plot_causal_intervention_matrix(delta_logodds_matrix, concept_names, output_path=None, title="Causal Intervention Matrix"):
