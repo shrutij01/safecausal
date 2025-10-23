@@ -1840,7 +1840,7 @@ def run_causal_intervention_experiment(args):
     concept_list = list(labels_train_dict.keys())
 
     # Print header
-    print(f"{'Steer \\ Eval':20s}", end="")
+    print(f"{'Steer Eval':20s}", end="")
     for concept in concept_list:
         print(f"{concept:>20s}", end="")
     print()
