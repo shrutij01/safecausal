@@ -2326,11 +2326,11 @@ def plot_causal_intervention_matrix(
 
     fig, ax = plt.subplots(figsize=(10, 8))
 
-    # Robust normalization: clip to ±1.5σ to reveal patterns while preserving relative magnitudes
+    # Robust normalization: clip to ±2.5σ to show lighter colors for weaker effects
     mean_val = delta_logodds_matrix.mean()
     std_val = delta_logodds_matrix.std()
-    vmax = mean_val + 1.5 * std_val
-    vmin = mean_val - 1.5 * std_val
+    vmax = mean_val + 2.5 * std_val
+    vmin = mean_val - 2.5 * std_val
 
     # Ensure symmetric around zero for diverging colormap
     vabs = max(abs(vmin), abs(vmax))
