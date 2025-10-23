@@ -953,13 +953,24 @@ def get_attributions_w_hooks(
     # Apply probe weights in PyTorch to maintain gradient flow
     # probe is a sklearn LogisticRegression, extract weights
     # For binary classification: coef_ shape is (1, n_features), we need (n_features,)
+    # For multiclass: coef_ shape is (n_classes, n_features), select specific class
     # Use same dtype as model activations
-    probe_weights = t.tensor(
-        probe.coef_.squeeze(), dtype=submod_acts.dtype
-    ).to(model.device)
-    probe_bias = t.tensor(probe.intercept_[0], dtype=submod_acts.dtype).to(
-        model.device
-    )
+    if logit_idx is not None:
+        # Multiclass: select specific class weights
+        probe_weights = t.tensor(
+            probe.coef_[logit_idx], dtype=submod_acts.dtype
+        ).to(model.device)
+        probe_bias = t.tensor(probe.intercept_[logit_idx], dtype=submod_acts.dtype).to(
+            model.device
+        )
+    else:
+        # Binary: squeeze to get (n_features,)
+        probe_weights = t.tensor(
+            probe.coef_.squeeze(), dtype=submod_acts.dtype
+        ).to(model.device)
+        probe_bias = t.tensor(probe.intercept_[0], dtype=submod_acts.dtype).to(
+            model.device
+        )
 
     # Compute logits maintaining gradients
     # submod_acts: (batch, n_features), probe_weights: (n_features,)
