@@ -987,6 +987,7 @@ def find_top_k_features_by_attribution(
     use_sparsemax=False,
     batch_size=32,
     scaler=None,
+    logit_idx=None,
 ):
     """
     Find top k SAE features using gradient attribution method.
@@ -1009,6 +1010,8 @@ def find_top_k_features_by_attribution(
         k: Number of top features to return
         use_sparsemax: Whether SAE uses sparsemax/MP activation
         batch_size: Number of sentences to process per batch
+        scaler: StandardScaler for normalizing activations (optional)
+        logit_idx: For multiclass probes, which class logit to compute gradients for (optional)
 
     Returns:
         Tuple of (top_k_scores, top_k_indices, all_scores):
@@ -1041,7 +1044,7 @@ def find_top_k_features_by_attribution(
             dictionary=dictionary,
             probe=probe,
             batch=batch,
-            logit_idx=None,
+            logit_idx=logit_idx,  # Pass through for multiclass support
             use_sparsemax=use_sparsemax,
             scaler=scaler,
         )
@@ -1158,6 +1161,7 @@ def sweep_k_values_for_plots(
     seed=42,
     verbose=True,
     compute_activation_mcc=False,
+    mcc_union_features=False,
 ):
     """
     Sweep over k values to create MCC vs k plots (single concept version).
@@ -1195,6 +1199,8 @@ def sweep_k_values_for_plots(
         verbose: Print progress
         compute_activation_mcc: If True, also compute activation-label MCC using
                                compute_correlation_matrix (needed for right plot)
+        mcc_union_features: If True, use union of top-k features across concepts for MCC.
+                           If False (default), compute MCC per concept and average.
 
     Returns:
         If single concept:
@@ -1216,6 +1222,7 @@ def sweep_k_values_for_plots(
             seed,
             verbose,
             compute_activation_mcc,
+            mcc_union_features,
         )
     else:
         return _sweep_k_single_concept(
@@ -1291,6 +1298,7 @@ def _sweep_k_multi_concept(
     seed,
     verbose,
     compute_activation_mcc,
+    mcc_union_features=False,
 ):
     """
     Helper for multi-concept k-sweep.
@@ -1298,6 +1306,10 @@ def _sweep_k_multi_concept(
     Trains one probe per concept and computes:
     1. Probe-label correlation for each concept (for left & middle plots)
     2. Optionally: Activation-label MCC using compute_correlation_matrix (for right plot)
+
+    Args:
+        mcc_union_features: If True, use union of top-k features across concepts for MCC.
+                           If False (default), compute MCC per concept and average.
     """
     results = {"k_values": np.array(k_values)}
 
@@ -1321,6 +1333,7 @@ def _sweep_k_multi_concept(
         k_values, desc="Sweeping k for all concepts", disable=not verbose
     ):
         concept_act_mccs = []
+        all_top_k_indices_set = set() if mcc_union_features else None
 
         for concept in labels_dict_train.keys():
             # Get top-k features for this concept
@@ -1329,22 +1342,23 @@ def _sweep_k_multi_concept(
                 all_scores = t.tensor(all_scores)
             _, top_k_indices = t.topk(all_scores, k=k)
 
-            # Compute activation-label MCC for this concept using only its top-k features
+            # Compute activation-label MCC
             if compute_activation_mcc:
-                # Extract activations for only this concept's top-k features
-                sae_acts_test_concept = sae_acts_test_tensor[:, top_k_indices]
+                if mcc_union_features:
+                    # Collect indices for union method
+                    all_top_k_indices_set.update(top_k_indices.tolist())
+                else:
+                    # Per-concept method: compute MCC using only this concept's top-k features
+                    sae_acts_test_concept = sae_acts_test_tensor[:, top_k_indices]
+                    single_concept_labels = {concept: labels_dict_test[concept]}
 
-                # Create single-concept label dict
-                single_concept_labels = {concept: labels_dict_test[concept]}
+                    corr_matrix_concept, _ = compute_correlation_matrix(
+                        sae_acts_test_concept, single_concept_labels
+                    )
 
-                # Compute correlation matrix: (k_features, 1_concept)
-                corr_matrix_concept, _ = compute_correlation_matrix(
-                    sae_acts_test_concept, single_concept_labels
-                )
-
-                # Take max absolute correlation across this concept's top-k features
-                max_corr_this_concept = corr_matrix_concept.abs().max().item()
-                concept_act_mccs.append(max_corr_this_concept)
+                    # Take max absolute correlation across this concept's top-k features
+                    max_corr_this_concept = corr_matrix_concept.abs().max().item()
+                    concept_act_mccs.append(max_corr_this_concept)
 
             # Train probe
             result = train_sparse_probe_on_top_k(
@@ -1368,9 +1382,25 @@ def _sweep_k_multi_concept(
                     f"k={k:3d}, {concept}: Probe Corr={result['correlation']:.4f}"
                 )
 
-        # Compute aggregate activation MCC as average of per-concept MCCs
+        # Compute aggregate activation MCC
         if compute_activation_mcc:
-            aggregate_mcc = np.mean(concept_act_mccs)
+            if mcc_union_features:
+                # Union method: use all top-k features across concepts
+                all_top_k_indices = sorted(list(all_top_k_indices_set))
+                sae_acts_test_union = sae_acts_test_tensor[:, all_top_k_indices]
+
+                # Compute correlation matrix: (features, concepts)
+                corr_matrix_union, _ = compute_correlation_matrix(
+                    sae_acts_test_union, labels_dict_test
+                )
+
+                # For each concept, take max correlation across all union features
+                max_corr_per_concept = corr_matrix_union.abs().max(dim=0).values
+                aggregate_mcc = max_corr_per_concept.mean().item()
+            else:
+                # Per-concept method: average the per-concept MCCs
+                aggregate_mcc = np.mean(concept_act_mccs)
+
             aggregate_mcc_list.append(aggregate_mcc)
 
     # Convert lists to arrays
@@ -1398,6 +1428,7 @@ def get_probe_logits_with_intervention(
     use_sparsemax=False,
     batch_size=32,
     scaler=None,
+    multiclass=False,
 ):
     """
     Get probe logits with optional intervention on SAE features.
@@ -1408,7 +1439,7 @@ def get_probe_logits_with_intervention(
         submodule_steer_name: Name of submodule to intervene on
         submodule_probe_name: Name of submodule to extract probe activations
         dictionary: SAE model
-        probe: Trained sklearn probe
+        probe: Trained sklearn probe (binary or multiclass)
         sentences: List of sentences
         intervention_indices: Indices of SAE features to intervene on (None = no intervention)
                              For "add_decoder", uses only the first index (top feature)
@@ -1421,9 +1452,13 @@ def get_probe_logits_with_intervention(
         use_sparsemax: Whether SAE uses sparsemax
         batch_size: Batch size for processing
         scaler: Optional StandardScaler for normalizing activations
+        multiclass: If True, return all class logits (n_samples, n_classes).
+                   If False, return binary logits (n_samples,) - squeezes if needed.
 
     Returns:
-        logits: Probe logits (n_samples,)
+        logits: Probe logits
+                - If multiclass=False: (n_samples,) for binary probes
+                - If multiclass=True: (n_samples, n_classes) for multiclass probes
     """
     submodule_steer = get_submodule_with_index(model, submodule_steer_name)
     submodule_probe = get_submodule_with_index(model, submodule_probe_name)
@@ -1549,7 +1584,14 @@ def get_probe_logits_with_intervention(
         logits = probe.decision_function(submod_acts.cpu().float().numpy())
         all_logits.append(logits)
 
-    return np.concatenate(all_logits, axis=0)
+    result = np.concatenate(all_logits, axis=0)
+
+    # Handle binary vs multiclass output
+    if not multiclass and result.ndim > 1:
+        # Binary case: squeeze to (n_samples,)
+        result = result.squeeze()
+
+    return result
 
 
 def compute_causal_intervention_matrix(
@@ -1658,22 +1700,212 @@ def compute_causal_intervention_matrix(
     return delta_logodds_matrix
 
 
+def compute_causal_intervention_matrix_multiclass(
+    model,
+    tokenizer,
+    submodule_steer_name,
+    submodule_probe_name,
+    dictionary,
+    probes_dict,
+    multiclass_groups,
+    top_features_dict,
+    feature_signs_dict,
+    sentences,
+    intervention_type="add_decoder",
+    intervention_strength=2.0,
+    use_sparsemax=False,
+    batch_size=32,
+    scaler=None,
+):
+    """
+    Compute causal intervention matrix for multiclass probes.
+
+    For each pair (steer_class, eval_class):
+    1. Get baseline logits for eval_class's group (no intervention)
+    2. Intervene on steer_class's top feature (with correct sign)
+    3. Get new logits for eval_class's group
+    4. Extract specific class logit
+    5. Compute ΔLogOdds = logits_after - logits_before
+
+    Args:
+        model: Language model
+        tokenizer: Tokenizer
+        submodule_steer_name: Submodule name for steering
+        submodule_probe_name: Submodule name for probe
+        dictionary: SAE model
+        probes_dict: Dict mapping group_name -> multiclass probe
+        multiclass_groups: Dict with group info (class_names, concept_names, labels)
+        top_features_dict: Dict mapping (group_name, class_idx) -> feature_idx
+        feature_signs_dict: Dict mapping (group_name, class_idx) -> sign (+1 or -1)
+        sentences: List of sentences to evaluate
+        intervention_type: "add_decoder" (only this makes sense with signs)
+        intervention_strength: Base strength (will be multiplied by sign)
+        use_sparsemax: Whether SAE uses sparsemax
+        batch_size: Batch size
+        scaler: Optional StandardScaler
+
+    Returns:
+        delta_logodds_matrix: (num_total_classes, num_total_classes) numpy array
+        class_names_flat: List of full class names corresponding to matrix indices
+    """
+    # Flatten all classes across all groups
+    class_names_flat = []
+    class_to_group = {}  # class_flat_idx -> (group_name, class_idx)
+
+    flat_idx = 0
+    for group_name, group_info in multiclass_groups.items():
+        for class_idx, concept_name in enumerate(group_info['concept_names']):
+            class_names_flat.append(concept_name)
+            class_to_group[flat_idx] = (group_name, class_idx)
+            flat_idx += 1
+
+    num_total_classes = len(class_names_flat)
+    delta_logodds_matrix = np.zeros((num_total_classes, num_total_classes))
+
+    print(f"\nComputing multiclass intervention matrix ({num_total_classes} x {num_total_classes})...")
+    print(f"Intervention type: {intervention_type}")
+    print(f"Base strength: {intervention_strength}")
+
+    # Get baseline logits for all groups (no intervention)
+    baseline_logits_dict = {}  # group_name -> logits array (n_samples, n_classes)
+    print("\nGetting baseline logits (no intervention)...")
+    for group_name, probe in tqdm(probes_dict.items(), desc="Baseline"):
+        baseline_logits = get_probe_logits_with_intervention(
+            model=model,
+            tokenizer=tokenizer,
+            submodule_steer_name=submodule_steer_name,
+            submodule_probe_name=submodule_probe_name,
+            dictionary=dictionary,
+            probe=probe,
+            sentences=sentences,
+            intervention_indices=None,  # No intervention
+            use_sparsemax=use_sparsemax,
+            batch_size=batch_size,
+            scaler=scaler,
+            multiclass=True,  # Return all class logits
+        )
+        baseline_logits_dict[group_name] = baseline_logits
+
+    # Compute interventions
+    print("\nComputing interventions...")
+    for steer_flat_idx in tqdm(range(num_total_classes), desc="Steer class"):
+        steer_group, steer_class_idx = class_to_group[steer_flat_idx]
+        steer_feature = top_features_dict[(steer_group, steer_class_idx)]
+        steer_sign = feature_signs_dict[(steer_group, steer_class_idx)]
+
+        # Adjust intervention strength by sign
+        signed_strength = intervention_strength * steer_sign
+
+        for eval_flat_idx in range(num_total_classes):
+            eval_group, eval_class_idx = class_to_group[eval_flat_idx]
+
+            # Get logits with intervention
+            intervention_logits = get_probe_logits_with_intervention(
+                model=model,
+                tokenizer=tokenizer,
+                submodule_steer_name=submodule_steer_name,
+                submodule_probe_name=submodule_probe_name,
+                dictionary=dictionary,
+                probe=probes_dict[eval_group],
+                sentences=sentences,
+                intervention_indices=steer_feature,
+                intervention_type=intervention_type,
+                intervention_strength=signed_strength,  # Use signed strength
+                use_sparsemax=use_sparsemax,
+                batch_size=batch_size,
+                scaler=scaler,
+                multiclass=True,  # Return all class logits
+            )
+
+            # Extract specific class logits
+            # intervention_logits shape: (n_samples, n_classes_in_group)
+            # We want logits for eval_class_idx
+            if intervention_logits.ndim == 1:
+                # Binary case, already scalar
+                eval_logits_after = intervention_logits
+                eval_logits_before = baseline_logits_dict[eval_group]
+            else:
+                # Multiclass case, extract column
+                eval_logits_after = intervention_logits[:, eval_class_idx]
+                eval_logits_before = baseline_logits_dict[eval_group][:, eval_class_idx]
+
+            # Compute ΔLogOdds
+            delta = eval_logits_after - eval_logits_before
+            delta_logodds_matrix[steer_flat_idx, eval_flat_idx] = delta.mean()
+
+    return delta_logodds_matrix, class_names_flat
+
+
+def group_concepts_into_multiclass(labels_dict):
+    """
+    Group binary concept labels into multiclass groups.
+
+    Examples:
+        tense-present, tense-past → tense: [0, 1]
+        sentiment-positive, sentiment-neutral, sentiment-negative → sentiment: [0, 1, 2]
+
+    Args:
+        labels_dict: Dict of {concept_name: binary_labels}
+
+    Returns:
+        multiclass_groups: Dict of {group_name: {
+            'class_names': [class1, class2, ...],
+            'labels': multiclass_labels  # 0, 1, 2, ... for each class
+        }}
+    """
+    from collections import defaultdict
+
+    # Group concepts by prefix
+    groups = defaultdict(list)
+    for concept_name in labels_dict.keys():
+        if '-' in concept_name:
+            prefix, suffix = concept_name.rsplit('-', 1)
+            groups[prefix].append((suffix, concept_name))
+        else:
+            # Standalone concept - treat as its own binary group
+            groups[concept_name].append(('positive', concept_name))
+
+    # Convert to multiclass format
+    multiclass_groups = {}
+    for group_name, class_list in groups.items():
+        class_names = [suffix for suffix, _ in class_list]
+        concept_names = [full_name for _, full_name in class_list]
+
+        # Create multiclass labels
+        num_samples = len(labels_dict[concept_names[0]])
+        multiclass_labels = np.zeros(num_samples, dtype=int)
+
+        for class_idx, concept_name in enumerate(concept_names):
+            # Where this binary label is True, set multiclass label to class_idx
+            binary_labels = np.array(labels_dict[concept_name], dtype=bool)
+            multiclass_labels[binary_labels] = class_idx
+
+        multiclass_groups[group_name] = {
+            'class_names': class_names,
+            'concept_names': concept_names,
+            'labels': multiclass_labels
+        }
+
+    return multiclass_groups
+
+
 def run_causal_intervention_experiment(args):
     """
-    Run standalone causal intervention experiment.
+    Run standalone causal intervention experiment with multiclass probes.
 
-    This computes the intervention matrix showing how steering one concept affects another.
+    This computes the intervention matrix showing how steering one concept class
+    affects another concept class's logits.
     """
     from sklearn.model_selection import train_test_split
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     print("="*70)
-    print("CAUSAL INTERVENTION EXPERIMENT")
+    print("CAUSAL INTERVENTION EXPERIMENT (Multiclass Probes)")
     print("="*70)
 
     # Load sentences and labels
     sentences, labels = load_labeled_sentences_test()
-    print(f"\nLoaded {len(sentences)} sentences")
+    print(f"\nLoaded {len(sentences)} sentences with {len(labels)} binary concepts")
 
     # Limit number of samples if specified
     if args.max_samples is not None and args.max_samples < len(sentences):
@@ -1686,9 +1918,14 @@ def run_causal_intervention_experiment(args):
     # Filter concepts if specified
     if args.concepts:
         labels = {k: v for k, v in labels.items() if k in args.concepts}
-        print(f"Using concepts: {list(labels.keys())}")
-    else:
-        print(f"Using all {len(labels)} concepts")
+        print(f"Filtered to {len(labels)} concepts: {list(labels.keys())}")
+
+    # Group into multiclass problems
+    print("\nGrouping concepts into multiclass problems...")
+    multiclass_groups = group_concepts_into_multiclass(labels)
+    for group_name, group_info in multiclass_groups.items():
+        print(f"  {group_name}: {len(group_info['class_names'])} classes - {group_info['class_names']}")
+    print(f"Total multiclass groups: {len(multiclass_groups)}")
 
     # Load or compute SAE activations (for probe training on residual stream)
     if args.sae_activations_path:
@@ -1701,18 +1938,31 @@ def run_causal_intervention_experiment(args):
 
     # Split train/test
     print("\nSplitting train/test...")
-    first_concept = list(labels.keys())[0]
+    first_group = list(multiclass_groups.keys())[0]
     train_idx, test_idx = train_test_split(
         np.arange(len(sentences)),
         test_size=0.2,
         random_state=args.seed,
-        stratify=labels[first_concept]
+        stratify=multiclass_groups[first_group]['labels']
     )
 
     sentences_train = [sentences[i] for i in train_idx]
     sentences_test = [sentences[i] for i in test_idx]
-    labels_train_dict = {concept: np.array(label_list)[train_idx] for concept, label_list in labels.items()}
-    labels_test_dict = {concept: np.array(label_list)[test_idx] for concept, label_list in labels.items()}
+
+    # Split multiclass labels
+    multiclass_train = {}
+    multiclass_test = {}
+    for group_name, group_info in multiclass_groups.items():
+        multiclass_train[group_name] = {
+            'class_names': group_info['class_names'],
+            'concept_names': group_info['concept_names'],
+            'labels': group_info['labels'][train_idx]
+        }
+        multiclass_test[group_name] = {
+            'class_names': group_info['class_names'],
+            'concept_names': group_info['concept_names'],
+            'labels': group_info['labels'][test_idx]
+        }
 
     print(f"Train: {len(train_idx)}, Test: {len(test_idx)}")
 
@@ -1776,54 +2026,65 @@ def run_causal_intervention_experiment(args):
     residual_acts_train_normalized = scaler.fit_transform(residual_acts_train)
     print(f"Normalized residual activations (mean={residual_acts_train_normalized.mean():.4f}, std={residual_acts_train_normalized.std():.4f})")
 
-    # Train probes for each concept
-    print("\nTraining probes on residual stream...")
-    probes_dict = {}
-    for concept in labels_train_dict.keys():
+    # Train multiclass probes for each group
+    print("\nTraining multiclass probes on residual stream...")
+    probes_dict = {}  # group_name -> probe
+    for group_name, group_info in multiclass_train.items():
         probe = LogisticRegression(
             random_state=args.seed,
             max_iter=1000,
             class_weight="balanced",
             solver="lbfgs",
-            C=1.0
+            C=1.0,
+            multi_class="multinomial"  # Explicit multiclass mode
         )
-        probe.fit(residual_acts_train_normalized, labels_train_dict[concept])
-        probes_dict[concept] = probe
-        print(f"  {concept}: Train acc = {probe.score(residual_acts_train_normalized, labels_train_dict[concept]):.4f}")
+        probe.fit(residual_acts_train_normalized, group_info['labels'])
+        probes_dict[group_name] = probe
+        train_acc = probe.score(residual_acts_train_normalized, group_info['labels'])
+        print(f"  {group_name} ({len(group_info['class_names'])} classes): Train acc = {train_acc:.4f}")
 
-    # Get top-1 feature for each concept using gradient attribution
-    print(f"\nComputing gradient attribution to find top-1 feature per concept...")
-    top_features_dict = {}
+    # Get top-1 feature for each class using gradient attribution
+    print(f"\nComputing gradient attribution to find top-1 feature per class...")
+    top_features_dict = {}  # (group_name, class_idx) -> feature_idx
+    feature_signs_dict = {}  # (group_name, class_idx) -> sign (+1 or -1)
 
-    for concept in labels_train_dict.keys():
-        print(f"  {concept}...")
-        _, top_indices, all_scores = find_top_k_features_by_attribution(
-            model=lm_model,
-            tokenizer=tokenizer,
-            submodule_steer_name=args.submodule_steer,
-            submodule_probe_name=args.submodule_probe,
-            dictionary=sae_model,
-            probe=probes_dict[concept],
-            sentences=sentences_train,
-            k=1,  # Only need top-1 for intervention
-            use_sparsemax=args.use_sparsemax,
-            batch_size=args.batch_size,
-            scaler=scaler
-        )
-        top_features_dict[concept] = top_indices.item()  # Single integer
-        print(f"    Top feature: {top_indices.item()}")
+    for group_name, group_info in multiclass_train.items():
+        probe = probes_dict[group_name]
+        for class_idx, class_name in enumerate(group_info['class_names']):
+            full_name = group_info['concept_names'][class_idx]
+            print(f"  {full_name} (class {class_idx} of {group_name})...")
 
-    # Compute causal intervention matrix
-    delta_logodds_matrix = compute_causal_intervention_matrix(
+            _, top_indices, all_scores = find_top_k_features_by_attribution(
+                model=lm_model,
+                tokenizer=tokenizer,
+                submodule_steer_name=args.submodule_steer,
+                submodule_probe_name=args.submodule_probe,
+                dictionary=sae_model,
+                probe=probe,
+                sentences=sentences_train,
+                k=1,  # Only need top-1 for intervention
+                use_sparsemax=args.use_sparsemax,
+                batch_size=args.batch_size,
+                scaler=scaler,
+                logit_idx=class_idx  # Which class logit to compute gradients for
+            )
+            top_features_dict[(group_name, class_idx)] = top_indices.item()
+            # Store sign of attribution (positive means increase feature → increase logit)
+            feature_signs_dict[(group_name, class_idx)] = 1.0 if all_scores[top_indices.item()] > 0 else -1.0
+            print(f"    Top feature: {top_indices.item()} (sign: {feature_signs_dict[(group_name, class_idx)]:+.0f})")
+
+    # Compute causal intervention matrix (multiclass version)
+    delta_logodds_matrix, class_names_flat = compute_causal_intervention_matrix_multiclass(
         model=lm_model,
         tokenizer=tokenizer,
         submodule_steer_name=args.submodule_steer,
         submodule_probe_name=args.submodule_probe,
         dictionary=sae_model,
         probes_dict=probes_dict,
+        multiclass_groups=multiclass_test,
         top_features_dict=top_features_dict,
+        feature_signs_dict=feature_signs_dict,
         sentences=sentences_test,
-        labels_dict=labels_test_dict,
         intervention_type=args.intervention_type,
         intervention_strength=args.intervention_strength,
         use_sparsemax=args.use_sparsemax,
@@ -1835,19 +2096,18 @@ def run_causal_intervention_experiment(args):
     print("\n" + "="*70)
     print("INTERVENTION MATRIX (ΔLogOdds)")
     print("="*70)
-    concept_list = list(labels_train_dict.keys())
 
     # Print header
-    print(f"{'Steer Eval':20s}", end="")
-    for concept in concept_list:
+    print(f"{'Steer \\ Eval':20s}", end="")
+    for concept in class_names_flat:
         print(f"{concept:>20s}", end="")
     print()
-    print("-" * (20 + 20 * len(concept_list)))
+    print("-" * (20 + 20 * len(class_names_flat)))
 
     # Print matrix rows
-    for i, steer_concept in enumerate(concept_list):
+    for i, steer_concept in enumerate(class_names_flat):
         print(f"{steer_concept:20s}", end="")
-        for j, eval_concept in enumerate(concept_list):
+        for j, eval_concept in enumerate(class_names_flat):
             print(f"{delta_logodds_matrix[i, j]:20.4f}", end="")
         print()
 
@@ -1855,11 +2115,23 @@ def run_causal_intervention_experiment(args):
     if args.intervention_output:
         # Save raw matrix to JSON first (before plotting)
         matrix_json_path = args.intervention_output.with_suffix('.json')
+        # Convert tuple keys to strings for JSON serialization
+        top_features_serializable = {f"{k[0]}_{k[1]}": v for k, v in top_features_dict.items()}
+        feature_signs_serializable = {f"{k[0]}_{k[1]}": v for k, v in feature_signs_dict.items()}
+
         save_data = {
             "intervention_type": args.intervention_type,
             "intervention_strength": args.intervention_strength,
-            "concepts": concept_list,
-            "top_features": top_features_dict,
+            "class_names": class_names_flat,
+            "multiclass_groups": {
+                group_name: {
+                    "class_names": info["class_names"],
+                    "concept_names": info["concept_names"]
+                }
+                for group_name, info in multiclass_test.items()
+            },
+            "top_features": top_features_serializable,
+            "feature_signs": feature_signs_serializable,
             "delta_logodds_matrix": delta_logodds_matrix.tolist(),
         }
         with open(matrix_json_path, 'w') as f:
@@ -1870,7 +2142,7 @@ def run_causal_intervention_experiment(args):
         plot_title = f"Causal Intervention ({args.intervention_type}, strength={args.intervention_strength})"
         plot_causal_intervention_matrix(
             delta_logodds_matrix,
-            concept_list,
+            class_names_flat,
             output_path=args.intervention_output,
             title=plot_title
         )
@@ -2228,6 +2500,8 @@ def run_k_sweep_attribution(args):
 
     # Sweep k values
     print(f"\nSweeping k values: {args.k_values}")
+    mcc_method = "union" if args.mcc_union_features else "per-concept"
+    print(f"MCC computation method: {mcc_method}")
     results = sweep_k_values_for_plots(
         sae_activations_train=sae_train,
         sae_activations_test=sae_test,
@@ -2237,7 +2511,8 @@ def run_k_sweep_attribution(args):
         k_values=args.k_values,
         seed=args.seed,
         verbose=True,
-        compute_activation_mcc=True
+        compute_activation_mcc=True,
+        mcc_union_features=args.mcc_union_features
     )
 
     # Print results
@@ -2465,6 +2740,11 @@ def main():
         type=int,
         default=None,
         help="Limit number of samples for faster processing (useful for large models like Gemma)",
+    )
+    parser.add_argument(
+        "--mcc-union-features",
+        action="store_true",
+        help="Use union of top-k features across concepts for aggregate MCC (default: per-concept average)",
     )
 
     args = parser.parse_args()
