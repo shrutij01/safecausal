@@ -1321,7 +1321,6 @@ def _sweep_k_multi_concept(
         k_values, desc="Sweeping k for all concepts", disable=not verbose
     ):
         concept_act_mccs = []
-        all_top_k_indices_set = set()
 
         for concept in labels_dict_train.keys():
             # Get top-k features for this concept
@@ -1330,9 +1329,22 @@ def _sweep_k_multi_concept(
                 all_scores = t.tensor(all_scores)
             _, top_k_indices = t.topk(all_scores, k=k)
 
-            # Collect all top-k indices across concepts for aggregate MCC
+            # Compute activation-label MCC for this concept using only its top-k features
             if compute_activation_mcc:
-                all_top_k_indices_set.update(top_k_indices.tolist())
+                # Extract activations for only this concept's top-k features
+                sae_acts_test_concept = sae_acts_test_tensor[:, top_k_indices]
+
+                # Create single-concept label dict
+                single_concept_labels = {concept: labels_dict_test[concept]}
+
+                # Compute correlation matrix: (k_features, 1_concept)
+                corr_matrix_concept, _ = compute_correlation_matrix(
+                    sae_acts_test_concept, single_concept_labels
+                )
+
+                # Take max absolute correlation across this concept's top-k features
+                max_corr_this_concept = corr_matrix_concept.abs().max().item()
+                concept_act_mccs.append(max_corr_this_concept)
 
             # Train probe
             result = train_sparse_probe_on_top_k(
@@ -1356,23 +1368,9 @@ def _sweep_k_multi_concept(
                     f"k={k:3d}, {concept}: Probe Corr={result['correlation']:.4f}"
                 )
 
-        # Compute aggregate activation MCC using union of all top-k features
+        # Compute aggregate activation MCC as average of per-concept MCCs
         if compute_activation_mcc:
-            # Get union of all top-k features across all concepts
-            all_top_k_indices = sorted(list(all_top_k_indices_set))
-            sae_acts_test_union = sae_acts_test_tensor[:, all_top_k_indices]
-
-            # Compute correlation matrix: (features, concepts)
-            corr_matrix_union, _ = compute_correlation_matrix(
-                sae_acts_test_union, labels_dict_test
-            )
-
-            # For each concept, take max correlation across all union features
-            # corr_matrix_union shape: (num_union_features, num_concepts)
-            max_corr_per_concept = corr_matrix_union.abs().max(dim=0).values
-
-            # Average across all concepts
-            aggregate_mcc = max_corr_per_concept.mean().item()
+            aggregate_mcc = np.mean(concept_act_mccs)
             aggregate_mcc_list.append(aggregate_mcc)
 
     # Convert lists to arrays
