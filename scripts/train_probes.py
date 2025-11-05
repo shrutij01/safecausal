@@ -3459,31 +3459,35 @@ def run_k_sweep_attribution(args):
         print(
             f"\nLoading pre-computed SAE activations from {args.sae_activations_path}"
         )
-        print("WARNING: Pre-computed activations should be delta activations (acts_2 - acts_1) for pairwise data!")
+        print("WARNING: Pre-computed activations should be SAE(delta_embeddings) = SAE(embeddings_2 - embeddings_1) for difference-based SAEs!")
         if str(args.sae_activations_path).endswith(".npy"):
             sae_activations = np.load(args.sae_activations_path)
         else:
             sae_activations = t.load(args.sae_activations_path).numpy()
         print(f"SAE delta activations shape: {sae_activations.shape}")
     else:
-        print("\nComputing SAE delta activations from pairs...")
+        print("\nComputing SAE activations from pairs...")
         sae_model = load_model(args.model_path)
 
         # Get embeddings for both sentences
+        print("Extracting embeddings for first sentences...")
         embeddings_1 = get_sentence_embeddings(
             sentences_1, sae_model.model_name, sae_model.layer, args.batch_size
         )
+        print("Extracting embeddings for second sentences...")
         embeddings_2 = get_sentence_embeddings(
             sentences_2, sae_model.model_name, sae_model.layer, args.batch_size
         )
 
-        # Get SAE activations for both
-        sae_acts_1 = get_activations(sae_model, embeddings_1).numpy()
-        sae_acts_2 = get_activations(sae_model, embeddings_2).numpy()
+        # For difference-based SAEs: compute delta embeddings FIRST, then pass through SAE
+        # SAE(x2 - x1) != SAE(x2) - SAE(x1) because SAE is non-linear!
+        print("Computing delta embeddings (embeddings_2 - embeddings_1)...")
+        delta_embeddings = embeddings_2 - embeddings_1
 
-        # Compute delta activations
-        sae_activations = sae_acts_2 - sae_acts_1
-        print(f"SAE delta activations shape: {sae_activations.shape}")
+        # Pass delta through the difference-based SAE
+        print("Passing delta embeddings through SAE...")
+        sae_activations = get_activations(sae_model, delta_embeddings).numpy()
+        print(f"SAE activations shape: {sae_activations.shape}")
 
     # Split train/test
     print("\nSplitting train/test...")
