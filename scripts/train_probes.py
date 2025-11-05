@@ -3614,30 +3614,24 @@ def run_k_sweep_attribution(args):
     residual_acts_train = (residual_acts_2 - residual_acts_1).numpy()
     print(f"Delta residual stream activations shape: {residual_acts_train.shape}")
 
-    # Normalize activations to prevent ill-conditioning from large magnitude differences
-    from sklearn.preprocessing import StandardScaler
-
-    scaler = StandardScaler()
-    residual_acts_train_normalized = scaler.fit_transform(residual_acts_train)
-    print(
-        f"Normalized residual activations (mean={residual_acts_train_normalized.mean():.4f}, std={residual_acts_train_normalized.std():.4f})"
-    )
-
-    # Train initial probes for each concept on residual stream activations
-    print("\nTraining initial probes for attribution...")
+    # Train initial probes on DELTA SAE ACTIVATIONS for feature ranking
+    # This ensures probe coefficients match SAE feature dimensions
+    print("\nTraining initial probes on delta SAE activations for feature ranking...")
     initial_probes = {}
     for concept in labels_train_dict.keys():
         probe = LogisticRegression(
             random_state=args.seed,
             max_iter=1000,
             class_weight="balanced",
-            solver="lbfgs",  # Use lbfgs instead of newton-cholesky for numerical stability
-            C=1.0,  # L2 regularization helps with ill-conditioning
+            solver="lbfgs",
+            C=1.0,
         )
-        probe.fit(residual_acts_train_normalized, labels_train_dict[concept])
+        probe.fit(sae_train, labels_train_dict[concept])
         initial_probes[concept] = probe
+        train_acc = probe.score(sae_train, labels_train_dict[concept])
+        test_acc = probe.score(sae_test, labels_test_dict[concept])
         print(
-            f"  {concept}: Train acc = {probe.score(residual_acts_train_normalized, labels_train_dict[concept]):.4f}"
+            f"  {concept}: Train acc = {train_acc:.4f}, Test acc = {test_acc:.4f}"
         )
 
     # Get LR-based feature scores for each concept (using trained probe coefficients)
