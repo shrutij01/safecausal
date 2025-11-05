@@ -22,6 +22,95 @@ from box import Box
 # import debug_tools as dbg  # Commented out to fix sys.excepthook error
 
 
+# ============================================================================
+# DATA WHITENING
+# ============================================================================
+
+
+class DataWhitener:
+    """
+    Whitens data using ZCA (Zero-phase Component Analysis) whitening.
+    Removes correlations and normalizes variance across features.
+
+    This is useful for SAEs as it:
+    - Decorrelates input features
+    - Equalizes variance across dimensions
+    - Improves convergence and feature quality
+    """
+
+    def __init__(self, epsilon: float = 1e-5):
+        """
+        Args:
+            epsilon: Regularization for numerical stability in eigendecomposition
+        """
+        self.epsilon = epsilon
+        self.mean = None
+        self.whitening_matrix = None
+        self.is_fitted = False
+
+    def fit(self, X: np.ndarray):
+        """
+        Compute whitening transform from data.
+
+        Args:
+            X: Data matrix (n_samples, n_features)
+        """
+        # Center the data
+        self.mean = X.mean(axis=0, keepdims=True)
+        X_centered = X - self.mean
+
+        # Compute covariance
+        cov = np.cov(X_centered, rowvar=False)
+
+        # Eigendecomposition
+        eigvals, eigvecs = np.linalg.eigh(cov)
+
+        # ZCA whitening matrix: W = U * D^(-1/2) * U^T
+        # where U = eigenvectors, D = eigenvalues
+        D_inv_sqrt = np.diag(1.0 / np.sqrt(eigvals + self.epsilon))
+        self.whitening_matrix = eigvecs @ D_inv_sqrt @ eigvecs.T
+
+        self.is_fitted = True
+
+    def transform(self, X: np.ndarray) -> np.ndarray:
+        """
+        Apply whitening transform to data.
+
+        Args:
+            X: Data matrix (n_samples, n_features)
+
+        Returns:
+            Whitened data
+        """
+        if not self.is_fitted:
+            raise RuntimeError("Must call fit() before transform()")
+
+        X_centered = X - self.mean
+        return X_centered @ self.whitening_matrix
+
+    def fit_transform(self, X: np.ndarray) -> np.ndarray:
+        """Fit and transform in one step."""
+        self.fit(X)
+        return self.transform(X)
+
+    def save(self, path: Path):
+        """Save whitening parameters."""
+        np.savez(
+            path,
+            mean=self.mean,
+            whitening_matrix=self.whitening_matrix,
+            epsilon=self.epsilon,
+        )
+
+    def load(self, path: Path):
+        """Load whitening parameters."""
+        data = np.load(path)
+        self.mean = data["mean"]
+        self.whitening_matrix = data["whitening_matrix"]
+        self.epsilon = float(data["epsilon"])
+        self.is_fitted = True
+
+
 def set_seeds(seed: int, deterministic: bool = False) -> None:
     """
     Initialise every RNG we care about.
@@ -68,10 +157,14 @@ class DictLinearAE(nn.Module):
         rep_dim: int,
         hid: int,
         norm_type: str,
+        skip_input_norm: bool = False,
     ) -> None:
         super(DictLinearAE, self).__init__()
         self.encoder = nn.Linear(rep_dim, hid, bias=True)
-        self.input_norm = nn.LayerNorm(rep_dim)
+        # Skip input normalization if data is pre-whitened
+        self.input_norm = (
+            nn.Identity() if skip_input_norm else nn.LayerNorm(rep_dim)
+        )
         self.enc_norm = dict(
             ln=nn.LayerNorm(hid),
             gn=nn.GroupNorm(1, hid),
@@ -366,8 +459,8 @@ def _hash_cfg(cfg) -> str:
     # Use only KEYS for hashing
     filtered_dict = {k: cfg_dict.get(k) for k in KEYS if k in cfg_dict}
     # Add model from extra if it exists
-    if hasattr(cfg, 'extra') and hasattr(cfg.extra, 'model'):
-        filtered_dict['model'] = cfg.extra.model
+    if hasattr(cfg, "extra") and hasattr(cfg.extra, "model"):
+        filtered_dict["model"] = cfg.extra.model
 
     blob = json.dumps(filtered_dict, sort_keys=True).encode()
     return hashlib.sha1(blob).hexdigest()[:6]  # short & stable
@@ -612,6 +705,11 @@ class Cfg:
     use_amp: bool = True
     quick: bool = False
 
+    # Whitening parameters
+    whiten: bool = False  # Enable ZCA whitening of input data
+    whiten_epsilon: float = 1e-5  # Regularization for whitening covariance
+    skip_input_norm: bool = False  # Skip LayerNorm when using whitening
+
     # spill-over lives here (read-only)
     extra: Dict[str, Any] = field(default_factory=dict, init=False)
 
@@ -644,6 +742,22 @@ def parse_cfg() -> Cfg:
         action="store_true",
         default=False,
         help="Use smaller dataset for quick training",
+    )
+    add(
+        "--whiten",
+        action="store_true",
+        help="Apply ZCA whitening to input data (decorrelates features)",
+    )
+    add(
+        "--whiten-epsilon",
+        type=float,
+        default=1e-5,
+        help="Regularization for whitening covariance matrix",
+    )
+    add(
+        "--skip-input-norm",
+        action="store_true",
+        help="Skip LayerNorm on input (use when whitening is enabled)",
     )
     cli: Dict[str, Any] = vars(p.parse_args())
 
@@ -694,6 +808,30 @@ def make_dataloader(cfg) -> DataLoader:
         max_samples=max_samples,
     )
 
+    if cfg.whiten:
+        if len(dataset.data.shape) == 3:
+            differences = dataset.data[:, 1, :] - dataset.data[:, 0, :]
+        else:
+            differences = dataset.data[1:, :] - dataset.data[:-1, :]
+
+        print(f"Applying ZCA whitening to differences (shape: {differences.shape})...")
+        whitener = DataWhitener(epsilon=cfg.whiten_epsilon)
+        whitened_differences = whitener.fit_transform(differences)
+
+        if len(dataset.data.shape) == 3:
+            dataset.data = np.zeros_like(dataset.data)
+            dataset.data[:, 1, :] = whitened_differences
+        else:
+            new_data = np.zeros((len(differences) + 1, differences.shape[1]), dtype=differences.dtype)
+            new_data[1:, :] = np.cumsum(whitened_differences, axis=0)
+            dataset.data = new_data
+
+        save_dir = cfg.emb.parent / "run_out"
+        save_dir.mkdir(parents=True, exist_ok=True)
+        whitening_path = save_dir / "whitening_params.npz"
+        whitener.save(whitening_path)
+        print(f"Saved whitening parameters to {whitening_path}")
+
     print(f"Dataset size: {len(dataset)}")
     print(f"Batch size: {cfg.batch}")
     print(f"Number of batches: {len(dataset) // cfg.batch}")
@@ -717,7 +855,12 @@ def make_dataloader(cfg) -> DataLoader:
 
 
 def make_dict(cfg: Cfg) -> torch.nn.Module:
-    return DictLinearAE(cfg.extra.rep_dim, cfg.hid, cfg.norm)
+    return DictLinearAE(
+        cfg.extra.rep_dim,
+        cfg.hid,
+        cfg.norm,
+        skip_input_norm=cfg.skip_input_norm,
+    )
 
 
 def make_ssae(cfg: Cfg, dev: torch.device):

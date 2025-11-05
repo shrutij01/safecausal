@@ -10,14 +10,17 @@ import joblib
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from scipy.stats import pearsonr
-import pickle
 from tqdm import tqdm
 import zipfile
 import tempfile
 import shutil
+from functools import partial
+from scripts.probe_data import (
+    PairwiseProbingDataset,
+    balance_dataset,
+    concept_filter,
+)
 
-# Set HuggingFace cache to scratch directory to avoid disk quota issues
-# HF_HOME is the main cache directory (replaces deprecated TRANSFORMERS_CACHE)
 os.environ["HF_HOME"] = os.environ.get(
     "HF_HOME", "/network/scratch/j/joshi.shruti/hf_cache"
 )
@@ -100,6 +103,239 @@ def load_labeled_sentences_test():
             all_labels[concept].append(binary_labels[concept])
 
     return sentences, all_labels
+
+
+def load_pairwise_labeled_sentences_test(concept_key, concept_value, seed=0, max_pairs=None, split="test"):
+    """
+    Build a pairwise dataset from labeled_sentences for a binary concept.
+
+    Creates balanced pairs where:
+    - label=1: concept differs between sentence_1 and sentence_2 (change)
+    - label=0: concept is the same in both sentences (no-change)
+
+    This is direction-invariant: (pos→neg) and (neg→pos) both get label=1.
+
+    Args:
+        concept_key: e.g., "tense", "voice", "domain", "sentiment"
+        concept_value: e.g., "present", "active", "science", "positive"
+        seed: random seed for pair generation
+        max_pairs: maximum number of pairs to generate (optional)
+        split: "test" or "train" (determines which file to load)
+
+    Returns:
+        sentences_1: list[str] - first sentences in pairs
+        sentences_2: list[str] - second sentences in pairs
+        pair_labels: np.ndarray - 1 if concept changed, 0 if same
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    if split == "test":
+        filename = "labeled_sentences_large_deduped_test.jsonl"
+    elif split == "train":
+        filename = "labeled_sentences_large_deduped_train.jsonl"
+    else:
+        raise ValueError(f"Unknown split '{split}'. Must be 'test' or 'train'.")
+
+    datapath = os.path.join(
+        script_dir,
+        "..",
+        "data",
+        "labeled-sentences",
+        filename,
+    )
+    if not os.path.exists(datapath):
+        raise FileNotFoundError(f"File not found: {datapath}")
+
+    # Use PairwiseProbingDataset to create pairs
+    dataset = PairwiseProbingDataset(
+        datapath,
+        concept_key=concept_key,
+        concept_value=concept_value,
+        seed=seed
+    )
+
+    # Extract pairs
+    sentences_1 = []
+    sentences_2 = []
+    pair_labels = []
+
+    num_pairs = len(dataset)
+    if max_pairs is not None:
+        num_pairs = min(num_pairs, max_pairs)
+
+    for i in range(num_pairs):
+        item = dataset[i]
+        sentences_1.append(item["sentence_1"])
+        sentences_2.append(item["sentence_2"])
+        pair_labels.append(item["label"])
+
+    pair_labels = np.array(pair_labels, dtype=int)
+
+    logging.info(
+        f"Built {len(pair_labels)} pairs for {concept_key}='{concept_value}' "
+        f"({pair_labels.sum()} change, {len(pair_labels) - pair_labels.sum()} no-change)."
+    )
+
+    return sentences_1, sentences_2, pair_labels
+
+
+def load_paired_sentences_test_all_concepts(primary_concept=("tense", "present"), seed=42, max_pairs=None):
+    """
+    Load test sentences as unified pairs for difference-based SAE attribution.
+
+    Uses PairwiseProbingDataset with a primary concept to establish one unified
+    set of pairs, then computes labels for all concepts on those same pairs.
+
+    This is useful for k-sweep experiments where you want the same pairs
+    evaluated across multiple concepts.
+
+    Args:
+        primary_concept: tuple of (concept_key, concept_value) to use for creating pairs
+        seed: random seed for pair generation
+        max_pairs: maximum number of pairs (optional)
+
+    Returns:
+        sentences_1: list of first sentences in each pair
+        sentences_2: list of second sentences in each pair
+        all_labels: dict mapping concept name to binary labels (1=change, 0=no-change)
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    datapath = os.path.join(
+        script_dir,
+        "..",
+        "data",
+        "labeled-sentences",
+        "labeled_sentences_large_deduped_test.jsonl",
+    )
+    if not os.path.exists(datapath):
+        raise FileNotFoundError(f"Test file not found: {datapath}")
+
+    # Create primary dataset to establish unified pairs
+    primary_key, primary_value = primary_concept
+    primary_dataset = PairwiseProbingDataset(
+        datapath,
+        concept_key=primary_key,
+        concept_value=primary_value,
+        seed=seed
+    )
+
+    # Extract sentence pairs
+    sentences_1 = []
+    sentences_2 = []
+
+    num_pairs = len(primary_dataset)
+    if max_pairs is not None:
+        num_pairs = min(num_pairs, max_pairs)
+
+    for i in range(num_pairs):
+        item = primary_dataset[i]
+        sentences_1.append(item["sentence_1"])
+        sentences_2.append(item["sentence_2"])
+
+    # Now compute labels for all concepts on these same pairs
+    # Load raw data to access all attributes
+    labeled_sentences = load_jsonl(datapath)
+
+    # Build sentence -> attributes mapping
+    sent_to_attrs = {}
+    for data in labeled_sentences:
+        sent = data["sentence"]
+        sent_to_attrs[sent] = data
+
+    # Concepts to compute labels for
+    concept_specs = [
+        ("tense", "present"),
+        ("tense", "past"),
+        ("voice", "active"),
+        ("voice", "passive"),
+        ("domain", "science"),
+        ("domain", "fantasy"),
+        ("domain", "news"),
+        ("domain", "other"),
+        ("sentiment", "positive"),
+        ("sentiment", "neutral"),
+        ("sentiment", "negative"),
+    ]
+
+    all_labels = {}
+
+    for concept_key, concept_value in concept_specs:
+        concept_name = f"{concept_key}-{concept_value}"
+        labels = []
+
+        for s1, s2 in zip(sentences_1, sentences_2):
+            attrs1 = sent_to_attrs.get(s1, {})
+            attrs2 = sent_to_attrs.get(s2, {})
+
+            # Check if sentence has this concept
+            has_concept_1 = (concept_key in attrs1 and attrs1[concept_key] == concept_value)
+            has_concept_2 = (concept_key in attrs2 and attrs2[concept_key] == concept_value)
+
+            # Label: 1 if concept differs, 0 if same
+            label = 1 if has_concept_1 != has_concept_2 else 0
+            labels.append(label)
+
+        all_labels[concept_name] = labels
+
+    return sentences_1, sentences_2, all_labels
+
+
+def prepare_datasets(
+    train_filepath, test_filepath, concept_key, concept_value, seed=42
+):
+    """Prepare and balance the training and test datasets."""
+    filter_criterion = partial(
+        concept_filter, concept_key=concept_key, concept_value=concept_value
+    )
+    train_dataset = PairwiseProbingDataset(train_filepath, filter_criterion)
+    test_dataset = PairwiseProbingDataset(test_filepath, filter_criterion)
+
+    # print("Balancing training dataset...")
+    train_dataset = balance_dataset(train_dataset, seed)
+    # print("Balancing test dataset...")
+    test_dataset = balance_dataset(test_dataset, seed)
+
+    return train_dataset, test_dataset
+
+
+def prepare_pairwise_datasets_multiclass(train_filepath, test_filepath, concept_key, seed=42):
+    """
+    Prepare pairwise datasets for multiclass concepts (e.g., domain, sentiment, tense, voice).
+
+    Returns datasets where each item is a pair of sentences with:
+    - label=1 if the concept CLASS differs between sentences (change)
+    - label=0 if the concept CLASS is the same (no-change)
+
+    This is for training "change detector" probes on multiclass concepts.
+
+    Args:
+        train_filepath: Path to training data JSONL
+        test_filepath: Path to test data JSONL
+        concept_key: One of "domain", "sentiment", "tense", "voice"
+        seed: Random seed for pair generation
+
+    Returns:
+        train_dataset: PairwiseMulticlassProbingDataset
+        test_dataset: PairwiseMulticlassProbingDataset
+
+    Example:
+        train_ds, test_ds = prepare_pairwise_datasets_multiclass(
+            train_path, test_path, "domain", seed=42
+        )
+        # Each item: {"sentence_1": str, "sentence_2": str, "label": 0 or 1}
+    """
+    train_dataset = PairwiseMulticlassProbingDataset(
+        train_filepath,
+        concept=concept_key,
+        seed=seed
+    )
+    test_dataset = PairwiseMulticlassProbingDataset(
+        test_filepath,
+        concept=concept_key,
+        seed=seed + 1  # Different seed for test to avoid overlap
+    )
+
+    return train_dataset, test_dataset
 
 
 def score_identification(
@@ -274,11 +510,7 @@ def score_identification(
 
 
 def load_model(model_path: Path):
-    """Load trained SSAE model and return model with config info.
-
-    Handles both directory paths and zip file paths. If model_path is a zip file,
-    it will be extracted to a temporary directory first.
-    """
+    """Load trained SSAE model and return model with config info."""
     from ssae import DictLinearAE
 
     # Check if model_path is a zip file
@@ -428,8 +660,7 @@ def get_activations(
     return t.cat(all_activations, dim=0)
 
 
-def heuristic_feature_ranking_binary(X, y, method="max_mean_diff"):
-    # DEPRECATED.
+def heuristic_feature_ranking_binary(X, y, method="lr"):
     """Rank features using heuristic methods for sparse probing."""
     if method == "max_mean_diff":
         pos_class = y == 1
@@ -456,7 +687,7 @@ def train_probes(
     test_labels,
     probe_type="binary",
     seed=42,
-    sparse=None,
+    sparse="lr",
     k=10,
 ):
     """
@@ -1013,6 +1244,259 @@ def get_attributions_w_hooks(
     return f_grad_att, x_grad_att, cache, logits
 
 
+def get_pair_attributions_w_hooks(
+    model,
+    tokenizer,
+    submodule_steer_name,
+    submodule_probe_name,
+    dictionary,
+    probe,
+    batch_1,
+    batch_2,
+    use_sparsemax=False,
+    scaler=None,
+    logit_idx=None,
+):
+    """
+    Compute feature attributions for difference between two batches using hooks.
+
+    This function computes attributions for how SAE features explain the difference
+    in probe predictions between two batches (x1 and x2). Unlike get_attributions_w_hooks
+    which processes a single batch, this function:
+    1. Runs x1 and caches activations (no gradients)
+    2. Runs x2 and computes delta_x = x2 - x1
+    3. Passes delta_x through SSAE to get delta_x_hat and delta_f
+    4. Reconstructs x2 as x1 + delta_x_hat + (delta_x - delta_x_hat).detach()
+    5. Computes probe predictions for both x1 and x2
+    6. Backpropagates from change in probe predictions: logits2 - logits1
+    7. Returns delta_f * grad(delta_f) attributions
+
+    This is specifically designed for SAEs trained on differences between embeddings.
+
+    Args:
+        model: Language model (GPTNeoXForCausalLM or AutoModelForCausalLM)
+        tokenizer: Tokenizer for the model
+        submodule_steer_name: String name of the submodule to intercept for SAE (e.g., 'gpt_neox.layers.5')
+        submodule_probe_name: String name of the submodule to capture activations for probe
+        dictionary: SSAE dictionary model trained on embedding differences
+        probe: Trained probe (sklearn LogisticRegression)
+        batch_1: List of text strings (x1 examples)
+        batch_2: List of text strings (x2 examples, must be same length as batch_1)
+        use_sparsemax: Whether the SAE uses sparsemax/MP activation
+        scaler: StandardScaler for normalizing activations (optional)
+        logit_idx: For multiclass probes, which class logit to compute gradients for (optional)
+
+    Returns:
+        Tuple of (delta_f_att, cache, (logits1, logits2)):
+            - delta_f_att: Feature gradient attributions for the difference (gradient * delta_f)
+            - cache: Dict containing intermediate activations and deltas
+            - (logits1, logits2): Tuple of probe logits for batch_1 and batch_2
+    """
+    # Validate inputs
+    assert len(batch_1) == len(
+        batch_2
+    ), f"batch_1 and batch_2 must have same length, got {len(batch_1)} and {len(batch_2)}"
+
+    cache = {
+        "resid_stream_1": None,
+        "resid_stream_2": None,
+        "delta_f": None,
+        "delta_x": None,
+        "x1_probe": None,
+        "x2_probe": None,
+        "delta_f_flat": None,
+    }
+
+    submodule_steer = get_submodule_with_index(model, submodule_steer_name)
+    submodule_probe = get_submodule_with_index(model, submodule_probe_name)
+
+    # ---- 1. Run x1 and cache resid_stream_1 ----
+    def hook_steer_x1(_module, _input, _output):
+        """Hook to capture x1 activations without gradients."""
+        if isinstance(_output, tuple):
+            resid = _output[0]
+        else:
+            resid = _output
+        cache["resid_stream_1"] = resid.detach()
+        return None
+
+    def hook_probe_x1(_module, _input, _output):
+        """Hook to capture probe activations for x1."""
+        if isinstance(_output, tuple):
+            _output = _output[0]
+        cache["x1_probe"] = _output.detach()
+        return None
+
+    h_s1 = submodule_steer.register_forward_hook(hook_steer_x1)
+    h_p1 = submodule_probe.register_forward_hook(hook_probe_x1)
+
+    with t.no_grad():
+        batch1_tok = tokenizer(batch_1, return_tensors="pt", padding=True).to(
+            model.device
+        )
+        _ = model(**batch1_tok)
+
+    h_s1.remove()
+    h_p1.remove()
+
+    # ---- 2. Run x2 with SSAE difference-based steering hook ----
+    def hook_steer_x2(_module, _input, _output):
+        """Hook to replace activations with SSAE reconstruction of difference."""
+        if isinstance(_output, tuple):
+            resid2 = _output[0]
+        else:
+            resid2 = _output
+
+        # Ensure gradient tracking on x2
+        if not resid2.requires_grad:
+            resid2.requires_grad_(True)
+        resid2.retain_grad()
+
+        resid1 = cache["resid_stream_1"]  # (batch, seq, d) - no gradients
+
+        # Compute delta_x: x2 - x1
+        delta_x = resid2 - resid1
+        cache["delta_x"] = delta_x
+
+        # Pass delta_x through SSAE to get reconstruction and features
+        if use_sparsemax:
+            # Flatten for sparsemax/MP models
+            delta_x_flat = delta_x.flatten(start_dim=0, end_dim=1)
+            delta_x_hat_flat, delta_f_flat = dictionary(delta_x_flat)
+            delta_x_hat = delta_x_hat_flat.view_as(delta_x)
+            delta_f = delta_f_flat.view(delta_x.shape[0], delta_x.shape[1], -1)
+            delta_f_flat.requires_grad_(True)
+            delta_f_flat.retain_grad()
+            cache["delta_f_flat"] = delta_f_flat
+        else:
+            delta_x_hat, delta_f = dictionary(delta_x)
+
+        if not delta_f.requires_grad:
+            delta_f.requires_grad_(True)
+        delta_f.retain_grad()
+
+        # Detach unexplained part of delta_x (gradients only through SSAE reconstruction)
+        delta_resid = (delta_x - delta_x_hat).detach()
+
+        # Reconstruct x2 from: x1 + explained_delta + unexplained_delta
+        delta_x_recon = delta_x_hat + delta_resid
+        resid2_recon = resid1 + delta_x_recon
+
+        cache["delta_f"] = delta_f
+        cache["resid_stream_2"] = resid2
+
+        # Replace output with reconstruction
+        if isinstance(_output, tuple):
+            return (resid2_recon,) + _output[1:]
+        else:
+            return resid2_recon
+
+    def hook_probe_x2(_module, _input, _output):
+        """Hook to capture probe activations for x2."""
+        if isinstance(_output, tuple):
+            _output = _output[0]
+        cache["x2_probe"] = _output
+        return None
+
+    h_s2 = submodule_steer.register_forward_hook(hook_steer_x2)
+    h_p2 = submodule_probe.register_forward_hook(hook_probe_x2)
+
+    with t.enable_grad():
+        batch2_tok = tokenizer(batch_2, return_tensors="pt", padding=True).to(
+            model.device
+        )
+        _ = model(**batch2_tok)
+
+    h_s2.remove()
+    h_p2.remove()
+
+    # ---- 3. Build probe metric on change in representation ----
+    x1_probe = cache["x1_probe"]  # (batch, seq, d_probe)
+    x2_probe = cache["x2_probe"]  # (batch, seq, d_probe)
+
+    # Sum over sequence dimension
+    submod_acts_1 = x1_probe.sum(dim=1).squeeze(dim=-1).detach()
+    submod_acts_2 = x2_probe.sum(dim=1).squeeze(dim=-1)
+
+    # Optional scaler normalization (must match training normalization)
+    if scaler is not None:
+        mean = t.tensor(
+            scaler.mean_, dtype=submod_acts_2.dtype, device=model.device
+        )
+        scale = t.tensor(
+            scaler.scale_, dtype=submod_acts_2.dtype, device=model.device
+        )
+        submod_acts_1 = (submod_acts_1 - mean) / scale
+        submod_acts_2 = (submod_acts_2 - mean) / scale
+
+    # Apply probe weights (same logic as get_attributions_w_hooks)
+    # probe is a sklearn LogisticRegression
+    # For binary (2 classes): coef_ shape is (1, n_features)
+    # For multiclass (>2 classes): coef_ shape is (n_classes, n_features)
+    if logit_idx is not None:
+        # Check if binary (2 classes) or true multiclass (>2 classes)
+        if probe.coef_.shape[0] == 1:
+            # Binary classification with 2 classes
+            # Class 0: use negative weights, Class 1: use positive weights
+            sign = -1.0 if logit_idx == 0 else 1.0
+            probe_weights = t.tensor(
+                sign * probe.coef_[0], dtype=submod_acts_2.dtype
+            ).to(model.device)
+            probe_bias = t.tensor(
+                sign * probe.intercept_[0], dtype=submod_acts_2.dtype
+            ).to(model.device)
+        else:
+            # True multiclass: select specific class weights
+            probe_weights = t.tensor(
+                probe.coef_[logit_idx], dtype=submod_acts_2.dtype
+            ).to(model.device)
+            probe_bias = t.tensor(
+                probe.intercept_[logit_idx], dtype=submod_acts_2.dtype
+            ).to(model.device)
+    else:
+        # No logit_idx specified: binary case, use positive direction
+        probe_weights = t.tensor(
+            probe.coef_.squeeze(), dtype=submod_acts_2.dtype
+        ).to(model.device)
+        probe_bias = t.tensor(
+            probe.intercept_[0], dtype=submod_acts_2.dtype
+        ).to(model.device)
+
+    # Compute logits for both batches
+    logits1 = submod_acts_1 @ probe_weights + probe_bias
+    logits2 = submod_acts_2 @ probe_weights + probe_bias
+
+    # Metric: change in probe prediction (only logits2 has gradients)
+    metric = t.sum(logits2 - logits1.detach())
+    metric.backward()
+
+    # ---- 4. Extract gradient × delta_f attribution ----
+    if use_sparsemax:
+        delta_f_grad = cache["delta_f_flat"].grad
+        if delta_f_grad is None:
+            raise RuntimeError(
+                "No gradients computed for delta_f_flat. Check backward pass."
+            )
+        delta_f_grad = delta_f_grad.detach()
+        delta_f_grad = delta_f_grad.reshape(
+            cache["resid_stream_2"].shape[0],
+            cache["resid_stream_2"].shape[1],
+            -1,
+        )
+    else:
+        delta_f_grad = cache["delta_f"].grad
+        if delta_f_grad is None:
+            raise RuntimeError(
+                "No gradients computed for delta_f. Check backward pass."
+            )
+        delta_f_grad = delta_f_grad.detach()
+
+    # Attribution: element-wise product of delta_f and its gradient
+    delta_f_att = cache["delta_f"].detach() * delta_f_grad
+
+    return delta_f_att, cache, (logits1.detach(), logits2.detach())
+
+
 def find_top_k_features_by_attribution(
     model,
     tokenizer,
@@ -1026,6 +1510,7 @@ def find_top_k_features_by_attribution(
     batch_size=32,
     scaler=None,
     logit_idx=None,
+    use_abs=True,
 ):
     """
     Find top k SAE features using gradient attribution method.
@@ -1107,6 +1592,59 @@ def find_top_k_features_by_attribution(
     # Get the actual scores (with sign preserved) for the selected indices
     top_k_scores = all_scores[top_k_indices]
 
+    return top_k_scores, top_k_indices, all_scores
+
+
+def find_top_k_features_by_attribution_pairs(
+    model,
+    tokenizer,
+    submodule_steer_name,
+    submodule_probe_name,
+    dictionary,
+    probe,
+    sentences_1,
+    sentences_2,
+    k=10,
+    use_sparsemax=False,
+    batch_size=32,
+    scaler=None,
+    logit_idx=None,
+):
+    num_features = dictionary.encoder.weight.shape[0]
+    acts_all = t.zeros(len(sentences_1), num_features)
+
+    num_batches = (len(sentences_1) + batch_size - 1) // batch_size
+
+    for idx in range(num_batches):
+        start = idx * batch_size
+        end = min(start + batch_size, len(sentences_1))
+        batch1 = sentences_1[start:end]
+        batch2 = sentences_2[start:end]
+
+        delta_f_att, cache, (logits1, logits2) = get_pair_attributions_w_hooks(
+            model=model,
+            tokenizer=tokenizer,
+            submodule_steer_name=submodule_steer_name,
+            submodule_probe_name=submodule_probe_name,
+            dictionary=dictionary,
+            probe=probe,
+            batch_1=batch1,
+            batch_2=batch2,
+            use_sparsemax=use_sparsemax,
+            scaler=scaler,
+            logit_idx=logit_idx,
+        )
+
+        # delta_f_att: (batch, seq_len, num_features)
+        delta_f_att_summed = delta_f_att.sum(dim=1)  # (batch, num_features)
+        acts_all[start : start + len(batch1)] = (
+            delta_f_att_summed.detach().cpu()
+        )
+
+    all_scores = acts_all.sum(dim=0)  # (num_features,)
+    abs_scores = all_scores.abs()
+    _, top_k_indices = t.topk(abs_scores, k=k)
+    top_k_scores = all_scores[top_k_indices]
     return top_k_scores, top_k_indices, all_scores
 
 
@@ -1214,7 +1752,8 @@ def sweep_k_values_for_plots(
     - Multi concept: Pass labels as dicts, all_feature_scores as dict
 
     Usage example (single concept):
-        _, _, all_scores = find_top_k_features_by_attribution(...)
+        # Get feature scores from trained probe coefficients
+        all_scores = np.abs(probe.coef_[0])
         results = sweep_k_values_for_plots(
             sae_train, sae_test, labels_train, labels_test,
             all_scores, k_values=[1, 3, 5, 10, 25, 50]
@@ -1236,7 +1775,8 @@ def sweep_k_values_for_plots(
         sae_activations_test: Test SAE activations (N_test x F)
         labels_train: Binary labels (N_train,) OR dict of {concept: labels_train}
         labels_test: Binary labels (N_test,) OR dict of {concept: labels_test}
-        all_feature_scores: Attribution scores (F,) OR dict of {concept: scores}
+        all_feature_scores: LR feature scores (F,) OR dict of {concept: scores}
+                           Should be np.abs(probe.coef_[0]) from trained probes
         k_values: List of k values to test
         seed: Random seed
         verbose: Print progress
@@ -1994,29 +2534,33 @@ def run_causal_intervention_experiment(args):
     affects another concept class's logits.
     """
     from sklearn.model_selection import train_test_split
+    from sklearn.preprocessing import StandardScaler
     from transformers import AutoModelForCausalLM, AutoTokenizer
+    from pathlib import Path
 
     print("=" * 70)
     print("CAUSAL INTERVENTION EXPERIMENT (Multiclass Probes)")
     print("=" * 70)
 
-    # Load sentences and labels
-    sentences, labels = load_labeled_sentences_test()
+    # Load paired sentences and labels for difference-based SAE
+    # Use unified pairs across all concepts for this experiment
+    sentences_1, sentences_2, labels = load_paired_sentences_test_all_concepts(seed=args.seed)
     print(
-        f"\nLoaded {len(sentences)} sentences with {len(labels)} binary concepts"
+        f"\nLoaded {len(sentences_1)} sentence pairs with {len(labels)} binary concepts"
     )
 
     # Limit number of samples if specified
-    if args.max_samples is not None and args.max_samples < len(sentences):
+    if args.max_samples is not None and args.max_samples < len(sentences_1):
         print(
-            f"Limiting to {args.max_samples} samples (from {len(sentences)})"
+            f"Limiting to {args.max_samples} sample pairs (from {len(sentences_1)})"
         )
         indices = np.random.RandomState(args.seed).choice(
-            len(sentences), args.max_samples, replace=False
+            len(sentences_1), args.max_samples, replace=False
         )
-        sentences = [sentences[i] for i in indices]
+        sentences_1 = [sentences_1[i] for i in indices]
+        sentences_2 = [sentences_2[i] for i in indices]
         labels = {k: [v[i] for i in indices] for k, v in labels.items()}
-        print(f"Using {len(sentences)} sentences")
+        print(f"Using {len(sentences_1)} sentence pairs")
 
     # Filter concepts if specified
     if args.concepts:
@@ -2043,20 +2587,22 @@ def run_causal_intervention_experiment(args):
             sae_activations = t.load(args.sae_activations_path).numpy()
         print(f"SAE activations shape: {sae_activations.shape}")
 
-    # Split train/test
+    # Split train/test using the labels of the first multiclass group for stratification
     print("\nSplitting train/test...")
     first_group = list(multiclass_groups.keys())[0]
     train_idx, test_idx = train_test_split(
-        np.arange(len(sentences)),
+        np.arange(len(sentences_1)),
         test_size=0.2,
         random_state=args.seed,
         stratify=multiclass_groups[first_group]["labels"],
     )
 
-    sentences_train = [sentences[i] for i in train_idx]
-    sentences_test = [sentences[i] for i in test_idx]
+    sentences_1_train = [sentences_1[i] for i in train_idx]
+    sentences_2_train = [sentences_2[i] for i in train_idx]
+    sentences_1_test = [sentences_1[i] for i in test_idx]
+    sentences_2_test = [sentences_2[i] for i in test_idx]
 
-    # Split multiclass labels
+    # Split multiclass labels into train/test
     multiclass_train = {}
     multiclass_test = {}
     for group_name, group_info in multiclass_groups.items():
@@ -2118,8 +2664,8 @@ def run_causal_intervention_experiment(args):
                 concepts_needed.add(concept_name)
     elif args.steering_curves:
         # Only need concepts in steering curves
-        for pair_str in args.steering_curves.split(';'):
-            concepts = pair_str.strip().split(',')
+        for pair_str in args.steering_curves.split(";"):
+            concepts = pair_str.strip().split(",")
             if len(concepts) == 2:
                 concepts_needed.add(concepts[0].strip())
                 concepts_needed.add(concepts[1].strip())
@@ -2137,47 +2683,78 @@ def run_causal_intervention_experiment(args):
                 groups_needed.add(group_name)
                 break  # Only need to find one match per group
 
-    print(f"\nOptimization: Training probes for {len(groups_needed)}/{len(multiclass_train)} groups")
+    print(
+        f"\nOptimization: Training probes for {len(groups_needed)}/{len(multiclass_train)} groups"
+    )
     print(f"Groups needed: {sorted(groups_needed)}")
     print(f"Concepts needed: {sorted(concepts_needed)}")
 
-    # Extract residual stream activations for probe training
-    print("\nExtracting residual stream activations from language model...")
-    submodule_probe = get_submodule_with_index(lm_model, args.submodule_probe)
-    residual_acts_list = []
+    # Helper: extract residual stream activations for a list of sentences
+    def extract_residual_activations(
+        model, tokenizer, submodule, sentences, batch_size
+    ):
+        residual_acts_list = []
 
-    def _capture_residual(_module, _input, _output):
-        if isinstance(_output, tuple):
-            _output = _output[0]
-        residual_acts_list.append(_output.sum(dim=1).detach().cpu())
+        def _capture_residual(_module, _input, _output):
+            if isinstance(_output, tuple):
+                _output = _output[0]
+            # Sum over sequence dimension to get per-example vector
+            residual_acts_list.append(_output.sum(dim=1).detach().cpu())
 
-    hook = submodule_probe.register_forward_hook(_capture_residual)
+        hook = submodule.register_forward_hook(_capture_residual)
+        with t.no_grad():
+            for i in tqdm(
+                range(0, len(sentences), batch_size),
+                desc="Extracting residual activations",
+            ):
+                batch = sentences[i : i + batch_size]
+                batch_tokenized = tokenizer(
+                    batch, return_tensors="pt", padding=True
+                ).to(model.device)
+                _ = model(**batch_tokenized)
+        hook.remove()
 
-    with t.no_grad():
-        for i in tqdm(
-            range(0, len(sentences_train), args.batch_size),
-            desc="Extracting residual activations",
-        ):
-            batch = sentences_train[i : i + args.batch_size]
-            batch_tokenized = tokenizer(
-                batch, return_tensors="pt", padding=True
-            ).to(lm_model.device)
-            _ = lm_model(**batch_tokenized)
+        return t.cat(residual_acts_list, dim=0).cpu().numpy()
 
-    hook.remove()
-    residual_acts_train = t.cat(residual_acts_list, dim=0).cpu().numpy()
-    print(f"Residual stream activations shape: {residual_acts_train.shape}")
-
-    # Normalize activations
-    from sklearn.preprocessing import StandardScaler
-
-    scaler = StandardScaler()
-    residual_acts_train_normalized = scaler.fit_transform(residual_acts_train)
+    # Extract residual stream activations for train and test
     print(
-        f"Normalized residual activations (mean={residual_acts_train_normalized.mean():.4f}, std={residual_acts_train_normalized.std():.4f})"
+        "\nExtracting residual stream activations from language model (TRAIN)..."
+    )
+    submodule_probe = get_submodule_with_index(lm_model, args.submodule_probe)
+    residual_acts_train = extract_residual_activations(
+        lm_model,
+        tokenizer,
+        submodule_probe,
+        sentences_train,
+        args.batch_size,
+    )
+    print(
+        f"Residual stream TRAIN activations shape: {residual_acts_train.shape}"
     )
 
-    # Train multiclass probes for each group (only for needed groups)
+    print(
+        "\nExtracting residual stream activations from language model (TEST)..."
+    )
+    residual_acts_test = extract_residual_activations(
+        lm_model,
+        tokenizer,
+        submodule_probe,
+        sentences_test,
+        args.batch_size,
+    )
+    print(
+        f"Residual stream TEST activations shape: {residual_acts_test.shape}"
+    )
+
+    # Normalize activations (fit on train, apply to both train and test)
+    scaler = StandardScaler()
+    residual_acts_train_normalized = scaler.fit_transform(residual_acts_train)
+    residual_acts_test_normalized = scaler.transform(residual_acts_test)
+    print(
+        f"Normalized residual TRAIN activations (mean={residual_acts_train_normalized.mean():.4f}, std={residual_acts_train_normalized.std():.4f})"
+    )
+
+    # Train multiclass probes for each group (only for needed groups), using train_probes
     print("\nTraining multiclass probes on residual stream...")
     probes_dict = {}  # group_name -> probe
     for group_name, group_info in multiclass_train.items():
@@ -2186,25 +2763,27 @@ def run_causal_intervention_experiment(args):
             print(f"  {group_name}: Skipped (not needed)")
             continue
 
-        probe = LogisticRegression(
-            random_state=args.seed,
-            max_iter=1000,
-            class_weight="balanced",
-            solver="lbfgs",
-            C=1.0,
-            multi_class="multinomial",  # Explicit multiclass mode
-        )
-        probe.fit(residual_acts_train_normalized, group_info["labels"])
-        probes_dict[group_name] = probe
-        train_acc = probe.score(
-            residual_acts_train_normalized, group_info["labels"]
-        )
         print(
-            f"  {group_name} ({len(group_info['class_names'])} classes): Train acc = {train_acc:.4f}"
+            f"  Training probe for group '{group_name}' ({len(group_info['class_names'])} classes)..."
         )
 
+        # Use shared train_probes helper in multiclass mode
+        probe = train_probes(
+            train_activations=residual_acts_train_normalized,
+            train_labels=group_info["labels"],
+            test_activations=residual_acts_test_normalized,
+            test_labels=multiclass_test[group_name]["labels"],
+            probe_type="multiclass",
+            seed=args.seed,
+            sparse=None,  # use all features; no top-k preselection here
+        )
+
+        probes_dict[group_name] = probe
+
     # Get top-1 feature for each class using gradient attribution
-    print(f"\nComputing gradient attribution for {len(concepts_needed)} concepts...")
+    print(
+        f"\nComputing gradient attribution for {len(concepts_needed)} concepts..."
+    )
     print(f"Concepts: {sorted(concepts_needed)}")
     top_features_dict = {}  # (group_name, class_idx) -> feature_idx
     feature_signs_dict = {}  # (group_name, class_idx) -> sign (+1 or -1)
@@ -2224,14 +2803,15 @@ def run_causal_intervention_experiment(args):
 
             print(f"  {full_name} (class {class_idx} of {group_name})...")
 
-            _, top_indices, all_scores = find_top_k_features_by_attribution(
+            _, top_indices, all_scores = find_top_k_features_by_attribution_pairs(
                 model=lm_model,
                 tokenizer=tokenizer,
                 submodule_steer_name=args.submodule_steer,
                 submodule_probe_name=args.submodule_probe,
                 dictionary=sae_model,
                 probe=probe,
-                sentences=sentences_train,
+                sentences_1=sentences_1_train,
+                sentences_2=sentences_2_train,
                 k=1,  # Only need top-1 for intervention
                 use_sparsemax=args.use_sparsemax,
                 batch_size=args.batch_size,
@@ -2270,7 +2850,6 @@ def run_causal_intervention_experiment(args):
             )
 
     # Compute causal intervention matrix (only if needed for heatmap or if no steering curves requested)
-    # Steering curves compute their own interventions for specific pairs
     if args.intervention_output or not args.steering_curves:
         delta_logodds_matrix, class_names_flat = (
             compute_causal_intervention_matrix_multiclass(
@@ -2292,7 +2871,9 @@ def run_causal_intervention_experiment(args):
             )
         )
     else:
-        print("\nSkipping heatmap matrix computation (only generating steering curves)")
+        print(
+            "\nSkipping heatmap matrix computation (only generating steering curves)"
+        )
         delta_logodds_matrix = None
         class_names_flat = None
 
@@ -2318,8 +2899,8 @@ def run_causal_intervention_experiment(args):
 
     # Save results if output path provided
     if args.intervention_output:
-        # Save raw matrix to JSON first (before plotting)
         matrix_json_path = args.intervention_output.with_suffix(".json")
+
         # Convert tuple keys to strings for JSON serialization
         top_features_serializable = {
             f"{k[0]}_{k[1]}": v for k, v in top_features_dict.items()
@@ -2347,31 +2928,30 @@ def run_causal_intervention_experiment(args):
             json.dump(save_data, f, indent=2)
         print(f"\nIntervention matrix data saved to {matrix_json_path}")
 
-        # Save plot
-        # plot_title = f"Causal Intervention ({args.intervention_type}, strength={args.intervention_strength})"
         plot_causal_intervention_matrix(
             delta_logodds_matrix,
             class_names_flat,
             output_path=args.intervention_output,
-            # title=plot_title,
         )
         print(f"Intervention matrix plot saved to {args.intervention_output}")
 
     # Optionally generate steering strength curves for specified concept pairs
     if args.steering_curves:
-        print("\n" + "="*70)
+        print("\n" + "=" * 70)
         print("GENERATING STEERING STRENGTH CURVES")
-        print("="*70)
+        print("=" * 70)
 
         # Default strength values to test
         strength_values = [0.1, 0.5, 1.0, 2.0, 5.0]
 
         # Parse concept pairs from argument (format: "concept1,concept2;concept3,concept4")
         concept_pairs = []
-        for pair_str in args.steering_curves.split(';'):
-            concepts = pair_str.strip().split(',')
+        for pair_str in args.steering_curves.split(";"):
+            concepts = pair_str.strip().split(",")
             if len(concepts) == 2:
-                concept_pairs.append((concepts[0].strip(), concepts[1].strip()))
+                concept_pairs.append(
+                    (concepts[0].strip(), concepts[1].strip())
+                )
 
         # Extract model name from model path (e.g., "labeled-sentences_seed0" from path)
         model_name = args.model_path.name
@@ -2380,12 +2960,10 @@ def run_causal_intervention_experiment(args):
         if args.intervention_output:
             base_output = args.intervention_output
         else:
-            # Default to outputs/steering_curve if no intervention output specified
             base_output = Path(f"outputs/steering_curve_{model_name}.png")
             base_output.parent.mkdir(parents=True, exist_ok=True)
 
         for idx, (concept_i, concept_j) in enumerate(concept_pairs):
-            # Include model name in curve filename
             if args.intervention_output:
                 curve_output = base_output.with_name(
                     f"{base_output.stem}_{model_name}_curve_{idx+1}.png"
@@ -2394,6 +2972,7 @@ def run_causal_intervention_experiment(args):
                 curve_output = base_output.with_name(
                     f"{base_output.stem}_curve_{idx+1}.png"
                 )
+
             plot_steering_strength_curves(
                 model=lm_model,
                 tokenizer=tokenizer,
@@ -2517,14 +3096,16 @@ def plot_steering_strength_curves(
     group_j, class_j = None, None
 
     for group_name, group_info in multiclass_groups.items():
-        for class_idx, concept_name in enumerate(group_info['concept_names']):
+        for class_idx, concept_name in enumerate(group_info["concept_names"]):
             if concept_name == concept_i:
                 group_i, class_i = group_name, class_idx
             if concept_name == concept_j:
                 group_j, class_j = group_name, class_idx
 
     if group_i is None or group_j is None:
-        raise ValueError(f"Concepts {concept_i} or {concept_j} not found in multiclass_groups")
+        raise ValueError(
+            f"Concepts {concept_i} or {concept_j} not found in multiclass_groups"
+        )
 
     # Get features and signs
     feature_i = top_features_dict[(group_i, class_i)]
@@ -2558,10 +3139,10 @@ def plot_steering_strength_curves(
 
     # Storage for results
     results = {
-        'steer_i_measure_i': [],  # Blue line
-        'steer_j_measure_i': [],  # Red line
-        'steer_both_measure_i': [],  # Purple solid
-        'steer_sum': [],  # Purple dotted
+        "steer_i_measure_i": [],  # Blue line
+        "steer_j_measure_i": [],  # Red line
+        "steer_both_measure_i": [],  # Purple solid
+        "steer_sum": [],  # Purple dotted
     }
 
     print(f"\nComputing steering curves for {concept_i} vs {concept_j}...")
@@ -2585,8 +3166,8 @@ def plot_steering_strength_curves(
             multiclass=True,
         )
         logits_i = logits_i[:, class_i] if logits_i.ndim > 1 else logits_i
-        delta_i = (logits_i.mean() - baseline_mean)
-        results['steer_i_measure_i'].append(delta_i)
+        delta_i = logits_i.mean() - baseline_mean
+        results["steer_i_measure_i"].append(delta_i)
 
         # 2. Steer z_j, measure z_i (red)
         logits_j = get_probe_logits_with_intervention(
@@ -2606,40 +3187,69 @@ def plot_steering_strength_curves(
             multiclass=True,
         )
         logits_j = logits_j[:, class_i] if logits_j.ndim > 1 else logits_j
-        delta_j = (logits_j.mean() - baseline_mean)
-        results['steer_j_measure_i'].append(delta_j)
+        delta_j = logits_j.mean() - baseline_mean
+        results["steer_j_measure_i"].append(delta_j)
 
         # 3. Sum for dotted purple line
-        results['steer_sum'].append(delta_i + delta_j)
+        results["steer_sum"].append(delta_i + delta_j)
 
         # 4. Steer both (purple solid) - need to implement multi-feature steering
         # For now, approximate as sequential: steer i, then steer j on top
         # This is a simplification - ideally we'd steer both simultaneously
-        results['steer_both_measure_i'].append(delta_i + delta_j)  # Placeholder
+        results["steer_both_measure_i"].append(
+            delta_i + delta_j
+        )  # Placeholder
 
     # Create plot
     fig, ax = plt.subplots(figsize=(6, 4))
 
-    ax.plot(strength_values, results['steer_i_measure_i'],
-            marker='o', color='blue', label=f'{concept_i}', linewidth=2)
-    ax.plot(strength_values, results['steer_j_measure_i'],
-            marker='o', color='red', label=f'{concept_j}', linewidth=2)
-    ax.plot(strength_values, results['steer_both_measure_i'],
-            marker='o', color='purple', label=f'{concept_i} and {concept_j}', linewidth=2)
-    ax.plot(strength_values, results['steer_sum'],
-            linestyle='--', marker='.', color='purple', alpha=0.7,
-            label=f'{concept_i} + {concept_j}', linewidth=2)
+    ax.plot(
+        strength_values,
+        results["steer_i_measure_i"],
+        marker="o",
+        color="blue",
+        label=f"{concept_i}",
+        linewidth=2,
+    )
+    ax.plot(
+        strength_values,
+        results["steer_j_measure_i"],
+        marker="o",
+        color="red",
+        label=f"{concept_j}",
+        linewidth=2,
+    )
+    ax.plot(
+        strength_values,
+        results["steer_both_measure_i"],
+        marker="o",
+        color="purple",
+        label=f"{concept_i} and {concept_j}",
+        linewidth=2,
+    )
+    ax.plot(
+        strength_values,
+        results["steer_sum"],
+        linestyle="--",
+        marker=".",
+        color="purple",
+        alpha=0.7,
+        label=f"{concept_i} + {concept_j}",
+        linewidth=2,
+    )
 
-    ax.axhline(y=0, color='gray', linestyle='-', alpha=0.3, linewidth=1)
-    ax.set_xlabel('Steering coefficient', fontsize=12)
-    ax.set_ylabel(f'ΔLogOdds({concept_i})', fontsize=12)
-    ax.legend(fontsize=10, loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=2)
+    ax.axhline(y=0, color="gray", linestyle="-", alpha=0.3, linewidth=1)
+    ax.set_xlabel("Steering coefficient", fontsize=12)
+    ax.set_ylabel(f"ΔLogOdds({concept_i})", fontsize=12)
+    ax.legend(
+        fontsize=10, loc="upper center", bbox_to_anchor=(0.5, -0.15), ncol=2
+    )
     ax.grid(True, alpha=0.3)
 
     plt.tight_layout()
 
     if output_path:
-        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.savefig(output_path, dpi=300, bbox_inches="tight")
         print(f"Saved steering curve to {output_path}")
 
     return fig, results
@@ -2804,7 +3414,11 @@ def get_submodule_with_index(model, submodule_name):
 
 def run_k_sweep_attribution(args):
     """
-    Run k-sweep using gradient attribution method.
+    Run k-sweep using LR coefficient-based feature selection.
+
+    Uses trained logistic regression probe coefficients to rank features by importance.
+    This method is much faster than gradient attribution and follows the
+    heuristic_feature_ranking_binary approach with method="lr".
 
     This creates the three plots: domain=science correlation, sentiment=positive correlation, and aggregate MCC.
     """
@@ -2813,24 +3427,25 @@ def run_k_sweep_attribution(args):
     import matplotlib.pyplot as plt
 
     print("=" * 70)
-    print("K-SWEEP WITH GRADIENT ATTRIBUTION")
+    print("K-SWEEP WITH LR COEFFICIENT-BASED FEATURE SELECTION (PAIRWISE)")
     print("=" * 70)
 
-    # Load sentences and labels
-    sentences, labels = load_labeled_sentences_test()
-    print(f"\nLoaded {len(sentences)} sentences")
+    # Load paired sentences and labels for difference-based SAE
+    sentences_1, sentences_2, labels = load_paired_sentences_test_all_concepts(seed=args.seed)
+    print(f"\nLoaded {len(sentences_1)} sentence pairs")
 
     # Limit number of samples if specified (useful for faster debugging/testing with large models)
-    if args.max_samples is not None and args.max_samples < len(sentences):
+    if args.max_samples is not None and args.max_samples < len(sentences_1):
         print(
-            f"Limiting to {args.max_samples} samples (from {len(sentences)})"
+            f"Limiting to {args.max_samples} pairs (from {len(sentences_1)})"
         )
         indices = np.random.RandomState(args.seed).choice(
-            len(sentences), args.max_samples, replace=False
+            len(sentences_1), args.max_samples, replace=False
         )
-        sentences = [sentences[i] for i in indices]
+        sentences_1 = [sentences_1[i] for i in indices]
+        sentences_2 = [sentences_2[i] for i in indices]
         labels = {k: [v[i] for i in indices] for k, v in labels.items()}
-        print(f"Using {len(sentences)} sentences")
+        print(f"Using {len(sentences_1)} sentence pairs")
 
     # Filter concepts if specified
     if args.concepts:
@@ -2839,31 +3454,43 @@ def run_k_sweep_attribution(args):
     else:
         print(f"Using all {len(labels)} concepts")
 
-    # Load or compute SAE activations
+    # Load or compute SAE activations (for pairs, compute delta activations)
     if args.sae_activations_path:
         print(
             f"\nLoading pre-computed SAE activations from {args.sae_activations_path}"
         )
+        print("WARNING: Pre-computed activations should be delta activations (acts_2 - acts_1) for pairwise data!")
         if str(args.sae_activations_path).endswith(".npy"):
             sae_activations = np.load(args.sae_activations_path)
         else:
             sae_activations = t.load(args.sae_activations_path).numpy()
-        print(f"SAE activations shape: {sae_activations.shape}")
+        print(f"SAE delta activations shape: {sae_activations.shape}")
     else:
-        print("\nComputing SAE activations...")
+        print("\nComputing SAE delta activations from pairs...")
         sae_model = load_model(args.model_path)
-        embeddings = get_sentence_embeddings(
-            sentences, sae_model.model_name, sae_model.layer, args.batch_size
+
+        # Get embeddings for both sentences
+        embeddings_1 = get_sentence_embeddings(
+            sentences_1, sae_model.model_name, sae_model.layer, args.batch_size
         )
-        sae_activations = get_activations(sae_model, embeddings).numpy()
-        print(f"SAE activations shape: {sae_activations.shape}")
+        embeddings_2 = get_sentence_embeddings(
+            sentences_2, sae_model.model_name, sae_model.layer, args.batch_size
+        )
+
+        # Get SAE activations for both
+        sae_acts_1 = get_activations(sae_model, embeddings_1).numpy()
+        sae_acts_2 = get_activations(sae_model, embeddings_2).numpy()
+
+        # Compute delta activations
+        sae_activations = sae_acts_2 - sae_acts_1
+        print(f"SAE delta activations shape: {sae_activations.shape}")
 
     # Split train/test
     print("\nSplitting train/test...")
     # Use first concept for stratification
     first_concept = list(labels.keys())[0]
     train_idx, test_idx = train_test_split(
-        np.arange(len(sentences)),
+        np.arange(len(sentences_1)),
         test_size=0.2,
         random_state=args.seed,
         stratify=labels[first_concept],
@@ -2871,7 +3498,8 @@ def run_k_sweep_attribution(args):
 
     sae_train = sae_activations[train_idx]
     sae_test = sae_activations[test_idx]
-    sentences_train = [sentences[i] for i in train_idx]
+    sentences_1_train = [sentences_1[i] for i in train_idx]
+    sentences_2_train = [sentences_2[i] for i in train_idx]
 
     labels_train_dict = {
         concept: np.array(label_list)[train_idx]
@@ -2926,33 +3554,65 @@ def run_k_sweep_attribution(args):
     print(f"Submodule probe: {args.submodule_probe}")
 
     # Extract residual stream activations from language model for probe training
-    print("\nExtracting residual stream activations from language model...")
+    # For difference-based SAEs, extract activations from BOTH sentences and compute delta
+    print(
+        "\nExtracting residual stream activations from language model (paired sentences)..."
+    )
     submodule_probe = get_submodule_with_index(lm_model, args.submodule_probe)
-    residual_acts_list = []
+    residual_acts_1_list = []
+    residual_acts_2_list = []
 
-    def _capture_residual(_module, _input, _output):
+    def _capture_residual_1(_module, _input, _output):
         if isinstance(_output, tuple):
             _output = _output[0]
         # Sum over sequence dimension: (batch, seq, hidden) -> (batch, hidden)
-        residual_acts_list.append(_output.sum(dim=1).detach().cpu())
+        residual_acts_1_list.append(_output.sum(dim=1).detach().cpu())
 
-    hook = submodule_probe.register_forward_hook(_capture_residual)
+    def _capture_residual_2(_module, _input, _output):
+        if isinstance(_output, tuple):
+            _output = _output[0]
+        # Sum over sequence dimension: (batch, seq, hidden) -> (batch, hidden)
+        residual_acts_2_list.append(_output.sum(dim=1).detach().cpu())
+
+    # Extract residual activations for first sentences
+    print("Extracting residual activations for first sentences...")
+    hook_1 = submodule_probe.register_forward_hook(_capture_residual_1)
 
     with t.no_grad():
         for i in tqdm(
-            range(0, len(sentences_train), args.batch_size),
-            desc="Extracting residual activations",
+            range(0, len(sentences_1_train), args.batch_size),
+            desc="Extracting residual activations (s1)",
         ):
-            batch = sentences_train[i : i + args.batch_size]
-            batch_tokenized = tokenizer(
-                batch, return_tensors="pt", padding=True
+            batch_1 = sentences_1_train[i : i + args.batch_size]
+            batch_tokenized_1 = tokenizer(
+                batch_1, return_tensors="pt", padding=True
             ).to(lm_model.device)
-            _ = lm_model(**batch_tokenized)
+            _ = lm_model(**batch_tokenized_1)
 
-    hook.remove()
-    # Convert to numpy (already in float32)
-    residual_acts_train = t.cat(residual_acts_list, dim=0).cpu().numpy()
-    print(f"Residual stream activations shape: {residual_acts_train.shape}")
+    hook_1.remove()
+    residual_acts_1 = t.cat(residual_acts_1_list, dim=0).cpu()
+
+    # Extract residual activations for second sentences
+    print("Extracting residual activations for second sentences...")
+    hook_2 = submodule_probe.register_forward_hook(_capture_residual_2)
+
+    with t.no_grad():
+        for i in tqdm(
+            range(0, len(sentences_2_train), args.batch_size),
+            desc="Extracting residual activations (s2)",
+        ):
+            batch_2 = sentences_2_train[i : i + args.batch_size]
+            batch_tokenized_2 = tokenizer(
+                batch_2, return_tensors="pt", padding=True
+            ).to(lm_model.device)
+            _ = lm_model(**batch_tokenized_2)
+
+    hook_2.remove()
+    residual_acts_2 = t.cat(residual_acts_2_list, dim=0).cpu()
+
+    # Compute delta residual activations for difference-based probing
+    residual_acts_train = (residual_acts_2 - residual_acts_1).numpy()
+    print(f"Delta residual stream activations shape: {residual_acts_train.shape}")
 
     # Normalize activations to prevent ill-conditioning from large magnitude differences
     from sklearn.preprocessing import StandardScaler
@@ -2980,26 +3640,16 @@ def run_k_sweep_attribution(args):
             f"  {concept}: Train acc = {probe.score(residual_acts_train_normalized, labels_train_dict[concept]):.4f}"
         )
 
-    # Get attribution scores for each concept
-    print(f"\nComputing gradient attribution scores...")
+    # Get LR-based feature scores for each concept (using trained probe coefficients)
+    print(f"\nExtracting LR feature scores from trained probes...")
     all_scores_dict = {}
-    max_k = max(args.k_values)
 
     for concept in labels_train_dict.keys():
         print(f"  {concept}...")
-        _, _, all_scores = find_top_k_features_by_attribution(
-            model=lm_model,
-            tokenizer=tokenizer,
-            submodule_steer_name=args.submodule_steer,
-            submodule_probe_name=args.submodule_probe,
-            dictionary=sae_model,
-            probe=initial_probes[concept],
-            sentences=sentences_train,
-            k=max_k,
-            use_sparsemax=args.use_sparsemax,
-            batch_size=args.batch_size,
-            scaler=scaler,
-        )
+        probe = initial_probes[concept]
+        # For binary classification, coef_ has shape (1, n_features)
+        # Use absolute values as feature importance scores
+        all_scores = np.abs(probe.coef_[0])
         all_scores_dict[concept] = all_scores
 
     # Sweep k values
@@ -3185,7 +3835,8 @@ def main():
     parser.add_argument(
         "--sweep-k-attribution",
         action="store_true",
-        help="Perform k-sweep using gradient attribution method",
+        help="Perform k-sweep using LR coefficient-based feature selection (method='lr' from heuristic_feature_ranking_binary). "
+             "Ranks features by |probe.coef_[0]| - much faster than gradient attribution.",
     )
     parser.add_argument(
         "--k-values",
@@ -3211,7 +3862,7 @@ def main():
         "--lm-model-name",
         type=str,
         default=None,
-        help="Language model name for gradient attribution. If not provided, automatically inferred from SAE config.",
+        help="Language model name (only needed for loading model to extract residual stream activations). If not provided, automatically inferred from SAE config.",
     )
     parser.add_argument(
         "--submodule-steer",
@@ -3306,7 +3957,22 @@ def main():
             scores = data["correlation_matrix"]
             top_features = data["top_features"]
             top_scores = scores.max(dim=0).values
-            mcc = top_scores.mean().item()
+
+            # Group scores by prefix (before hyphen) for macro-averaging
+            prefix_groups = {}
+            for i, label in enumerate(list(top_features.keys())):
+                prefix = label.split('-')[0] if '-' in label else label
+                if prefix not in prefix_groups:
+                    prefix_groups[prefix] = []
+                prefix_groups[prefix].append(top_scores[i].item())
+
+            # Compute average for each prefix group
+            prefix_averages = {}
+            for prefix, group_scores in prefix_groups.items():
+                prefix_averages[prefix] = sum(group_scores) / len(group_scores)
+
+            # Compute macro-average across prefix groups
+            mcc = sum(prefix_averages.values()) / len(prefix_averages)
 
             print("\nMax Correlation (MCC) for each concept:")
             print("-" * 50)
@@ -3315,7 +3981,12 @@ def main():
                     f"  {label}: {top_scores[i]:.4f} (feature {top_features[label]})"
                 )
 
-            print(f"\nAverage MCC: {mcc:.4f}")
+            print("\nPrefix Group Averages:")
+            print("-" * 50)
+            for prefix, avg in sorted(prefix_averages.items()):
+                print(f"  {prefix}: {avg:.4f}")
+
+            print(f"\nMacro-Average MCC (across {len(prefix_groups)} groups): {mcc:.4f}")
             print(
                 f"Correlation matrix shape: {data['correlation_matrix'].shape}"
             )
