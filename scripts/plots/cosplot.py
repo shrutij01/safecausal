@@ -17,36 +17,23 @@ plt.rc("font", family="serif", size=19)
 
 def get_data(type="same"):
     if type == "same":
-        values_eta = np.array([0.4624, 0.6522, 0.7732, 0.6901, 0.7576, 0.7339])
-        std_devs_eta = np.array(
-            [0.0850, 0.0719, 0.0610, 0.0912, 0.0826, 0.0838]
-        )
+        values_eta = np.array([0.4624, 0.6522, 0.7732, 0.6901, 0.7339])
+        std_devs_eta = np.array([0.0850, 0.0719, 0.0610, 0.0912, 0.0838])
 
-        values_aff = np.array([0.4263, 0.6074, 0.5819, 0.4417, 0.6100, 0.5963])
-        std_devs_aff = np.array(
-            [0.1598, 0.1296, 0.1018, 0.1343, 0.1014, 0.1327]
-        )
+        values_aff = np.array([0.4263, 0.6074, 0.5819, 0.4417, 0.5963])
+        std_devs_aff = np.array([0.1598, 0.1296, 0.1018, 0.1343, 0.1327])
 
-        values_md = np.array([0.4184, 0.4909, np.nan, np.nan, np.nan, 0.1789])
-        std_devs_md = np.array(
-            [0.1607, 0.1331, np.nan, np.nan, np.nan, 0.1377]
-        )
-        values_pca = np.array([0.2893, 0.3660, 0.1613, 0.2763, 0.3202, 0.0307])
-        std_devs_pca = np.array(
-            [0.1200, 0.0481, 0.0586, 0.1389, 0.1251, 0.1014]
-        )
-        values_scope = np.array(
-            [0.488, 0.5897, 0.58152, 0.4884, 0.4731, 0.6635]
-        )
-        std_devs_scope = np.array(
-            [0.0578, 0.0703, 0.053, 0.0578, 0.07321, 0.0298]
-        )
+        values_md = np.array([0.4184, 0.4909, np.nan, np.nan, 0.1789])
+        std_devs_md = np.array([0.1607, 0.1331, np.nan, np.nan, 0.1377])
+        values_pca = np.array([0.2893, 0.3660, 0.1613, 0.2763, 0.0307])
+        std_devs_pca = np.array([0.1200, 0.0481, 0.0586, 0.1389, 0.1014])
+        values_scope = np.array([0.488, 0.5897, 0.58152, 0.4884, 0.6635])
+        std_devs_scope = np.array([0.0578, 0.0703, 0.053, 0.0578, 0.0298])
         labels = [
             r"$\textbf{\textsc{LANG}(1, 1)}$",
             r"$\textbf{\textsc{GENDER}(1, 1)}$",
             r"$\textbf{\textsc{BINARY}(2, 2)}$",
             r"$\textbf{\textsc{CORR}(2, 1)}$",
-            r"$\textbf{\textsc{CAT}(135, 3)}$",
             r"$\textbf{\text{TruthfulQA}(1, 1)}$",
         ]
         dataset_positions = np.array([2 * i + 1 for i in range(len(labels))])
@@ -125,13 +112,13 @@ def main(args):
     # # sns.set_context("paper")
     sns.set_context("notebook", rc={"lines.linewidth": 3})
 
-    _, ax = plt.subplots(figsize=(21, 15))
+    _, ax = plt.subplots(figsize=(18, 11))
     ax.xaxis.grid(False)
     width = 0.35
     ax.bar(
         dataset_positions - 2 * width,
         values_eta,
-        label=r"$\mathbf{\tilde{z}_{\eta}}$",
+        label=r"$\mathbf{\tilde{z}_{SSAE}}$",
         color="none",
         edgecolor="mediumslateblue",
         hatch="*",
@@ -155,7 +142,7 @@ def main(args):
     ax.bar(
         dataset_positions - width,
         values_scope,
-        label=r"$\mathbf{\tilde{z}_{scope}}$",
+        label=r"$\mathbf{\tilde{z}_{SAE}}$",
         color="none",
         edgecolor="deepskyblue",
         hatch="..",
@@ -305,7 +292,7 @@ def main(args):
     plt.tight_layout()
     if args.save:
         print("Saving the plot...")
-        plt.savefig("cosine_sims_" + str(args.datatype) + "_.png")
+        plt.savefig("cosine_sims_minuscat" + str(args.datatype) + "_.png")
     else:
         plt.show()
 
@@ -625,6 +612,6 @@ if __name__ == "__main__":
     parser.add_argument("datatype")
     parser.add_argument("--save", action="store_true")
     args = parser.parse_args()
-    # main(args)
+    main(args)
     # plot_varying_k_mccs()
-    plot_udr()
+    # plot_udr()

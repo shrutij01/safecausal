@@ -497,6 +497,104 @@ def compute_mcc_between_logits_and_labels(logits, labels):
 
 
 
+def get_gemmascope_steering_vector(args, dataset_name="refusal"):
+    """Extract steering vector from Gemmascope using the same logic as SSAE."""
+    # Load dataset and get embeddings
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    data_path = os.path.join(script_dir, "..", "data", f"{dataset_name}.json")
+
+    if not os.path.exists(data_path):
+        raise FileNotFoundError(f"{dataset_name.capitalize()} data not found at {data_path}")
+
+    dataset_data = data_utils.load_json(data_path)
+
+    # Limit to 100 samples
+    max_samples = getattr(args, "max_test_samples", 100)
+    if len(dataset_data) > max_samples:
+        dataset_data = dataset_data[:max_samples]
+
+    embedding_layer = 25  # Gemmascope layer
+
+    # Create question-answer pairs with labels
+    questions = []
+    labels = []
+
+    instruction = (
+        "For the following user request and model response, does the response refuse or comply with the user's request? Answer only with the option: '(A) Refuse' or '(B) Comply'.\n"
+        if dataset_name == "refusal"
+        else "For the following user request and model response, does the answer align with the user's behavior? Answer only with the option: '(A) Agree' or '(B) Disagree'.\n"
+    )
+
+    for item in dataset_data:
+        question = item["question"]
+        matching_answer = item["answer_matching_behavior"]
+        not_matching_answer = item["answer_not_matching_behavior"]
+
+        matching_pair = f"{instruction}\n{question}\n{matching_answer}"
+        not_matching_pair = f"{instruction}\n{question}\n{not_matching_answer}"
+
+        questions.extend([not_matching_pair, matching_pair])
+        labels.extend([0, 1])
+
+    # Get embeddings
+    print(f"Extracting Gemma embeddings for {len(questions)} questions in batches...")
+    embeddings = get_sentence_embeddings(
+        questions, model_name="google/gemma-2-2b-it", layer=embedding_layer, batch_size=8
+    )
+    if isinstance(embeddings, list):
+        embeddings = np.array(embeddings)
+
+    embeddings_tensor = torch.tensor(embeddings, dtype=torch.float32)
+    labels_tensor = torch.tensor(labels, dtype=torch.float32).unsqueeze(1)
+
+    # Load Gemmascope
+    (
+        gemma_decoder_weight,
+        gemma_decoder_bias,
+        gemma_encoder_weight,
+        gemma_encoder_bias,
+    ) = load_gemmascope_checkpoint()
+
+    gemma_model = ExternalSAEModel(
+        gemma_decoder_weight,
+        gemma_decoder_bias,
+        gemma_encoder_weight,
+        gemma_encoder_bias,
+    )
+
+    # Get activations
+    batch_size = 32
+    gemma_acts_list = []
+    print(f"Processing Gemmascope activations in batches of {batch_size}...")
+
+    with torch.no_grad():
+        for i in range(0, len(embeddings_tensor), batch_size):
+            batch = embeddings_tensor[i:i + batch_size]
+            batch_acts = gemma_model.encoder(batch)
+            gemma_acts_list.append(batch_acts.cpu())
+
+    gemma_acts = torch.cat(gemma_acts_list, dim=0)
+
+    # Find best feature using correlation
+    gemma_corr_vector = compute_correlations(gemma_acts, labels_tensor)
+    best_feature_idx = gemma_corr_vector.abs().argmax().item()
+
+    # Compute MCC for best feature
+    best_feature_acts = (gemma_acts[:, best_feature_idx] > 0.1).float()
+    mcc = compute_mcc_between_logits_and_labels(best_feature_acts.numpy(), labels_tensor.squeeze().numpy())
+
+    # Extract steering vector from decoder
+    steering_vector = gemma_decoder_weight[:, best_feature_idx]  # Shape: (rep_dim,)
+
+    return (
+        steering_vector,
+        best_feature_idx,
+        mcc,
+        embedding_layer,
+        dataset_name,
+    )
+
+
 def get_steering_vector(args, dataset_name="refusal"):
     """Load dataset and find the best steering vector dimension using correlation analysis.
     This function maintains backward compatibility for generation functionality.
@@ -564,12 +662,23 @@ def main(args, generate_configs):
 
     # Original generation functionality
     # Get steering vector using the specified dataset
-    steering_vector, feature_idx, correlation, used_layer, dataset_used = (
-        get_steering_vector(args, dataset_name)
-    )
-    print(
-        f"Using {dataset_name}-based steering vector from feature {feature_idx} (correlation: {correlation:.4f})"
-    )
+    if hasattr(args, 'use_gemmascope') and args.use_gemmascope:
+        print("\n=== Using Gemmascope Steering Vector ===")
+        steering_vector, feature_idx, correlation, used_layer, dataset_used = (
+            get_gemmascope_steering_vector(args, dataset_name)
+        )
+        print(
+            f"Using Gemmascope {dataset_name}-based steering vector from feature {feature_idx} (MCC: {correlation:.4f})"
+        )
+    else:
+        print("\n=== Using SSAE Steering Vector ===")
+        steering_vector, feature_idx, correlation, used_layer, dataset_used = (
+            get_steering_vector(args, dataset_name)
+        )
+        print(
+            f"Using SSAE {dataset_name}-based steering vector from feature {feature_idx} (MCC: {correlation:.4f})"
+        )
+
     print(
         f"Applying steering intervention to layer {used_layer} (same as embedding extraction)"
     )
@@ -733,8 +842,10 @@ def main(args, generate_configs):
         prompt_results.append(prompt_result)
 
     # Save results
+    steering_type = "gemmascope" if (hasattr(args, 'use_gemmascope') and args.use_gemmascope) else "ssae"
     results = {
         "dataset": dataset_name,
+        "steering_type": steering_type,
         "steering_info": {
             "feature_idx": feature_idx,
             "correlation": correlation,
@@ -748,7 +859,7 @@ def main(args, generate_configs):
     save_path = os.path.join(
         BASE_DIR,
         "generated_outputs",
-        f"{dataset_name}_steering_comparison.json",
+        f"{dataset_name}_{steering_type}_steering_comparison.json",
     )
     os.makedirs(os.path.dirname(save_path), exist_ok=True)
     with open(save_path, "w") as f:
@@ -850,6 +961,11 @@ if __name__ == "__main__":
         type=int,
         default=32,
         help="Batch size for processing activations (default: 32, reduce if OOM)",
+    )
+    parser.add_argument(
+        "--use-gemmascope",
+        action="store_true",
+        help="Use Gemmascope steering vector instead of SSAE (requires Gemma model)",
     )
     args = parser.parse_args()
     generate_configs = [

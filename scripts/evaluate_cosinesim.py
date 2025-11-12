@@ -16,6 +16,7 @@ import utils.data_utils as utils
 from loaders import (
     TestDataLoader,
     load_llamascope_checkpoint,
+    load_gemmascope_checkpoint,
     load_ssae_models,
 )
 from baselines.pca import pca_transform
@@ -108,6 +109,30 @@ def take_pca(z_test, tilde_z_test, device):
     return cosines_pca
 
 
+def detect_model_type_from_config(dataconfig):
+    """Detect the appropriate SAE model type from data config."""
+    if hasattr(dataconfig, 'model_name'):
+        model_name = dataconfig.model_name.lower()
+        if 'gemma' in model_name:
+            return "gemmascope"
+        elif 'llama' in model_name:
+            return "llamascope"
+        elif 'pythia' in model_name:
+            return "ssae"
+
+    # Fallback: check for other config fields
+    if hasattr(dataconfig, 'model_id'):
+        model_id = dataconfig.model_id.lower()
+        if 'gemma' in model_id:
+            return "gemmascope"
+        elif 'llama' in model_id:
+            return "llamascope"
+        elif 'pythia' in model_id:
+            return "ssae"
+
+    return None
+
+
 def main(args):
     """Evaluate cosine similarities using specified method."""
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -139,10 +164,22 @@ def main(args):
             print("Failed to split data by concepts")
             return
 
+        # Auto-detect model type if not specified
+        modeltype = args.modeltype
+        if not modeltype:
+            detected_type = detect_model_type_from_config(dataconfig)
+            if detected_type:
+                modeltype = detected_type
+                print(f"Auto-detected model type: {modeltype}")
+            else:
+                raise ValueError("Could not auto-detect model type. Please specify --modeltype")
+
         # Load model parameters
-        if args.modeltype == "llamascope":
+        if modeltype == "llamascope":
             decoder_weight, decoder_bias, _, _ = load_llamascope_checkpoint()
-        elif args.modeltype == "ssae":
+        elif modeltype == "gemmascope":
+            decoder_weight, decoder_bias, _, _ = load_gemmascope_checkpoint()
+        elif modeltype == "ssae":
             if not args.modeldir:
                 raise ValueError("--modeldir is required for SSAE model type")
             decoder_weight_matrices, decoder_bias_vectors, _, _ = (
@@ -152,7 +189,7 @@ def main(args):
             decoder_bias = decoder_bias_vectors[0]
         else:
             raise ValueError(
-                "Invalid model type. Choose 'llamascope' or 'ssae'"
+                "Invalid model type. Choose 'llamascope', 'gemmascope', or 'ssae'"
             )
 
         concept_metrics = {}
@@ -177,12 +214,12 @@ def main(args):
 
             # Save steering vector if requested
             if args.store_steering and steering_vector is not None:
-                steering_dir = f"{os.path.dirname(args.datafile)}/steering_vector_{args.modeltype}"
+                steering_dir = f"{os.path.dirname(args.data)}/steering_vector_{modeltype}"
                 os.makedirs(steering_dir, exist_ok=True)
 
                 steering_path = os.path.join(
                     steering_dir,
-                    f"steering_vector_concept_{concept}_{args.modeltype}.pt",
+                    f"steering_vector_concept_{concept}_{modeltype}.pt",
                 )
                 torch.save(steering_vector, steering_path)
                 print(
@@ -227,8 +264,8 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--modeltype",
-        choices=["llamascope", "ssae"],
-        help="Type of model (required for decoder method)",
+        choices=["llamascope", "gemmascope", "ssae"],
+        help="Type of model (auto-detected if not specified)",
     )
     parser.add_argument(
         "--modeldir", help="Path to model directory (required for SSAE)"
@@ -244,8 +281,6 @@ if __name__ == "__main__":
 
     # Validation
     if args.method in ["decoder", "both"]:
-        if not args.modeltype:
-            parser.error("--modeltype is required when using decoder method")
         if args.modeltype == "ssae" and not args.modeldir:
             parser.error("--modeldir is required when using SSAE model type")
 

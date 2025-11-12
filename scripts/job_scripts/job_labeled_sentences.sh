@@ -12,9 +12,11 @@ data_configs=(
 )
 
 # Updated parameter names to match refactored code
-# Use different oc values based on model: 2304 for gemma, 512 for pythia
-gemma_encoding_dim="--oc 2304"
-pythia_encoding_dim="--oc 512"
+# injective rep sizes: 2304 for gemma, 512 for pythia
+gemma_encoding_dim="--oc 4096"
+pythia_encoding_dim="--oc 4096"
+# gemma_encoding_dim="--oc 2304"
+# pythia_encoding_dim="--oc 512"
 schedules=(
     "--schedule 3000" #"--schedule 5000"   # scheduler-epochs
 )

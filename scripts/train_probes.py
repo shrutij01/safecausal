@@ -387,7 +387,6 @@ def score_identification(
                 "gradient method requires probe and label_name arguments"
             )
 
-        # Check if we have the required parameters for hook-based attribution
         required_params = [
             model,
             tokenizer,
@@ -397,7 +396,6 @@ def score_identification(
             sentences,
         ]
         if all(param is not None for param in required_params):
-            # Use hook-based gradient attribution method
             top_k_scores, top_k_indices, all_scores = (
                 find_top_k_features_by_attribution(
                     model=model,
@@ -1776,14 +1774,14 @@ def sweep_k_values_for_plots(
         labels_train: Binary labels (N_train,) OR dict of {concept: labels_train}
         labels_test: Binary labels (N_test,) OR dict of {concept: labels_test}
         all_feature_scores: LR feature scores (F,) OR dict of {concept: scores}
-                           Should be np.abs(probe.coef_[0]) from trained probes
+                        Should be np.abs(probe.coef_[0]) from trained probes
         k_values: List of k values to test
         seed: Random seed
         verbose: Print progress
         compute_activation_mcc: If True, also compute activation-label MCC using
-                               compute_correlation_matrix (needed for right plot)
+                            compute_correlation_matrix (needed for right plot)
         mcc_union_features: If True, use union of top-k features across concepts for MCC.
-                           If False (default), compute MCC per concept and average.
+                        If False (default), compute MCC per concept and average.
 
     Returns:
         If single concept:
@@ -1892,7 +1890,7 @@ def _sweep_k_multi_concept(
 
     Args:
         mcc_union_features: If True, use union of top-k features across concepts for MCC.
-                           If False (default), compute MCC per concept and average.
+                        If False (default), compute MCC per concept and average.
     """
     results = {"k_values": np.array(k_values)}
 
@@ -2035,18 +2033,18 @@ def get_probe_logits_with_intervention(
         probe: Trained sklearn probe (binary or multiclass)
         sentences: List of sentences
         intervention_indices: Indices of SAE features to intervene on (None = no intervention)
-                             For "add_decoder", uses only the first index (top feature)
+                            For "add_decoder", uses only the first index (top feature)
         intervention_type: Type of intervention:
-                          - "zero": Set features to 0
-                          - "amplify": Multiply features by intervention_strength
-                          - "ablate": Same as zero
-                          - "add_decoder": Add decoder direction to residual stream
+                        - "zero": Set features to 0
+                        - "amplify": Multiply features by intervention_strength
+                        - "ablate": Same as zero
+                        - "add_decoder": Add decoder direction to residual stream
         intervention_strength: Strength of intervention (for amplify/add_decoder, default: 2.0)
         use_sparsemax: Whether SAE uses sparsemax
         batch_size: Batch size for processing
         scaler: Optional StandardScaler for normalizing activations
         multiclass: If True, return all class logits (n_samples, n_classes).
-                   If False, return binary logits (n_samples,) - squeezes if needed.
+                If False, return binary logits (n_samples,) - squeezes if needed.
 
     Returns:
         logits: Probe logits

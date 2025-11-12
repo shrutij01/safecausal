@@ -48,6 +48,7 @@ job_name="ssae_optimized"
 output="job_output_%j.txt"
 error="job_error_%j.txt"
 time_limit="1:00:00"
+cpu_req="cpus-per-task=8"
 memory="32Gb"
 gpu_req="gpu:1"
 

@@ -2,53 +2,44 @@
 
 # Define hyperparameters for correlated labeled sentences
 corr_embedding_files=(
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/labeled-sentences_gemma2_25_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.1_gemma2_25_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.2_gemma2_25_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.5_gemma2_25_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.9_gemma2_25_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.99_gemma2_25_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_1.0_gemma2_25_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.1_pythia70m_5_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.2_pythia70m_5_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.5_pythia70m_5_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.9_pythia70m_5_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.99_pythia70m_5_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_1.0_pythia70m_5_last_token.h5"
 )
 
 corr_data_configs=(
+    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences/labeled-sentences_gemma2_25_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.1_gemma2_25_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.2_gemma2_25_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.5_gemma2_25_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.9_gemma2_25_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.99_gemma2_25_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_1.0_gemma2_25_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.1_pythia70m_5_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.2_pythia70m_5_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.5_pythia70m_5_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.9_pythia70m_5_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_0.99_pythia70m_5_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/labeled-sentences-correlated/labeled_sentences_corr_ds-sp_1.0_pythia70m_5_last_token.yaml"
 )
 
-# Same parameters as job_labeled_sentences.sh
-# Use different oc values based on model: 2304 for gemma, 512 for pythia
-gemma_encoding_dim="--oc 2304"
-pythia_encoding_dim="--oc 512"
+# injective rep sizes: 2304 for gemma, 512 for pythia
+gemma_encoding_dim="--oc 4096"
+pythia_encoding_dim="--oc 4096"
+# gemma_encoding_dim="--oc 2304"
+# pythia_encoding_dim="--oc 512"
 schedules=(
-    "--schedule 3000"   # scheduler-epochs
+    "--schedule 3000"
 )
 targets=(
     "--target 0.005" # target-sparsity
 )
 batch_sizes=(
-    "--batch 1024"       # batch-size - increased for better GPU utilization
+    "--batch 1024"
 )
 norm_types=(
-    "--norm ln"         # norm-type
+    "--norm ln"
 )
 loss_types=(
-    "--loss absolute" # loss-type
+    "--loss absolute"
 )
 learning_rates=(
     "--lr 0.0005"      # primal-lr
@@ -57,15 +48,13 @@ seeds=(
     "--seed 0" "--seed 1" "--seed 2" "--seed 5" "--seed 7"
 )
 
-# New optimized parameters from refactored code
 renorm_epochs=(
-    "--renorm-epochs 50"    # renormalization frequency for the decoder columns
+    "--renorm-epochs 50"
 )
 num_epochs=(
     "--epochs 15000"
 )
 
-# Job settings
 job_name="ssae_correlated"
 output="job_output_%j.txt"
 error="job_error_%j.txt"
@@ -78,15 +67,12 @@ gpu_req="gpu:1"
 mkdir -p generated_jobs
 mkdir -p logs
 
-# Counter for unique job names
 counter=0
 
-# Loop through all combinations of hyperparameters
 for idx in "${!corr_embedding_files[@]}"; do
     embedding_file="${corr_embedding_files[$idx]}"
     data_config="${corr_data_configs[$idx]}"
 
-    # Select encoding dimension based on model (gemma vs pythia)
     if [[ $embedding_file == *"gemma"* ]]; then
         oc="${gemma_encoding_dim}"
     else
