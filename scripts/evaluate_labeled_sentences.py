@@ -413,7 +413,7 @@ def get_sentence_embeddings(
 
     from ssae.store_embeddings import extract_embeddings
     import torch
-    from transformers import GPTNeoXForCausalLM, AutoTokenizer
+    from transformers import GPTNeoXForCausalLM, AutoTokenizer, AutoModelForCausalLM
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -429,6 +429,13 @@ def get_sentence_embeddings(
             revision="step3000",
             cache_dir="./pythia-70m-deduped/step3000",
         )
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+    elif model_name == "google/gemma-2-2b-it":
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name, low_cpu_mem_usage=True
+        ).to(device)
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
     else:
@@ -523,6 +530,8 @@ def evaluate_bias_in_bios_dag(
     top_k: int = 20,
     correlation_threshold: float = 0.3,
     max_texts: Optional[int] = None,
+    embedding_model: str = "EleutherAI/pythia-70m-deduped",
+    layer: int = 5,
 ) -> Dict[str, Any]:
     """
     Evaluate bias-in-bios dataset and learn DAG with labeled dimensions.
@@ -534,6 +543,8 @@ def evaluate_bias_in_bios_dag(
         top_k: Number of top connections to display
         correlation_threshold: Minimum correlation for dimension labeling
         max_texts: Optional limit on number of texts to process (for faster testing)
+        embedding_model: Model to use for extracting embeddings
+        layer: Layer to extract embeddings from
 
     Returns:
         Dictionary containing results including DAG weights and dimension labels
@@ -548,8 +559,8 @@ def evaluate_bias_in_bios_dag(
         labels = {k: v[:max_texts] for k, v in labels.items()}
 
     # Get sentence embeddings
-    print("\nExtracting sentence embeddings...")
-    embeddings = get_sentence_embeddings(texts)
+    print(f"\nExtracting sentence embeddings using {embedding_model} layer {layer}...")
+    embeddings = get_sentence_embeddings(texts, model_name=embedding_model, layer=layer)
     print(f"Embeddings shape: {embeddings.shape}")
 
     # Load model
@@ -655,6 +666,19 @@ def main():
         default=None,
         help="Maximum number of texts to process (bias-in-bios only, for faster testing)",
     )
+    parser.add_argument(
+        "--embedding-model",
+        type=str,
+        default="EleutherAI/pythia-70m-deduped",
+        choices=["EleutherAI/pythia-70m-deduped", "google/gemma-2-2b-it"],
+        help="Model to use for extracting embeddings",
+    )
+    parser.add_argument(
+        "--layer",
+        type=int,
+        default=5,
+        help="Layer to extract embeddings from",
+    )
     parser.add_argument("--output", type=Path, help="Output file for results")
 
     args = parser.parse_args()
@@ -668,6 +692,8 @@ def main():
             top_k=args.top_k,
             correlation_threshold=args.correlation_threshold,
             max_texts=args.max_texts,
+            embedding_model=args.embedding_model,
+            layer=args.layer,
         )
         # Results are already printed by evaluate_bias_in_bios_dag
         return
