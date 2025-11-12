@@ -281,10 +281,11 @@ def identify_concept_dimensions(
 
 def learn_latent_dag(
     activations: t.Tensor,
-    n_samples: int = 1000,
+    n_samples: int = 500,
     lambda1: float = 0.02,
     top_k: int = 10,
     dim_labels: Optional[Dict[int, List[Tuple[str, float]]]] = None,
+    top_dims: Optional[int] = 100,
 ) -> t.Tensor:
     """
     Learn a DAG on the difference between activations.
@@ -295,9 +296,10 @@ def learn_latent_dag(
         lambda1: Regularization parameter for DAGMA
         top_k: Number of top connections to print
         dim_labels: Optional dictionary mapping dimension index to list of (concept_name, correlation) tuples
+        top_dims: Number of top dimensions to use (based on variance). None = use all dims
 
     Returns:
-        W_est: Estimated coefficient matrix (F x F)
+        W_est: Estimated coefficient matrix (F x F) or (top_dims x top_dims)
     """
     import numpy as np
 
@@ -305,6 +307,37 @@ def learn_latent_dag(
     n_features = activations.shape[1]
 
     print(f"Learning DAG on activations with shape: {activations.shape}")
+
+    # Select top dimensions based on variance to speed up computation
+    if top_dims is not None and top_dims < n_features:
+        print(f"Selecting top {top_dims} dimensions by variance for efficiency...")
+        variances = activations.var(dim=0)
+        top_dim_indices = variances.argsort(descending=True)[:top_dims]
+        top_dim_indices_sorted = top_dim_indices.sort().values
+        activations_subset = activations[:, top_dim_indices_sorted]
+
+        # Create mapping from subset index to original index
+        subset_to_original = {i: idx.item() for i, idx in enumerate(top_dim_indices_sorted)}
+        original_to_subset = {idx.item(): i for i, idx in enumerate(top_dim_indices_sorted)}
+
+        print(f"Reduced to shape: {activations_subset.shape}")
+        print(f"Top variance dims: {top_dim_indices_sorted[:10].tolist()}...")
+
+        # Update dim_labels to use subset indices
+        if dim_labels is not None:
+            dim_labels_subset = {}
+            for orig_idx, labels in dim_labels.items():
+                if orig_idx in original_to_subset:
+                    dim_labels_subset[original_to_subset[orig_idx]] = labels
+            dim_labels = dim_labels_subset
+            print(f"Retained {len(dim_labels)} labeled dimensions in subset")
+    else:
+        activations_subset = activations
+        subset_to_original = {i: i for i in range(n_features)}
+        top_dim_indices_sorted = None
+
+    n_features_subset = activations_subset.shape[1]
+
     print(f"Sampling {n_samples} pairs uniformly...")
 
     # Uniformly sample pairs of activations
@@ -312,14 +345,14 @@ def learn_latent_dag(
     indices_j = t.randint(0, n_total, (n_samples,))
 
     # Compute differences
-    differences = activations[indices_i] - activations[indices_j]
+    differences = activations_subset[indices_i] - activations_subset[indices_j]
     print(f"Differences shape: {differences.shape}")
 
     # Convert to numpy for DAGMA
     X = differences.cpu().numpy()
 
     # Learn DAG using DAGMA Linear with L2 loss
-    print(f"Fitting DAGMA with lambda1={lambda1}...")
+    print(f"Fitting DAGMA with lambda1={lambda1} on {n_features_subset} dimensions...")
     model = DagmaLinear(loss_type="l2")
     W_est = model.fit(X, lambda1=lambda1)
 
@@ -331,17 +364,18 @@ def learn_latent_dag(
     # Get indices of top-k connections
     flat_indices = np.argsort(W_abs.flatten())[::-1][:top_k]
     top_connections = [
-        (idx // n_features, idx % n_features, W_abs.flatten()[idx])
+        (idx // n_features_subset, idx % n_features_subset, W_abs.flatten()[idx])
         for idx in flat_indices
     ]
 
     # Helper function to format dimension labels
-    def format_dim_label(dim_idx):
-        if dim_labels is None or dim_idx not in dim_labels:
-            return f"Dim {dim_idx}"
-        concepts = dim_labels[dim_idx]
+    def format_dim_label(subset_dim_idx):
+        orig_dim_idx = subset_to_original[subset_dim_idx]
+        if dim_labels is None or subset_dim_idx not in dim_labels:
+            return f"Dim {orig_dim_idx}"
+        concepts = dim_labels[subset_dim_idx]
         concept_str = ", ".join([f"{name} ({corr:.2f})" for name, corr in concepts])
-        return f"Dim {dim_idx} [{concept_str}]"
+        return f"Dim {orig_dim_idx} [{concept_str}]"
 
     print(f"\nTop {top_k} connections (arrows) in the learned DAG:")
     print("=" * 80)
@@ -363,10 +397,11 @@ def learn_latent_dag(
         if involved_dims:
             print(f"\n{len(involved_dims)} labeled dimensions involved in top connections:")
             print("=" * 80)
-            for dim_idx in sorted(involved_dims):
-                concepts = dim_labels[dim_idx]
+            for subset_dim_idx in sorted(involved_dims):
+                orig_dim_idx = subset_to_original[subset_dim_idx]
+                concepts = dim_labels[subset_dim_idx]
                 concept_str = ", ".join([f"{name} ({corr:.2f})" for name, corr in concepts])
-                print(f"  Dim {dim_idx}: {concept_str}")
+                print(f"  Dim {orig_dim_idx}: {concept_str}")
 
     return t.from_numpy(W_est)
 
@@ -525,7 +560,7 @@ def evaluate_sentence_labels(
 
 def evaluate_bias_in_bios_dag(
     model_path: Path,
-    n_samples: int = 1000,
+    n_samples: int = 500,
     lambda1: float = 0.02,
     top_k: int = 20,
     correlation_threshold: float = 0.3,
@@ -534,6 +569,7 @@ def evaluate_bias_in_bios_dag(
     layer: int = 5,
     embedding_batch_size: int = 128,
     activation_batch_size: int = 512,
+    top_dims: Optional[int] = 100,
 ) -> Dict[str, Any]:
     """
     Evaluate bias-in-bios dataset and learn DAG with labeled dimensions.
@@ -549,6 +585,7 @@ def evaluate_bias_in_bios_dag(
         layer: Layer to extract embeddings from
         embedding_batch_size: Batch size for embedding extraction
         activation_batch_size: Batch size for SSAE activation extraction
+        top_dims: Number of top dimensions to use for DAG learning (None = use all)
 
     Returns:
         Dictionary containing results including DAG weights and dimension labels
@@ -605,6 +642,7 @@ def evaluate_bias_in_bios_dag(
         lambda1=lambda1,
         top_k=top_k,
         dim_labels=dim_labels,
+        top_dims=top_dims,
     )
 
     return {
@@ -697,6 +735,12 @@ def main():
         default=512,
         help="Batch size for SSAE activation extraction (reduce if OOM)",
     )
+    parser.add_argument(
+        "--top-dims",
+        type=int,
+        default=100,
+        help="Number of top dimensions to use for DAG learning (bias-in-bios only, for speed)",
+    )
     parser.add_argument("--output", type=Path, help="Output file for results")
 
     args = parser.parse_args()
@@ -714,6 +758,7 @@ def main():
             layer=args.layer,
             embedding_batch_size=args.embedding_batch_size,
             activation_batch_size=args.activation_batch_size,
+            top_dims=args.top_dims,
         )
         # Results are already printed by evaluate_bias_in_bios_dag
         return
