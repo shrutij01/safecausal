@@ -532,6 +532,8 @@ def evaluate_bias_in_bios_dag(
     max_texts: Optional[int] = None,
     embedding_model: str = "EleutherAI/pythia-70m-deduped",
     layer: int = 5,
+    embedding_batch_size: int = 128,
+    activation_batch_size: int = 512,
 ) -> Dict[str, Any]:
     """
     Evaluate bias-in-bios dataset and learn DAG with labeled dimensions.
@@ -545,6 +547,8 @@ def evaluate_bias_in_bios_dag(
         max_texts: Optional limit on number of texts to process (for faster testing)
         embedding_model: Model to use for extracting embeddings
         layer: Layer to extract embeddings from
+        embedding_batch_size: Batch size for embedding extraction
+        activation_batch_size: Batch size for SSAE activation extraction
 
     Returns:
         Dictionary containing results including DAG weights and dimension labels
@@ -560,7 +564,8 @@ def evaluate_bias_in_bios_dag(
 
     # Get sentence embeddings
     print(f"\nExtracting sentence embeddings using {embedding_model} layer {layer}...")
-    embeddings = get_sentence_embeddings(texts, model_name=embedding_model, layer=layer)
+    print(f"Embedding batch size: {embedding_batch_size}")
+    embeddings = get_sentence_embeddings(texts, model_name=embedding_model, layer=layer, batch_size=embedding_batch_size)
     print(f"Embeddings shape: {embeddings.shape}")
 
     # Load model
@@ -569,7 +574,8 @@ def evaluate_bias_in_bios_dag(
 
     # Get SSAE activations
     print("\nGetting SSAE activations...")
-    activations = get_activations(model, embeddings)
+    print(f"Activation batch size: {activation_batch_size}")
+    activations = get_activations(model, embeddings, batch_size=activation_batch_size)
     print(f"Activations shape: {activations.shape}")
 
     # Identify which dimensions correspond to which concepts
@@ -679,6 +685,18 @@ def main():
         default=5,
         help="Layer to extract embeddings from",
     )
+    parser.add_argument(
+        "--embedding-batch-size",
+        type=int,
+        default=128,
+        help="Batch size for embedding extraction (reduce if OOM)",
+    )
+    parser.add_argument(
+        "--activation-batch-size",
+        type=int,
+        default=512,
+        help="Batch size for SSAE activation extraction (reduce if OOM)",
+    )
     parser.add_argument("--output", type=Path, help="Output file for results")
 
     args = parser.parse_args()
@@ -694,6 +712,8 @@ def main():
             max_texts=args.max_texts,
             embedding_model=args.embedding_model,
             layer=args.layer,
+            embedding_batch_size=args.embedding_batch_size,
+            activation_batch_size=args.activation_batch_size,
         )
         # Results are already printed by evaluate_bias_in_bios_dag
         return
