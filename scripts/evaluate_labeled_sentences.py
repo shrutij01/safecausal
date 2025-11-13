@@ -218,7 +218,7 @@ def identify_concept_dimensions(
     labels: Dict[str, List],
     top_n: int = 1,
     correlation_threshold: float = 0.3,
-) -> Dict[int, List[Tuple[str, float]]]:
+) -> Tuple[Dict[int, List[Tuple[str, float]]], Dict[str, List[Tuple[int, float]]], t.Tensor]:
     """
     Identify which latent dimensions correspond to which concepts based on correlation.
 
@@ -229,7 +229,10 @@ def identify_concept_dimensions(
         correlation_threshold: Minimum correlation to consider
 
     Returns:
-        Dictionary mapping dimension index -> list of (concept_name, correlation) tuples
+        Tuple of:
+        - dim_to_concepts: Dictionary mapping dimension index -> list of (concept_name, correlation) tuples
+        - label_to_dims: Dictionary mapping label name -> list of (dimension_index, correlation) tuples
+        - corr_matrix: Full correlation matrix (F x C)
     """
     print(f"Identifying concept dimensions...")
     print(f"Activations shape: {activations.shape}")
@@ -275,8 +278,47 @@ def identify_concept_dimensions(
         if concept_list:
             dim_to_concepts[dim_idx] = concept_list
 
+    # For each label, find all dimensions above threshold AND ensure top dim is included
+    label_to_dims = {}
+    n_concepts = len(label_names)
+
+    for concept_idx in range(n_concepts):
+        concept_name = label_names[concept_idx]
+        concept_corrs = corr_matrix[:, concept_idx]  # F
+        abs_corrs = concept_corrs.abs()
+
+        # Get top dimension for this label (guaranteed inclusion)
+        top_dim_idx = abs_corrs.argmax().item()
+        top_corr_val = concept_corrs[top_dim_idx].item()
+
+        # Find all dimensions above threshold
+        above_threshold_mask = abs_corrs >= correlation_threshold
+        above_threshold_indices = above_threshold_mask.nonzero(as_tuple=True)[0]
+
+        # Combine: ensure top dim is included, plus all above threshold
+        dim_set = set(above_threshold_indices.tolist())
+        dim_set.add(top_dim_idx)  # Ensure top dim is always included
+
+        # Sort by absolute correlation (descending)
+        dim_list = sorted(
+            [(dim_idx, concept_corrs[dim_idx].item()) for dim_idx in dim_set],
+            key=lambda x: abs(x[1]),
+            reverse=True
+        )
+
+        label_to_dims[concept_name] = dim_list
+
     print(f"Found {len(dim_to_concepts)} dimensions with correlation >= {correlation_threshold}")
-    return dim_to_concepts
+
+    # Print label statistics
+    print(f"\nLabel dimension statistics:")
+    for label_name in sorted(label_to_dims.keys())[:10]:  # Show first 10
+        dims = label_to_dims[label_name]
+        print(f"  {label_name}: {len(dims)} dimensions (top: dim {dims[0][0]}, corr={dims[0][1]:.3f})")
+    if len(label_to_dims) > 10:
+        print(f"  ... and {len(label_to_dims) - 10} more labels")
+
+    return dim_to_concepts, label_to_dims, corr_matrix
 
 
 def learn_latent_dag(
@@ -286,6 +328,7 @@ def learn_latent_dag(
     top_k: int = 10,
     dim_labels: Optional[Dict[int, List[Tuple[str, float]]]] = None,
     top_dims: Optional[int] = 100,
+    specific_dims: Optional[List[int]] = None,
 ) -> t.Tensor:
     """
     Learn a DAG on the difference between activations.
@@ -297,9 +340,10 @@ def learn_latent_dag(
         top_k: Number of top connections to print
         dim_labels: Optional dictionary mapping dimension index to list of (concept_name, correlation) tuples
         top_dims: Number of top dimensions to use (based on variance). None = use all dims
+        specific_dims: Optional list of specific dimension indices to use (overrides top_dims)
 
     Returns:
-        W_est: Estimated coefficient matrix (F x F) or (top_dims x top_dims)
+        W_est: Estimated coefficient matrix (F x F) or (subset x subset)
     """
     import numpy as np
 
@@ -308,8 +352,28 @@ def learn_latent_dag(
 
     print(f"Learning DAG on activations with shape: {activations.shape}")
 
-    # Select top dimensions based on variance to speed up computation
-    if top_dims is not None and top_dims < n_features:
+    # Select dimensions: prefer specific_dims if provided, otherwise use variance-based selection
+    if specific_dims is not None:
+        print(f"Using {len(specific_dims)} specific dimensions (union of top + above threshold)...")
+        top_dim_indices_sorted = t.tensor(specific_dims, dtype=t.long)
+        activations_subset = activations[:, top_dim_indices_sorted]
+
+        # Create mapping from subset index to original index
+        subset_to_original = {i: idx for i, idx in enumerate(specific_dims)}
+        original_to_subset = {idx: i for i, idx in enumerate(specific_dims)}
+
+        print(f"Reduced to shape: {activations_subset.shape}")
+        print(f"Selected dims (first 20): {specific_dims[:20]}...")
+
+        # Update dim_labels to use subset indices
+        if dim_labels is not None:
+            dim_labels_subset = {}
+            for orig_idx, labels in dim_labels.items():
+                if orig_idx in original_to_subset:
+                    dim_labels_subset[original_to_subset[orig_idx]] = labels
+            dim_labels = dim_labels_subset
+            print(f"Retained {len(dim_labels)} labeled dimensions in subset")
+    elif top_dims is not None and top_dims < n_features:
         print(f"Selecting top {top_dims} dimensions by variance for efficiency...")
         variances = activations.var(dim=0)
         top_dim_indices = variances.argsort(descending=True)[:top_dims]
@@ -619,7 +683,7 @@ def evaluate_bias_in_bios_dag(
     print("\n" + "=" * 80)
     print("IDENTIFYING CONCEPT DIMENSIONS")
     print("=" * 80)
-    dim_labels = identify_concept_dimensions(
+    dim_labels, label_to_dims, corr_matrix = identify_concept_dimensions(
         activations, labels, top_n=2, correlation_threshold=correlation_threshold
     )
 
@@ -632,6 +696,28 @@ def evaluate_bias_in_bios_dag(
     if len(dim_labels) > 20:
         print(f"  ... and {len(dim_labels) - 20} more dimensions")
 
+    # Print label-to-dimensions mapping
+    print(f"\nLabel-to-dimensions mapping (each label's dimensions):")
+    for label_name in sorted(label_to_dims.keys())[:20]:  # Show first 20
+        dims = label_to_dims[label_name]
+        dims_str = ", ".join([f"dim {dim_idx} ({corr:.2f})" for dim_idx, corr in dims[:5]])  # Show top 5 dims per label
+        if len(dims) > 5:
+            dims_str += f" ... and {len(dims) - 5} more"
+        print(f"  {label_name}: {len(dims)} dims - {dims_str}")
+    if len(label_to_dims) > 20:
+        print(f"  ... and {len(label_to_dims) - 20} more labels")
+
+    # Collect union of all relevant dimensions for DAG learning
+    # Union = top dim for each label + all dims above threshold
+    relevant_dims = set()
+    for label_name, dims_list in label_to_dims.items():
+        for dim_idx, corr in dims_list:
+            relevant_dims.add(dim_idx)
+
+    relevant_dims_sorted = sorted(list(relevant_dims))
+    print(f"\nTotal relevant dimensions for DAG learning: {len(relevant_dims_sorted)}")
+    print(f"  (Union of top dims per label + all dims above threshold {correlation_threshold})")
+
     # Learn DAG on activation differences with labeled dimensions
     print("\n" + "=" * 80)
     print("LEARNING DAG ON ACTIVATION DIFFERENCES")
@@ -643,13 +729,18 @@ def evaluate_bias_in_bios_dag(
         top_k=top_k,
         dim_labels=dim_labels,
         top_dims=top_dims,
+        specific_dims=relevant_dims_sorted,
     )
 
     return {
         "W_est": W_est,
         "dim_labels": dim_labels,
+        "label_to_dims": label_to_dims,
+        "corr_matrix": corr_matrix,
+        "relevant_dims": relevant_dims_sorted,
         "activations_shape": activations.shape,
         "n_labeled_dims": len(dim_labels),
+        "n_relevant_dims": len(relevant_dims_sorted),
     }
 
 
