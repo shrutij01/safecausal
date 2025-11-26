@@ -325,7 +325,39 @@ def load_model_and_tokenizer(model_id):
 
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
-        model_name = "llama3"
+        model_name = "llama-3.1-8b-instruct"
+    elif model_id == "meta-llama/Llama-3.1-8B":
+        # Base model (no instruction tuning)
+        try:
+            model = transformers.LlamaForCausalLM.from_pretrained(
+                model_id,
+                token=ACCESS_TOKEN,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                low_cpu_mem_usage=True,
+                trust_remote_code=True,
+            )
+            tokenizer = transformers.LlamaTokenizer.from_pretrained(
+                model_id, token=ACCESS_TOKEN, trust_remote_code=True
+            )
+        except Exception as e:
+            print(
+                f"Failed to load with LlamaTokenizer, trying AutoTokenizer: {e}"
+            )
+            tokenizer = transformers.AutoTokenizer.from_pretrained(
+                model_id, token=ACCESS_TOKEN, trust_remote_code=True
+            )
+            model = transformers.AutoModelForCausalLM.from_pretrained(
+                model_id,
+                token=ACCESS_TOKEN,
+                torch_dtype=torch.float16,
+                device_map="auto",
+                low_cpu_mem_usage=True,
+                trust_remote_code=True,
+            )
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        model_name = "llama-3.1-8b"
     elif model_id == "EleutherAI/pythia-70m-deduped":
         model = GPTNeoXForCausalLM.from_pretrained(
             "EleutherAI/pythia-70m-deduped",
@@ -347,7 +379,40 @@ def load_model_and_tokenizer(model_id):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
-        model_name = "gemma2"
+        model_name = "gemma-2-2b-it"
+    elif model_id == "google/gemma-2-2b":
+        # Base model
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True
+        ).to(device)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        model_name = "gemma-2-2b"
+    elif model_id == "google/gemma-2-9b-it":
+        # Instruction-tuned model
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            low_cpu_mem_usage=True,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        model_name = "gemma-2-9b-it"
+    elif model_id == "google/gemma-2-9b":
+        # Base model
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            low_cpu_mem_usage=True,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        model_name = "gemma-2-9b"
     else:
         raise NotImplementedError(f"Model {model_id} not supported")
 
@@ -692,8 +757,12 @@ if __name__ == "__main__":
         default="google/gemma-2-2b-it",
         choices=[
             "meta-llama/Llama-3.1-8B-Instruct",
+            "meta-llama/Llama-3.1-8B",
             "EleutherAI/pythia-70m-deduped",
             "google/gemma-2-2b-it",
+            "google/gemma-2-2b",
+            "google/gemma-2-9b-it",
+            "google/gemma-2-9b",
         ],
     )
     parser.add_argument("--layer", type=int, default=25, choices=range(0, 33))
