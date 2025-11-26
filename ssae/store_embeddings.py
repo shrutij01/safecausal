@@ -413,6 +413,18 @@ def load_model_and_tokenizer(model_id):
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
         model_name = "gemma-2-9b"
+    elif model_id == "google/gemma-3-1b-pt":
+        # Gemma 3 1B pre-trained base model
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id,
+            torch_dtype=torch.float16,
+            device_map="auto",
+            low_cpu_mem_usage=True,
+        )
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer.pad_token = tokenizer.eos_token
+        tokenizer.padding_side = "left"
+        model_name = "gemma-3-1b-pt"
     else:
         raise NotImplementedError(f"Model {model_id} not supported")
 
@@ -760,9 +772,7 @@ if __name__ == "__main__":
             "meta-llama/Llama-3.1-8B",
             "EleutherAI/pythia-70m-deduped",
             "google/gemma-2-2b-it",
-            "google/gemma-2-2b",
-            "google/gemma-2-9b-it",
-            "google/gemma-2-9b",
+            "google/gemma-3-1b-pt",
         ],
     )
     parser.add_argument("--layer", type=int, default=25, choices=range(0, 33))
