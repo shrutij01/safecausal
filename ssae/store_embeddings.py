@@ -84,6 +84,172 @@ def extract_embeddings(
     return embeddings
 
 
+def extract_embeddings_single(
+    texts,
+    model,
+    tokenizer,
+    layer,
+    pooling_method="last_token",
+    batch_size=128,
+    max_seq_len=1024,
+    activation_method="ours",
+):
+    """
+    Extract embeddings for individual texts (not pairs).
+
+    Args:
+        texts: List of text strings
+        model: The model to use for embedding extraction
+        tokenizer: The tokenizer to use
+        layer: Which layer to extract embeddings from
+        pooling_method: How to pool sequence embeddings ('last_token' or 'sum')
+        batch_size: Batch size for processing
+        max_seq_len: Maximum sequence length for truncation
+        activation_method: Method for extracting activations:
+            - 'ours': Left padding, right truncation, extract from position -1
+            - 'reference': Right padding, left truncation, extract from last actual token
+
+    Returns:
+        torch.Tensor: Embeddings of shape (num_texts, embedding_dim)
+    """
+    print(
+        f"Processing {len(texts)} individual texts in batches of {batch_size} using '{activation_method}' method..."
+    )
+
+    # Store original tokenizer settings to restore later
+    original_truncation_side = getattr(tokenizer, "truncation_side", "right")
+    original_padding_side = getattr(tokenizer, "padding_side", "left")
+
+    # Set tokenizer based on activation method
+    if activation_method == "reference":
+        # Reference implementation: right padding, left truncation
+        tokenizer.truncation_side = "left"
+        tokenizer.padding_side = "right"
+    else:  # "ours"
+        # Our implementation: left padding, right truncation
+        tokenizer.truncation_side = "right"
+        tokenizer.padding_side = "left"
+
+    all_embeddings = []
+    num_batches = (len(texts) + batch_size - 1) // batch_size
+
+    # Pre-compute text lengths for reference method
+    text_lengths = None
+    if activation_method == "reference":
+        print("Pre-computing text lengths...")
+        text_lengths = []
+        for t in texts:
+            text_lengths.append(len(tokenizer(t)["input_ids"]))
+
+    for batch_idx in tqdm(range(num_batches), desc="Processing batches"):
+        start_idx = batch_idx * batch_size
+        end_idx = min(start_idx + batch_size, len(texts))
+        batch_texts = texts[start_idx:end_idx]
+        batch_lengths = (
+            text_lengths[start_idx:end_idx] if text_lengths else None
+        )
+
+        # Tokenize batch
+        tokens = tokenizer(
+            batch_texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=max_seq_len,
+        ).to(device)
+
+        # Forward pass for batch
+        with torch.no_grad():
+            outputs = model(**tokens, output_hidden_states=True)
+            hidden_states = outputs["hidden_states"][layer]
+
+            if pooling_method == "last_token":
+                if activation_method == "reference":
+                    # Reference: Extract at the last actual token position (not padding)
+                    # activation_pos = min(length - 1, max_seq_len - 1)
+                    batch_emb_list = []
+                    for j, length in enumerate(batch_lengths):
+                        activation_pos = min(length - 1, max_seq_len - 1)
+                        batch_emb_list.append(
+                            hidden_states[j, activation_pos, :].unsqueeze(0)
+                        )
+                    pooled_embeddings = torch.cat(batch_emb_list, dim=0)
+                else:  # "ours"
+                    # Ours: With left padding, last token is always at position -1
+                    pooled_embeddings = hidden_states[:, -1, :]
+            elif pooling_method == "sum":
+                # Sum pooling across sequence dimension
+                pooled_embeddings = hidden_states.sum(dim=1)
+            else:
+                raise ValueError(f"Unknown pooling method: {pooling_method}")
+
+            # Move to CPU to save GPU memory
+            batch_embeddings = pooled_embeddings.cpu()
+            all_embeddings.append(batch_embeddings)
+
+        # Clear GPU cache after each batch
+        del (
+            tokens,
+            outputs,
+            hidden_states,
+            pooled_embeddings,
+        )
+        torch.cuda.empty_cache()
+
+    # Restore original tokenizer settings
+    tokenizer.truncation_side = original_truncation_side
+    tokenizer.padding_side = original_padding_side
+
+    # Concatenate all batch results
+    print(f"Concatenating {len(all_embeddings)} batches...")
+    embeddings = torch.cat(all_embeddings, dim=0)
+
+    return embeddings
+
+
+def create_random_pairs_from_embeddings(embeddings, num_pairs=50000, seed=42):
+    """
+    Create random pairs from embeddings and compute their differences.
+
+    Args:
+        embeddings: Tensor of shape (num_texts, embedding_dim)
+        num_pairs: Number of pairs to create
+        seed: Random seed for reproducibility
+
+    Returns:
+        torch.Tensor: Paired embeddings of shape (num_pairs, 2, embedding_dim)
+                      where [:, 0, :] is first embedding and [:, 1, :] is second
+    """
+    import random
+
+    random.seed(seed)
+
+    num_texts = embeddings.shape[0]
+    if num_texts < 2:
+        raise ValueError("Need at least 2 texts to create pairs")
+
+    # Limit num_pairs to avoid excessive computation
+    max_possible_pairs = num_texts * (num_texts - 1) // 2
+    num_pairs = min(num_pairs, max_possible_pairs)
+
+    print(f"Creating {num_pairs} random pairs from {num_texts} embeddings...")
+
+    # Generate random pair indices
+    pair_indices = []
+    for _ in range(num_pairs):
+        i, j = random.sample(range(num_texts), 2)
+        pair_indices.append((i, j))
+
+    # Create paired embeddings tensor
+    paired_embeddings = torch.zeros(num_pairs, 2, embeddings.shape[-1])
+    for idx, (i, j) in enumerate(pair_indices):
+        paired_embeddings[idx, 0] = embeddings[i]
+        paired_embeddings[idx, 1] = embeddings[j]
+
+    print(f"Created paired embeddings with shape {paired_embeddings.shape}")
+    return paired_embeddings
+
+
 def store_embeddings(
     filename, cfc_train, cfc_test, cfc_train_labels=None, cfc_test_labels=None
 ):
@@ -290,97 +456,97 @@ def main(args):
 
         return
     elif args.dataset == "oodprobe":
-        data_dir = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)),
-            "..",
-            "data",
-            "oodprobe",
+        # New approach: Load texts from zip, generate embeddings, then randomly pair them
+        zip_path = (
+            "/network/scratch/j/joshi.shruti/OODPROBE_DATA/cleaned_data.zip"
         )
-        csv_files = [f for f in os.listdir(data_dir) if f.endswith(".csv")]
 
-        for csv_file in csv_files:
-            dataset_name = (
-                csv_file.replace(".csv", "").lower().replace(" ", "_")
-            )
-            print(f"Processing {dataset_name}...")
+        # Load all texts from the zip file
+        print(f"Loading texts from {zip_path}...")
+        all_texts = utils.load_oodprobe_texts_from_zip(
+            zip_path=zip_path,
+            max_texts_per_file=None,  # Load all texts
+            seed=42,
+        )
 
-            import tempfile
-            import shutil
+        if len(all_texts) == 0:
+            raise ValueError("No texts loaded from the zip file")
 
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_csv_path = os.path.join(temp_dir, csv_file)
-                shutil.copy(os.path.join(data_dir, csv_file), temp_csv_path)
+        print(f"Loaded {len(all_texts)} texts, now extracting embeddings...")
 
-                cfc_train_tuples, cfc_test_tuples = (
-                    utils.load_oodprobe_paired_samples(
-                        data_dir=temp_dir,
-                        num_samples=args.num_samples,
-                        train_split=args.split,
-                        seed=42,
-                    )
-                )
+        # Extract embeddings for all individual texts
+        all_embeddings = extract_embeddings_single(
+            all_texts,
+            model,
+            tokenizer,
+            args.layer,
+            args.pooling_method,
+            args.batch_size,
+            activation_method=args.activation_method,
+        )
 
-            # Apply quick sampling if enabled
-            cfc_train_tuples, _ = apply_quick_sampling(
-                cfc_train_tuples, None, args.quick
-            )
+        print(f"Extracted embeddings with shape {all_embeddings.shape}")
 
-            print(
-                f"Extracting embeddings from {len(cfc_train_tuples)} training samples for {dataset_name}..."
-            )
-            cfc_train_embeddings = extract_embeddings(
-                cfc_train_tuples,
-                model,
-                tokenizer,
-                args.layer,
-                args.pooling_method,
-                args.batch_size,
-            )
+        # Randomly sample pairs from embeddings
+        num_train_pairs = args.num_samples if args.num_samples else 50000
+        num_test_pairs = int(
+            num_train_pairs * (1 - args.split) / args.split
+        )  # Maintain split ratio
 
-            if len(cfc_test_tuples) > 0:
-                print(
-                    f"Extracting embeddings from {len(cfc_test_tuples)} test samples for {dataset_name}..."
-                )
-                cfc_test_embeddings = extract_embeddings(
-                    cfc_test_tuples,
-                    model,
-                    tokenizer,
-                    args.layer,
-                    args.pooling_method,
-                    args.batch_size,
-                )
-            else:
-                cfc_test_embeddings = []
+        # Apply quick sampling if enabled
+        if args.quick:
+            num_train_pairs = min(num_train_pairs, 5500)
+            num_test_pairs = min(num_test_pairs, 550)
 
-            directory_location = "/network/scratch/j/joshi.shruti/ssae/"
-            directory_name = os.path.join(directory_location, "oodprobe")
-            if not os.path.exists(directory_name):
-                os.makedirs(directory_name)
+        # Create random pairs from embeddings
+        total_pairs = num_train_pairs + num_test_pairs
+        paired_embeddings = create_random_pairs_from_embeddings(
+            all_embeddings,
+            num_pairs=total_pairs,
+            seed=42,
+        )
 
-            filename = f"{dataset_name}_{model_name}_{args.layer}_{args.pooling_method}.h5"
-            filepath = os.path.join(directory_name, filename)
-            store_embeddings(
-                filepath, cfc_train_embeddings, cfc_test_embeddings
-            )
+        # Split into train and test
+        cfc_train_embeddings = paired_embeddings[:num_train_pairs]
+        cfc_test_embeddings = paired_embeddings[num_train_pairs:]
 
-            config = {
-                "rep_dim": cfc_train_embeddings.shape[-1],
-                "dataset": dataset_name,
-                "model": args.model_id,
-                "layer": args.layer,
-                "pooling_method": args.pooling_method,
-                "num_samples": args.num_samples,
-                "split": args.split,
-            }
+        print(
+            f"Created {len(cfc_train_embeddings)} train pairs and {len(cfc_test_embeddings)} test pairs"
+        )
 
-            config_filename = f"{dataset_name}_{model_name}_{args.layer}_{args.pooling_method}.yaml"
-            config_filepath = os.path.join(directory_name, config_filename)
+        # Save embeddings
+        directory_location = "/network/scratch/j/joshi.shruti/ssae/"
+        directory_name = os.path.join(directory_location, "oodprobe")
+        if not os.path.exists(directory_name):
+            os.makedirs(directory_name)
 
-            with open(config_filepath, "w") as f:
-                yaml.dump(config, f)
+        dataset_name = "oodprobe_cleaned"
+        filename = f"{dataset_name}_{model_name}_{args.layer}_{args.pooling_method}.h5"
+        filepath = os.path.join(directory_name, filename)
+        store_embeddings(filepath, cfc_train_embeddings, cfc_test_embeddings)
 
-            print(f"Saved {dataset_name} embeddings to {filepath}")
-            print(f"Saved {dataset_name} config to {config_filepath}")
+        config = {
+            "rep_dim": cfc_train_embeddings.shape[-1],
+            "dataset": dataset_name,
+            "model": args.model_id,
+            "layer": args.layer,
+            "pooling_method": args.pooling_method,
+            "num_texts": len(all_texts),
+            "num_train_pairs": len(cfc_train_embeddings),
+            "num_test_pairs": len(cfc_test_embeddings),
+            "split": args.split,
+            "data_seed": 42,
+            "num_concepts": 1,  # Single concept for oodprobe
+        }
+
+        config_filename = f"{dataset_name}_{model_name}_{args.layer}_{args.pooling_method}.yaml"
+        config_filepath = os.path.join(directory_name, config_filename)
+
+        with open(config_filepath, "w") as f:
+            yaml.dump(config, f)
+
+        print(f"Saved {dataset_name} embeddings to {filepath}")
+        print(f"Saved {dataset_name} config to {config_filepath}")
 
         return
     else:
@@ -557,6 +723,12 @@ if __name__ == "__main__":
         "--quick",
         action="store_true",
         help="Use quick mode: randomly sample 5500 training pairs (same as quick training)",
+    )
+    parser.add_argument(
+        "--activation-method",
+        choices=["ours", "reference"],
+        default="ours",
+        help="Method for extracting activations: 'ours' (left padding, position -1) or 'reference' (right padding, last actual token position)",
     )
     # Llama-3 has 32 layers, CAA paper showed most effective steering around the
     # 13th layer for Llama-2 with 33 layers

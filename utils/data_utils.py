@@ -382,9 +382,12 @@ def load_dataset(
         cfc_test_labels = [{"gender_change": True} for _ in cfc_test_tuples]
         concept_labels_test = None
     elif dataset_name == "categorical-contrastive":
-        cfc_train_tuples, cfc_test_tuples, cfc_train_labels, cfc_test_labels = load_categorical_contrastive(
-            split=split, num_samples=num_samples
-        )
+        (
+            cfc_train_tuples,
+            cfc_test_tuples,
+            cfc_train_labels,
+            cfc_test_labels,
+        ) = load_categorical_contrastive(split=split, num_samples=num_samples)
         concept_labels_test = None
     elif dataset_name in [
         "eng-french",
@@ -667,6 +670,213 @@ def load_oodprobe_paired_samples(
     return cfc_train_tuples, cfc_test_tuples
 
 
+def load_oodprobe_texts_from_zip(
+    zip_path="/network/scratch/j/joshi.shruti/OODPROBE_DATA/cleaned_data.zip",
+    max_texts_per_file=None,
+    seed=42,
+):
+    """
+    Load text data from a zipped folder containing cleaned_data.
+    Returns individual texts (not pairs) for embedding generation.
+
+    The function expects the zip to contain CSV/JSON/JSONL files with text data.
+    For CSV files, it looks for 'prompt', 'text', or 'sentence' columns.
+    For JSON/JSONL files, it looks for 'prompt', 'text', or 'sentence' fields.
+
+    Args:
+        zip_path: Path to the zip file containing cleaned_data
+        max_texts_per_file: Maximum number of texts to load per file (None for all)
+        seed: Random seed for reproducible sampling
+
+    Returns:
+        list: List of text strings for embedding generation
+    """
+    import zipfile
+    import tempfile
+    import io
+
+    random.seed(seed)
+    np.random.seed(seed)
+
+    all_texts = []
+
+    if not os.path.exists(zip_path):
+        raise FileNotFoundError(f"Zip file not found: {zip_path}")
+
+    print(f"Loading texts from {zip_path}...")
+
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        # List all files in the zip
+        file_list = zf.namelist()
+        print(f"Found {len(file_list)} items in zip")
+
+        for file_name in file_list:
+            # Skip directories
+            if file_name.endswith("/"):
+                continue
+
+            # Skip hidden files
+            if os.path.basename(file_name).startswith("."):
+                continue
+
+            file_texts = []
+
+            try:
+                if file_name.endswith(".csv"):
+                    # Read CSV file
+                    with zf.open(file_name) as f:
+                        df = pd.read_csv(io.TextIOWrapper(f, encoding="utf-8"))
+
+                        # Look for text column
+                        text_col = None
+                        for col_name in [
+                            "prompt",
+                            "text",
+                            "sentence",
+                            "content",
+                        ]:
+                            if col_name in df.columns:
+                                text_col = col_name
+                                break
+
+                        if text_col is not None:
+                            file_texts = (
+                                df[text_col].dropna().astype(str).tolist()
+                            )
+                            print(
+                                f"  Loaded {len(file_texts)} texts from {os.path.basename(file_name)} (column: {text_col})"
+                            )
+                        else:
+                            print(
+                                f"  Skipping {os.path.basename(file_name)}: no recognized text column"
+                            )
+
+                elif file_name.endswith(".jsonl"):
+                    # Read JSONL file
+                    with zf.open(file_name) as f:
+                        content = io.TextIOWrapper(f, encoding="utf-8")
+                        for line in content:
+                            if line.strip():
+                                try:
+                                    data = json.loads(line)
+                                    # Look for text field
+                                    for field in [
+                                        "prompt",
+                                        "text",
+                                        "sentence",
+                                        "content",
+                                    ]:
+                                        if field in data and data[field]:
+                                            file_texts.append(str(data[field]))
+                                            break
+                                except json.JSONDecodeError:
+                                    continue
+                    if file_texts:
+                        print(
+                            f"  Loaded {len(file_texts)} texts from {os.path.basename(file_name)}"
+                        )
+
+                elif file_name.endswith(".json"):
+                    # Read JSON file
+                    with zf.open(file_name) as f:
+                        content = io.TextIOWrapper(f, encoding="utf-8").read()
+                        data = json.loads(content)
+
+                        # Handle list of dicts
+                        if isinstance(data, list):
+                            for item in data:
+                                if isinstance(item, dict):
+                                    for field in [
+                                        "prompt",
+                                        "text",
+                                        "sentence",
+                                        "content",
+                                    ]:
+                                        if field in item and item[field]:
+                                            file_texts.append(str(item[field]))
+                                            break
+                                elif isinstance(item, str):
+                                    file_texts.append(item)
+                        # Handle dict with text field
+                        elif isinstance(data, dict):
+                            for field in [
+                                "prompt",
+                                "text",
+                                "sentence",
+                                "content",
+                            ]:
+                                if field in data:
+                                    if isinstance(data[field], list):
+                                        file_texts.extend(
+                                            [str(t) for t in data[field] if t]
+                                        )
+                                    else:
+                                        file_texts.append(str(data[field]))
+                                    break
+
+                    if file_texts:
+                        print(
+                            f"  Loaded {len(file_texts)} texts from {os.path.basename(file_name)}"
+                        )
+
+            except Exception as e:
+                print(f"  Error processing {os.path.basename(file_name)}: {e}")
+                continue
+
+            # Sample if max_texts_per_file is specified
+            if (
+                max_texts_per_file is not None
+                and len(file_texts) > max_texts_per_file
+            ):
+                file_texts = random.sample(file_texts, max_texts_per_file)
+
+            all_texts.extend(file_texts)
+
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_texts = []
+    for text in all_texts:
+        if text not in seen:
+            seen.add(text)
+            unique_texts.append(text)
+
+    print(f"Total unique texts loaded: {len(unique_texts)}")
+    return unique_texts
+
+
+def create_random_text_pairs(texts, num_pairs=50000, seed=42):
+    """
+    Create random pairs from a list of texts.
+
+    Args:
+        texts: List of text strings
+        num_pairs: Number of pairs to create
+        seed: Random seed for reproducibility
+
+    Returns:
+        list: List of [text1, text2] pairs
+    """
+    random.seed(seed)
+
+    if len(texts) < 2:
+        raise ValueError("Need at least 2 texts to create pairs")
+
+    # Limit num_pairs to avoid excessive computation
+    max_possible_pairs = len(texts) * (len(texts) - 1) // 2
+    num_pairs = min(num_pairs, max_possible_pairs)
+
+    pairs = []
+    for _ in range(num_pairs):
+        # Randomly select two different indices
+        i, j = random.sample(range(len(texts)), 2)
+        pairs.append([texts[i], texts[j]])
+
+    print(
+        f"Created {len(pairs)} random pairs from {len(texts)} texts using seed={seed}"
+    )
+    return pairs
+
+
 def save_oodprobe_pairs(
     data_dir, output_file, num_samples=1000, train_split=0.9, seed=42
 ):
@@ -805,7 +1015,11 @@ def load_categorical_contrastive(split=0.9, num_samples=None, data_seed=42):
     # Load the train data (contains most samples)
     script_dir = os.path.dirname(os.path.abspath(__file__))
     train_file = os.path.join(
-        script_dir, "..", "data", "categorical_dataset", "categorical_contrastive_train.json"
+        script_dir,
+        "..",
+        "data",
+        "categorical_dataset",
+        "categorical_contrastive_train.json",
     )
 
     if not os.path.exists(train_file):
@@ -814,7 +1028,7 @@ def load_categorical_contrastive(split=0.9, num_samples=None, data_seed=42):
             "Please run 'python data/categorical.py' to generate it first."
         )
 
-    with open(train_file, 'r', encoding='utf-8') as f:
+    with open(train_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
     print(f"Found {len(data)} samples in categorical dataset")
@@ -836,7 +1050,7 @@ def load_categorical_contrastive(split=0.9, num_samples=None, data_seed=42):
         label_dict = {
             "color_changed": bool(sample["labels"][0]),
             "shape_changed": bool(sample["labels"][1]),
-            "object_changed": bool(sample["labels"][2])
+            "object_changed": bool(sample["labels"][2]),
         }
         labels.append(label_dict)
 
@@ -849,6 +1063,8 @@ def load_categorical_contrastive(split=0.9, num_samples=None, data_seed=42):
     cfc_train_labels = labels[:split_idx]
     cfc_test_labels = labels[split_idx:]
 
-    print(f"Split: {len(cfc_train_tuples)} train pairs, {len(cfc_test_tuples)} test pairs")
+    print(
+        f"Split: {len(cfc_train_tuples)} train pairs, {len(cfc_test_tuples)} test pairs"
+    )
 
     return cfc_train_tuples, cfc_test_tuples, cfc_train_labels, cfc_test_labels

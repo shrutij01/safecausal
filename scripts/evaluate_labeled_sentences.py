@@ -718,6 +718,22 @@ def evaluate_bias_in_bios_dag(
     print(f"\nTotal relevant dimensions for DAG learning: {len(relevant_dims_sorted)}")
     print(f"  (Union of top dims per label + all dims above threshold {correlation_threshold})")
 
+    # Create complete dim_labels_for_dag that includes ALL relevant dims (even if below threshold)
+    dim_labels_for_dag = {}
+    for dim_idx in relevant_dims_sorted:
+        # Collect all labels for this dimension from label_to_dims (inverse lookup)
+        labels_for_this_dim = []
+        for label_name, dims_list in label_to_dims.items():
+            for d_idx, corr in dims_list:
+                if d_idx == dim_idx:
+                    labels_for_this_dim.append((label_name, corr))
+        if labels_for_this_dim:
+            # Sort by absolute correlation
+            labels_for_this_dim.sort(key=lambda x: abs(x[1]), reverse=True)
+            dim_labels_for_dag[dim_idx] = labels_for_this_dim
+
+    print(f"Created labels for {len(dim_labels_for_dag)} dimensions (including below-threshold top dims)")
+
     # Learn DAG on activation differences with labeled dimensions
     print("\n" + "=" * 80)
     print("LEARNING DAG ON ACTIVATION DIFFERENCES")
@@ -727,17 +743,48 @@ def evaluate_bias_in_bios_dag(
         n_samples=n_samples,
         lambda1=lambda1,
         top_k=top_k,
-        dim_labels=dim_labels,
+        dim_labels=dim_labels_for_dag,  # Use complete labels
         top_dims=top_dims,
         specific_dims=relevant_dims_sorted,
     )
 
+    # Extract top connections from W_est for saving
+    W_abs = np.abs(W_est.numpy())
+    n_features_subset = W_est.shape[0]
+    flat_indices = np.argsort(W_abs.flatten())[::-1][:top_k]
+
+    # Create mapping back to original indices
+    subset_to_original_map = {i: relevant_dims_sorted[i] for i in range(len(relevant_dims_sorted))}
+
+    top_connections_list = []
+    for idx in flat_indices:
+        from_dim_subset = idx // n_features_subset
+        to_dim_subset = idx % n_features_subset
+        coef = W_abs.flatten()[idx]
+
+        if coef > 0:
+            from_dim_orig = subset_to_original_map[from_dim_subset]
+            to_dim_orig = subset_to_original_map[to_dim_subset]
+
+            from_labels = dim_labels_for_dag.get(from_dim_orig, [])
+            to_labels = dim_labels_for_dag.get(to_dim_orig, [])
+
+            top_connections_list.append({
+                "from_dim": int(from_dim_orig),
+                "to_dim": int(to_dim_orig),
+                "coefficient": float(coef),
+                "from_labels": [(name, float(corr)) for name, corr in from_labels],
+                "to_labels": [(name, float(corr)) for name, corr in to_labels],
+            })
+
     return {
         "W_est": W_est,
         "dim_labels": dim_labels,
+        "dim_labels_complete": dim_labels_for_dag,
         "label_to_dims": label_to_dims,
         "corr_matrix": corr_matrix,
         "relevant_dims": relevant_dims_sorted,
+        "top_connections": top_connections_list,
         "activations_shape": activations.shape,
         "n_labeled_dims": len(dim_labels),
         "n_relevant_dims": len(relevant_dims_sorted),
@@ -851,7 +898,58 @@ def main():
             activation_batch_size=args.activation_batch_size,
             top_dims=args.top_dims,
         )
-        # Results are already printed by evaluate_bias_in_bios_dag
+
+        # Save results to JSON if output specified
+        if args.output:
+            save_results = {
+                "dataset": "bias-in-bios",
+                "parameters": {
+                    "n_samples": args.n_samples,
+                    "lambda1": args.lambda1,
+                    "correlation_threshold": args.correlation_threshold,
+                    "max_texts": args.max_texts,
+                    "embedding_model": args.embedding_model,
+                    "layer": args.layer,
+                },
+                "activations_shape": list(results["activations_shape"]),
+                "n_labeled_dims": results["n_labeled_dims"],
+                "n_relevant_dims": results["n_relevant_dims"],
+                "relevant_dims": results["relevant_dims"],
+                "top_connections": results["top_connections"],
+            }
+
+            # Convert label_to_dims to serializable format
+            label_to_dims_serializable = {}
+            for label_name, dims_list in results["label_to_dims"].items():
+                label_to_dims_serializable[label_name] = [
+                    {"dim": int(dim_idx), "correlation": float(corr)}
+                    for dim_idx, corr in dims_list
+                ]
+            save_results["label_to_dims"] = label_to_dims_serializable
+
+            # Convert dim_labels_complete to serializable format
+            dim_labels_complete_serializable = {}
+            for dim_idx, labels_list in results["dim_labels_complete"].items():
+                dim_labels_complete_serializable[str(dim_idx)] = [
+                    {"label": label_name, "correlation": float(corr)}
+                    for label_name, corr in labels_list
+                ]
+            save_results["dim_labels_complete"] = dim_labels_complete_serializable
+
+            # Save correlation matrix stats
+            corr_matrix = results["corr_matrix"]
+            save_results["correlation_matrix_shape"] = list(corr_matrix.shape)
+            save_results["correlation_matrix_stats"] = {
+                "mean": float(corr_matrix.mean().item()),
+                "std": float(corr_matrix.std().item()),
+                "max": float(corr_matrix.max().item()),
+                "min": float(corr_matrix.min().item()),
+            }
+
+            with open(args.output, "w") as f:
+                json.dump(save_results, f, indent=2)
+            print(f"\nResults saved to {args.output}")
+
         return
     else:
         # Evaluate model with labeled sentences
