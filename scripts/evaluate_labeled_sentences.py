@@ -841,6 +841,42 @@ def evaluate_bias_in_bios_dag(
     }
 
 
+def find_connected_components(adj_matrix: np.ndarray, threshold: float = 0.01) -> List[List[int]]:
+    """
+    Find connected components in a DAG adjacency matrix.
+    Treats the graph as undirected for component finding.
+
+    Args:
+        adj_matrix: Square adjacency matrix (can be directed)
+        threshold: Minimum absolute weight to consider as an edge
+
+    Returns:
+        List of components, each component is a list of node indices
+    """
+    n = adj_matrix.shape[0]
+    # Create undirected adjacency (edge exists if either direction has weight)
+    undirected = (np.abs(adj_matrix) > threshold) | (np.abs(adj_matrix.T) > threshold)
+
+    visited = [False] * n
+    components = []
+
+    def dfs(node, component):
+        visited[node] = True
+        component.append(node)
+        for neighbor in range(n):
+            if undirected[node, neighbor] and not visited[neighbor]:
+                dfs(neighbor, component)
+
+    for i in range(n):
+        if not visited[i]:
+            component = []
+            dfs(i, component)
+            if len(component) > 0:
+                components.append(component)
+
+    return components
+
+
 def compare_dag_vs_top_steering(
     model_path: Path,
     n_samples: int = 500,
@@ -857,11 +893,12 @@ def compare_dag_vs_top_steering(
 ) -> Dict[str, Any]:
     """
     Compare steering effectiveness between:
-    1. DAG-based steering: using dimensions identified by DAG with learned coefficients
+    1. DAG-based steering: steering ALL connected dimensions of the target concept
     2. Top-only steering: using only the single top-correlated dimension
 
-    This evaluates on bias-in-bios dataset, measuring how well each steering approach
-    can shift activations toward the target concept (e.g., female gender).
+    This evaluates on bias-in-bios dataset. For a target concept (e.g., gender),
+    we identify ALL dimensions correlated with it, find which are connected in the
+    learned DAG, and steer that entire component together.
 
     Args:
         model_path: Path to trained SSAE model
@@ -921,20 +958,22 @@ def compare_dag_vs_top_steering(
         activations, labels, top_n=2, correlation_threshold=correlation_threshold
     )
 
-    # Get dimensions for target label
+    # Get ALL dimensions for target label (not just top one)
     if target_label not in label_to_dims:
         raise ValueError(f"No dimensions found for target label '{target_label}'")
 
-    target_dims = label_to_dims[target_label]
-    top_dim_idx, top_dim_corr = target_dims[0]
+    target_dims = label_to_dims[target_label]  # All dims correlated with target
+    top_dim_idx, top_dim_corr = target_dims[0]  # Single top dimension
 
-    print(f"\nTarget label '{target_label}' dimensions:")
+    print(f"\nTarget label '{target_label}' - ALL correlated dimensions:")
+    print(f"  Total dimensions: {len(target_dims)}")
     print(f"  Top dimension: {top_dim_idx} (correlation: {top_dim_corr:.4f})")
-    print(f"  Total dimensions above threshold: {len(target_dims)}")
-    for i, (dim_idx, corr) in enumerate(target_dims[:5]):
+    for i, (dim_idx, corr) in enumerate(target_dims[:10]):
         print(f"    {i+1}. Dim {dim_idx}: {corr:.4f}")
+    if len(target_dims) > 10:
+        print(f"    ... and {len(target_dims) - 10} more")
 
-    # Collect relevant dimensions for DAG (union of top + above threshold)
+    # Collect relevant dimensions for DAG (union of all concept dims)
     relevant_dims = set()
     for label_name, dims_list in label_to_dims.items():
         for dim_idx, corr in dims_list:
@@ -965,7 +1004,7 @@ def compare_dag_vs_top_steering(
         lambda1=lambda1,
         top_k=20,
         dim_labels=dim_labels_for_dag,
-        top_dims=None,  # Use specific_dims instead
+        top_dims=None,
         specific_dims=relevant_dims_sorted,
     )
 
@@ -973,70 +1012,140 @@ def compare_dag_vs_top_steering(
     subset_to_original = {i: relevant_dims_sorted[i] for i in range(len(relevant_dims_sorted))}
     original_to_subset = {dim: i for i, dim in enumerate(relevant_dims_sorted)}
 
-    # Find target dimension in subset indices
-    if top_dim_idx not in original_to_subset:
-        raise ValueError(f"Top dimension {top_dim_idx} not in relevant dims subset")
+    # Find connected components in the DAG
+    print("\n" + "=" * 80)
+    print("FINDING CONNECTED COMPONENTS")
+    print("=" * 80)
 
-    top_dim_subset_idx = original_to_subset[top_dim_idx]
+    W_numpy = W_est.numpy()
+    components = find_connected_components(W_numpy, threshold=0.01)
 
-    # Extract DAG coefficients for target dimension
-    # W_est[i, j] represents influence of dim i on dim j
-    # We want to find which dimensions influence the target dimension
-    target_incoming = W_est[:, top_dim_subset_idx].numpy()  # Coefficients of dims influencing target
-    target_outgoing = W_est[top_dim_subset_idx, :].numpy()  # Coefficients of target influencing others
+    print(f"Found {len(components)} connected components")
+    for i, comp in enumerate(components):
+        orig_dims = [subset_to_original[idx] for idx in comp]
+        print(f"  Component {i+1}: {len(comp)} dims - {orig_dims[:5]}{'...' if len(comp) > 5 else ''}")
 
-    # Find significant DAG connections to/from target dimension
-    significant_threshold = 0.01
-    incoming_dims = [(subset_to_original[i], coef) for i, coef in enumerate(target_incoming)
-                     if abs(coef) > significant_threshold and i != top_dim_subset_idx]
-    outgoing_dims = [(subset_to_original[i], coef) for i, coef in enumerate(target_outgoing)
-                     if abs(coef) > significant_threshold and i != top_dim_subset_idx]
+    # Get all target concept dimensions in subset indices
+    target_dim_subset_indices = []
+    target_dim_correlations = {}
+    for dim_idx, corr in target_dims:
+        if dim_idx in original_to_subset:
+            subset_idx = original_to_subset[dim_idx]
+            target_dim_subset_indices.append(subset_idx)
+            target_dim_correlations[dim_idx] = corr
 
-    print(f"\nDAG connections for target dimension {top_dim_idx}:")
-    print(f"  Incoming connections (dims influencing target): {len(incoming_dims)}")
-    for dim_idx, coef in sorted(incoming_dims, key=lambda x: abs(x[1]), reverse=True)[:5]:
-        dim_label = dim_labels_for_dag.get(dim_idx, [("unknown", 0)])[0][0]
-        print(f"    Dim {dim_idx} ({dim_label}): {coef:.4f}")
-    print(f"  Outgoing connections (target influencing dims): {len(outgoing_dims)}")
-    for dim_idx, coef in sorted(outgoing_dims, key=lambda x: abs(x[1]), reverse=True)[:5]:
-        dim_label = dim_labels_for_dag.get(dim_idx, [("unknown", 0)])[0][0]
-        print(f"    Dim {dim_idx} ({dim_label}): {coef:.4f}")
+    print(f"\nTarget concept '{target_label}' dimensions in DAG subset: {len(target_dim_subset_indices)}")
+
+    # Find which component(s) contain target dimensions
+    target_components = []
+    for comp_idx, comp in enumerate(components):
+        target_dims_in_comp = [idx for idx in comp if idx in target_dim_subset_indices]
+        if target_dims_in_comp:
+            orig_dims_in_comp = [subset_to_original[idx] for idx in target_dims_in_comp]
+            target_components.append({
+                "component_idx": comp_idx,
+                "component_size": len(comp),
+                "target_dims_count": len(target_dims_in_comp),
+                "target_dims_subset": target_dims_in_comp,
+                "target_dims_original": orig_dims_in_comp,
+                "all_dims_original": [subset_to_original[idx] for idx in comp],
+            })
+
+    print(f"\nComponents containing target '{target_label}' dimensions:")
+    for tc in target_components:
+        print(f"  Component {tc['component_idx']}: {tc['target_dims_count']}/{tc['component_size']} dims are {target_label}")
+        print(f"    Target dims: {tc['target_dims_original'][:5]}{'...' if tc['target_dims_count'] > 5 else ''}")
 
     # Build steering vectors for comparison
     n_features = activations.shape[1]
+    steering_direction = 1.0 if top_dim_corr > 0 else -1.0
 
-    # 1. Top-only steering vector: only the top correlated dimension
+    # 1. Top-only steering vector: only the single top-correlated dimension
     top_only_vector = t.zeros(n_features)
-    steering_direction = 1.0 if top_dim_corr > 0 else -1.0  # Steer in direction of positive label
     top_only_vector[top_dim_idx] = steering_direction
 
-    # 2. DAG-based steering vector: target dim + incoming influences weighted by DAG coefficients
-    dag_vector = t.zeros(n_features)
-    dag_vector[top_dim_idx] = steering_direction
+    # 2. All-target-dims steering: steer ALL dimensions of target concept (weighted by correlation)
+    all_target_vector = t.zeros(n_features)
+    for dim_idx, corr in target_dims:
+        # Weight by correlation magnitude, direction by correlation sign
+        all_target_vector[dim_idx] = corr  # Already has sign from correlation
 
-    # Add incoming dimensions with their DAG coefficients as weights
-    for dim_idx, coef in incoming_dims:
-        # Scale by the DAG coefficient - dimensions that influence target should be steered too
-        dag_vector[dim_idx] = coef * steering_direction
+    # 3. DAG-connected steering: steer only target dims that are connected in DAG
+    dag_connected_vector = t.zeros(n_features)
+    if target_components:
+        # Use the largest component containing target dims
+        largest_target_comp = max(target_components, key=lambda x: x['target_dims_count'])
+        connected_target_dims = largest_target_comp['target_dims_original']
 
-    # Normalize DAG vector to have same L2 norm as top-only for fair comparison
-    dag_vector = dag_vector * (top_only_vector.norm() / (dag_vector.norm() + 1e-10))
+        for dim_idx in connected_target_dims:
+            corr = target_dim_correlations.get(dim_idx, 0)
+            dag_connected_vector[dim_idx] = corr
+
+        print(f"\nDAG-connected steering uses {len(connected_target_dims)} connected target dims")
+    else:
+        # Fallback to top dim if no components found
+        dag_connected_vector[top_dim_idx] = steering_direction
+        print(f"\nNo connected components found, falling back to top dim")
+
+    # 4. DAG-weighted steering: use DAG coefficients to weight connected dims
+    dag_weighted_vector = t.zeros(n_features)
+    if target_components:
+        largest_target_comp = max(target_components, key=lambda x: x['target_dims_count'])
+        comp_subset_indices = [original_to_subset[d] for d in largest_target_comp['all_dims_original']]
+
+        # For each target dim in component, add its contribution + contributions from dims it's connected to
+        for dim_idx in largest_target_comp['target_dims_original']:
+            subset_idx = original_to_subset[dim_idx]
+            corr = target_dim_correlations.get(dim_idx, 0)
+            dag_weighted_vector[dim_idx] = corr
+
+            # Add connected dims weighted by DAG coefficients
+            for other_subset_idx in comp_subset_indices:
+                if other_subset_idx != subset_idx:
+                    # Incoming edges (dims that influence this target dim)
+                    incoming_weight = W_numpy[other_subset_idx, subset_idx]
+                    # Outgoing edges (dims this target dim influences)
+                    outgoing_weight = W_numpy[subset_idx, other_subset_idx]
+
+                    other_dim = subset_to_original[other_subset_idx]
+                    total_weight = incoming_weight + outgoing_weight
+                    if abs(total_weight) > 0.01:
+                        dag_weighted_vector[other_dim] += total_weight * corr
+
+    # Normalize all vectors to have same L2 norm for fair comparison
+    base_norm = top_only_vector.norm()
+    all_target_vector = all_target_vector * (base_norm / (all_target_vector.norm() + 1e-10))
+    dag_connected_vector = dag_connected_vector * (base_norm / (dag_connected_vector.norm() + 1e-10))
+    dag_weighted_vector = dag_weighted_vector * (base_norm / (dag_weighted_vector.norm() + 1e-10))
 
     print(f"\nSteering vectors:")
-    print(f"  Top-only: {(top_only_vector != 0).sum().item()} non-zero dims, norm={top_only_vector.norm():.4f}")
-    print(f"  DAG-based: {(dag_vector != 0).sum().item()} non-zero dims, norm={dag_vector.norm():.4f}")
+    print(f"  1. Top-only: {(top_only_vector != 0).sum().item()} dims")
+    print(f"  2. All-target: {(all_target_vector != 0).sum().item()} dims (all correlated with {target_label})")
+    print(f"  3. DAG-connected: {(dag_connected_vector != 0).sum().item()} dims (connected target dims)")
+    print(f"  4. DAG-weighted: {(dag_weighted_vector != 0).sum().item()} dims (connected + DAG weights)")
 
     # Evaluate steering effectiveness
     print("\n" + "=" * 80)
     print("EVALUATING STEERING EFFECTIVENESS")
     print("=" * 80)
 
+    # Store all steering vectors with names
+    steering_vectors = {
+        "top_only": top_only_vector,
+        "all_target": all_target_vector,
+        "dag_connected": dag_connected_vector,
+        "dag_weighted": dag_weighted_vector,
+    }
+
     results = {
         "target_label": target_label,
         "top_dim_idx": int(top_dim_idx),
         "top_dim_corr": float(top_dim_corr),
-        "n_dag_dims": len(incoming_dims) + 1,
+        "n_target_dims": len(target_dims),
+        "n_dag_connected_dims": int((dag_connected_vector != 0).sum().item()),
+        "n_dag_weighted_dims": int((dag_weighted_vector != 0).sum().item()),
         "steering_strengths": steering_strengths,
+        "target_components": target_components,
         "comparison": {},
     }
 
@@ -1057,171 +1166,123 @@ def compare_dag_vs_top_steering(
     # Precompute probe weights
     probe_weights = corr_matrix[:, list(labels.keys()).index(target_label)]
 
-    # Helper: batched cosine similarity with positive centroid
-    def batched_cosine_sim(acts, batch_size):
-        """Compute mean cosine similarity with positive_mean in batches."""
-        total_sim = 0.0
-        n_samples = acts.shape[0]
-        for i in range(0, n_samples, batch_size):
-            batch = acts[i:i + batch_size]
-            # Cosine sim: (batch @ positive_mean) / (batch_norms * positive_mean_norm)
-            dots = batch @ positive_mean
-            norms = batch.norm(dim=1) + 1e-10
-            sims = dots / (norms * positive_mean_norm)
-            total_sim += sims.sum().item()
-        return total_sim / n_samples
+    # Helper: batched steering evaluation
+    def evaluate_steering_batched(steering_vec, strength, negative_acts, eval_batch_size):
+        """Evaluate a steering vector with given strength."""
+        n_neg = negative_acts.shape[0]
 
-    # Helper: batched probe score
-    def batched_probe_score(acts, batch_size):
-        """Compute mean probe score in batches."""
-        total_score = 0.0
-        n_samples = acts.shape[0]
-        for i in range(0, n_samples, batch_size):
-            batch = acts[i:i + batch_size]
-            scores = batch @ probe_weights
-            probs = t.sigmoid(scores)
-            total_score += probs.sum().item()
-        return total_score / n_samples
+        cos_sim_total = 0.0
+        probe_total = 0.0
+
+        for i in range(0, n_neg, eval_batch_size):
+            batch = negative_acts[i:i + eval_batch_size]
+            steered = batch + strength * steering_vec.unsqueeze(0)
+
+            # Cosine similarity with positive centroid
+            dots = steered @ positive_mean
+            norms = steered.norm(dim=1) + 1e-10
+            cos_sim_total += (dots / (norms * positive_mean_norm)).sum().item()
+
+            # Probe score
+            probe_total += t.sigmoid(steered @ probe_weights).sum().item()
+
+        return {
+            "cosine_sim": cos_sim_total / n_neg,
+            "probe_score": probe_total / n_neg,
+        }
+
+    # Compute baseline metrics (no steering)
+    orig_cos_sim = 0.0
+    orig_probe = 0.0
+    n_neg = negative_acts.shape[0]
+
+    for i in range(0, n_neg, eval_batch_size):
+        batch = negative_acts[i:i + eval_batch_size]
+        dots = batch @ positive_mean
+        norms = batch.norm(dim=1) + 1e-10
+        orig_cos_sim += (dots / (norms * positive_mean_norm)).sum().item()
+        orig_probe += t.sigmoid(batch @ probe_weights).sum().item()
+
+    orig_cos_sim /= n_neg
+    orig_probe /= n_neg
+
+    # Compute positive class reference
+    pos_cos_sim = 0.0
+    pos_probe = 0.0
+    n_pos = positive_acts.shape[0]
+
+    for i in range(0, n_pos, eval_batch_size):
+        batch = positive_acts[i:i + eval_batch_size]
+        dots = batch @ positive_mean
+        norms = batch.norm(dim=1) + 1e-10
+        pos_cos_sim += (dots / (norms * positive_mean_norm)).sum().item()
+        pos_probe += t.sigmoid(batch @ probe_weights).sum().item()
+
+    pos_cos_sim /= n_pos
+    pos_probe /= n_pos
+
+    print(f"\nBaseline metrics:")
+    print(f"  Original (negative): cos_sim={orig_cos_sim:.4f}, probe={orig_probe:.4f}")
+    print(f"  Positive reference:  cos_sim={pos_cos_sim:.4f}, probe={pos_probe:.4f}")
 
     for strength in steering_strengths:
         print(f"\n--- Steering strength: {strength} ---")
 
-        # Measure 1: Mean activation change in target dimension (batched)
-        orig_target_act = 0.0
-        top_target_act = 0.0
-        dag_target_act = 0.0
-        n_neg = negative_acts.shape[0]
-
-        for i in range(0, n_neg, eval_batch_size):
-            batch = negative_acts[i:i + eval_batch_size]
-            top_batch = batch + strength * top_only_vector.unsqueeze(0)
-            dag_batch = batch + strength * dag_vector.unsqueeze(0)
-
-            orig_target_act += batch[:, top_dim_idx].sum().item()
-            top_target_act += top_batch[:, top_dim_idx].sum().item()
-            dag_target_act += dag_batch[:, top_dim_idx].sum().item()
-
-        orig_target_act /= n_neg
-        top_target_act /= n_neg
-        dag_target_act /= n_neg
-        positive_target_act = positive_acts[:, top_dim_idx].mean().item()
-
-        print(f"  Target dim mean activation:")
-        print(f"    Original (negative): {orig_target_act:.4f}")
-        print(f"    Positive samples:    {positive_target_act:.4f}")
-        print(f"    Top-only steered:    {top_target_act:.4f} (delta: {top_target_act - orig_target_act:+.4f})")
-        print(f"    DAG steered:         {dag_target_act:.4f} (delta: {dag_target_act - orig_target_act:+.4f})")
-
-        # Measure 2: Cosine similarity with positive class centroid (batched)
-        orig_sim = batched_cosine_sim(negative_acts, eval_batch_size)
-
-        # For steered versions, compute in batches with steering applied on-the-fly
-        top_sim_total = 0.0
-        dag_sim_total = 0.0
-        for i in range(0, n_neg, eval_batch_size):
-            batch = negative_acts[i:i + eval_batch_size]
-            top_batch = batch + strength * top_only_vector.unsqueeze(0)
-            dag_batch = batch + strength * dag_vector.unsqueeze(0)
-
-            # Cosine sim for top-steered
-            dots_top = top_batch @ positive_mean
-            norms_top = top_batch.norm(dim=1) + 1e-10
-            top_sim_total += (dots_top / (norms_top * positive_mean_norm)).sum().item()
-
-            # Cosine sim for dag-steered
-            dots_dag = dag_batch @ positive_mean
-            norms_dag = dag_batch.norm(dim=1) + 1e-10
-            dag_sim_total += (dots_dag / (norms_dag * positive_mean_norm)).sum().item()
-
-        top_sim = top_sim_total / n_neg
-        dag_sim = dag_sim_total / n_neg
-
-        print(f"  Cosine similarity with positive centroid:")
-        print(f"    Original:     {orig_sim:.4f}")
-        print(f"    Top-only:     {top_sim:.4f} (delta: {top_sim - orig_sim:+.4f})")
-        print(f"    DAG-based:    {dag_sim:.4f} (delta: {dag_sim - orig_sim:+.4f})")
-
-        # Measure 3: Linear probe score (batched)
-        orig_probe = batched_probe_score(negative_acts, eval_batch_size)
-        positive_probe = batched_probe_score(positive_acts, eval_batch_size)
-
-        # For steered versions
-        top_probe_total = 0.0
-        dag_probe_total = 0.0
-        for i in range(0, n_neg, eval_batch_size):
-            batch = negative_acts[i:i + eval_batch_size]
-            top_batch = batch + strength * top_only_vector.unsqueeze(0)
-            dag_batch = batch + strength * dag_vector.unsqueeze(0)
-
-            top_probe_total += t.sigmoid(top_batch @ probe_weights).sum().item()
-            dag_probe_total += t.sigmoid(dag_batch @ probe_weights).sum().item()
-
-        top_probe = top_probe_total / n_neg
-        dag_probe = dag_probe_total / n_neg
-
-        print(f"  Probe score (prob of positive class):")
-        print(f"    Original (negative): {orig_probe:.4f}")
-        print(f"    Positive samples:    {positive_probe:.4f}")
-        print(f"    Top-only steered:    {top_probe:.4f} (delta: {top_probe - orig_probe:+.4f})")
-        print(f"    DAG steered:         {dag_probe:.4f} (delta: {dag_probe - orig_probe:+.4f})")
-
-        # Store results for this strength
-        results["comparison"][f"strength_{strength}"] = {
-            "target_dim_activation": {
-                "original": orig_target_act,
-                "positive_reference": positive_target_act,
-                "top_only": top_target_act,
-                "dag_based": dag_target_act,
-                "top_delta": top_target_act - orig_target_act,
-                "dag_delta": dag_target_act - orig_target_act,
-            },
-            "cosine_similarity": {
-                "original": orig_sim,
-                "top_only": top_sim,
-                "dag_based": dag_sim,
-                "top_delta": top_sim - orig_sim,
-                "dag_delta": dag_sim - orig_sim,
-            },
-            "probe_score": {
-                "original": orig_probe,
-                "positive_reference": positive_probe,
-                "top_only": top_probe,
-                "dag_based": dag_probe,
-                "top_delta": top_probe - orig_probe,
-                "dag_delta": dag_probe - orig_probe,
-            },
+        strength_results = {
+            "original": {"cosine_sim": orig_cos_sim, "probe_score": orig_probe},
+            "positive_reference": {"cosine_sim": pos_cos_sim, "probe_score": pos_probe},
         }
 
-        # Summary comparison
-        improvement_ratio = (dag_sim - orig_sim) / (top_sim - orig_sim + 1e-10)
-        print(f"  DAG vs Top improvement ratio (cosine sim): {improvement_ratio:.2f}x")
+        print(f"  {'Method':<20} {'Cos Sim':>10} {'Delta':>10} {'Probe':>10} {'Delta':>10}")
+        print(f"  {'-'*60}")
+        print(f"  {'Original':<20} {orig_cos_sim:>10.4f} {'-':>10} {orig_probe:>10.4f} {'-':>10}")
+
+        for vec_name, vec in steering_vectors.items():
+            metrics = evaluate_steering_batched(vec, strength, negative_acts, eval_batch_size)
+            cos_delta = metrics["cosine_sim"] - orig_cos_sim
+            probe_delta = metrics["probe_score"] - orig_probe
+
+            strength_results[vec_name] = {
+                "cosine_sim": metrics["cosine_sim"],
+                "probe_score": metrics["probe_score"],
+                "cos_delta": cos_delta,
+                "probe_delta": probe_delta,
+            }
+
+            print(f"  {vec_name:<20} {metrics['cosine_sim']:>10.4f} {cos_delta:>+10.4f} {metrics['probe_score']:>10.4f} {probe_delta:>+10.4f}")
+
+        print(f"  {'Positive ref':<20} {pos_cos_sim:>10.4f} {'-':>10} {pos_probe:>10.4f} {'-':>10}")
+
+        results["comparison"][f"strength_{strength}"] = strength_results
 
     # Store DAG info
     results["dag_info"] = {
-        "incoming_dims": [(int(d), float(c)) for d, c in incoming_dims],
-        "outgoing_dims": [(int(d), float(c)) for d, c in outgoing_dims],
         "relevant_dims_count": len(relevant_dims_sorted),
+        "n_components": len(components),
+        "W_est_shape": list(W_est.shape),
     }
 
     # Summary
     print("\n" + "=" * 80)
-    print("SUMMARY: DAG vs TOP-ONLY STEERING COMPARISON")
+    print("SUMMARY: STEERING COMPARISON")
     print("=" * 80)
 
     for strength in steering_strengths:
         comp = results["comparison"][f"strength_{strength}"]
         print(f"\nStrength {strength}:")
-        print(f"  Cosine similarity improvement:")
-        print(f"    Top-only: {comp['cosine_similarity']['top_delta']:+.4f}")
-        print(f"    DAG-based: {comp['cosine_similarity']['dag_delta']:+.4f}")
-        dag_better = comp['cosine_similarity']['dag_delta'] > comp['cosine_similarity']['top_delta']
-        print(f"    Winner: {'DAG' if dag_better else 'Top-only'}")
 
-        print(f"  Probe score improvement:")
-        print(f"    Top-only: {comp['probe_score']['top_delta']:+.4f}")
-        print(f"    DAG-based: {comp['probe_score']['dag_delta']:+.4f}")
-        dag_better_probe = comp['probe_score']['dag_delta'] > comp['probe_score']['top_delta']
-        print(f"    Winner: {'DAG' if dag_better_probe else 'Top-only'}")
+        # Find best method by cosine similarity improvement
+        methods = ["top_only", "all_target", "dag_connected", "dag_weighted"]
+        best_cos = max(methods, key=lambda m: comp[m]["cos_delta"])
+        best_probe = max(methods, key=lambda m: comp[m]["probe_delta"])
+
+        print(f"  Best by cosine sim:  {best_cos} ({comp[best_cos]['cos_delta']:+.4f})")
+        print(f"  Best by probe score: {best_probe} ({comp[best_probe]['probe_delta']:+.4f})")
+
+        # Compare DAG-connected vs top-only
+        dag_vs_top_cos = comp["dag_connected"]["cos_delta"] - comp["top_only"]["cos_delta"]
+        dag_vs_top_probe = comp["dag_connected"]["probe_delta"] - comp["top_only"]["probe_delta"]
+        print(f"  DAG-connected vs top-only: cos={dag_vs_top_cos:+.4f}, probe={dag_vs_top_probe:+.4f}")
 
     return results
 
