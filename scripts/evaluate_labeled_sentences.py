@@ -8,7 +8,6 @@ import yaml
 import os
 from dagma import utils
 from dagma.linear import DagmaLinear
-from dagma.nonlinear import DagmaMLP, DagmaNonlinear
 from datasets import load_dataset
 import numpy as np
 
@@ -502,19 +501,24 @@ def get_sentence_embeddings(
     layer=5,
     batch_size=128,
 ):
-    """Extract embeddings for individual sentences using store_embeddings function."""
+    """Extract embeddings for individual sentences with memory-efficient processing."""
     import sys
     import os
+    import gc
 
     # Add the parent directory to sys.path to import store_embeddings
     current_dir = os.path.dirname(os.path.abspath(__file__))
     sys.path.append(current_dir)
 
-    from ssae.store_embeddings import extract_embeddings
     import torch
     from transformers import GPTNeoXForCausalLM, AutoTokenizer, AutoModelForCausalLM
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Adjust batch size for large models to prevent OOM
+    if "gemma" in model_name.lower():
+        batch_size = min(batch_size, 4)  # Gemma needs very small batches
+        print(f"Using reduced batch size {batch_size} for Gemma model")
 
     # Load the language model
     if model_name == "EleutherAI/pythia-70m-deduped":
@@ -532,7 +536,9 @@ def get_sentence_embeddings(
         tokenizer.padding_side = "left"
     elif model_name == "google/gemma-2-2b-it":
         model = AutoModelForCausalLM.from_pretrained(
-            model_name, low_cpu_mem_usage=True
+            model_name,
+            low_cpu_mem_usage=True,
+            torch_dtype=torch.float16,  # Use half precision to save memory
         ).to(device)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
         tokenizer.pad_token = tokenizer.eos_token
@@ -540,18 +546,62 @@ def get_sentence_embeddings(
     else:
         raise NotImplementedError(f"Model {model_name} not supported")
 
-    # Convert individual sentences to fake pairs format for extract_embeddings
-    # We'll duplicate each sentence so we get (sentence, sentence) pairs
-    fake_contexts = [(sentence, sentence) for sentence in sentences]
+    model.eval()
 
-    # Extract embeddings using the existing function
-    embeddings = extract_embeddings(
-        fake_contexts, model, tokenizer, layer, "last_token", batch_size
-    )
+    # Extract embeddings directly in batches (avoid fake pairs overhead)
+    all_embeddings = []
+    n_sentences = len(sentences)
 
-    # Since we used (sentence, sentence) pairs, the difference will be zero
-    # So we just take the first embedding from each pair
-    return embeddings[:, 0, :]  # Shape: (N, rep_dim)
+    print(f"Extracting embeddings for {n_sentences} sentences in batches of {batch_size}...")
+
+    with torch.no_grad():
+        for i in range(0, n_sentences, batch_size):
+            if i % max(batch_size * 10, 100) == 0:
+                print(f"  Processing {i}/{n_sentences}...")
+
+            batch_sentences = sentences[i:i + batch_size]
+
+            # Tokenize batch
+            inputs = tokenizer(
+                batch_sentences,
+                return_tensors="pt",
+                padding=True,
+                truncation=True,
+                max_length=512,
+            ).to(device)
+
+            # Forward pass to get hidden states
+            outputs = model(**inputs, output_hidden_states=True)
+
+            # Get embeddings from specified layer, last token position
+            attention_mask = inputs["attention_mask"]
+            seq_lengths = attention_mask.sum(dim=1) - 1  # -1 for 0-indexing
+
+            hidden_states = outputs.hidden_states[layer]  # [batch, seq_len, hidden_dim]
+
+            # Extract last token embedding for each sequence
+            batch_embeddings = []
+            for j, seq_len in enumerate(seq_lengths):
+                emb = hidden_states[j, seq_len, :].cpu().float()  # Convert back to float32
+                batch_embeddings.append(emb)
+
+            all_embeddings.extend(batch_embeddings)
+
+            # Clear intermediate tensors
+            del outputs, hidden_states, inputs
+
+            # Clear CUDA cache after each batch to prevent fragmentation
+            if device.type == "cuda":
+                torch.cuda.empty_cache()
+
+    # Clean up model to free memory
+    del model
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    gc.collect()
+
+    print(f"  Done extracting {len(all_embeddings)} embeddings")
+    return torch.stack(all_embeddings)  # Shape: (N, rep_dim)
 
 
 def get_activations(
