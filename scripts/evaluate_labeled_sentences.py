@@ -803,6 +803,7 @@ def compare_dag_vs_top_steering(
     activation_batch_size: int = 512,
     steering_strengths: List[float] = [0.5, 1.0, 2.0],
     target_label: str = "gender",
+    eval_batch_size: int = 256,
 ) -> Dict[str, Any]:
     """
     Compare steering effectiveness between:
@@ -824,6 +825,7 @@ def compare_dag_vs_top_steering(
         activation_batch_size: Batch size for SSAE activation extraction
         steering_strengths: List of steering strength multipliers to test
         target_label: Label to steer toward (default: "gender" for female direction)
+        eval_batch_size: Batch size for evaluation metrics computation (reduce if OOM)
 
     Returns:
         Dictionary containing comparison results for both steering methods
@@ -996,18 +998,62 @@ def compare_dag_vs_top_steering(
     negative_acts = activations[negative_mask]
 
     print(f"\nSamples: {positive_acts.shape[0]} positive, {negative_acts.shape[0]} negative")
+    print(f"Evaluation batch size: {eval_batch_size}")
+
+    # Precompute positive mean (used for cosine similarity)
+    positive_mean = positive_acts.mean(dim=0)
+    positive_mean_norm = positive_mean.norm() + 1e-10
+
+    # Precompute probe weights
+    probe_weights = corr_matrix[:, list(labels.keys()).index(target_label)]
+
+    # Helper: batched cosine similarity with positive centroid
+    def batched_cosine_sim(acts, batch_size):
+        """Compute mean cosine similarity with positive_mean in batches."""
+        total_sim = 0.0
+        n_samples = acts.shape[0]
+        for i in range(0, n_samples, batch_size):
+            batch = acts[i:i + batch_size]
+            # Cosine sim: (batch @ positive_mean) / (batch_norms * positive_mean_norm)
+            dots = batch @ positive_mean
+            norms = batch.norm(dim=1) + 1e-10
+            sims = dots / (norms * positive_mean_norm)
+            total_sim += sims.sum().item()
+        return total_sim / n_samples
+
+    # Helper: batched probe score
+    def batched_probe_score(acts, batch_size):
+        """Compute mean probe score in batches."""
+        total_score = 0.0
+        n_samples = acts.shape[0]
+        for i in range(0, n_samples, batch_size):
+            batch = acts[i:i + batch_size]
+            scores = batch @ probe_weights
+            probs = t.sigmoid(scores)
+            total_score += probs.sum().item()
+        return total_score / n_samples
 
     for strength in steering_strengths:
         print(f"\n--- Steering strength: {strength} ---")
 
-        # Apply steering to negative samples (trying to make them look like positive)
-        top_steered = negative_acts + strength * top_only_vector.unsqueeze(0)
-        dag_steered = negative_acts + strength * dag_vector.unsqueeze(0)
+        # Measure 1: Mean activation change in target dimension (batched)
+        orig_target_act = 0.0
+        top_target_act = 0.0
+        dag_target_act = 0.0
+        n_neg = negative_acts.shape[0]
 
-        # Measure 1: Mean activation change in target dimension
-        orig_target_act = negative_acts[:, top_dim_idx].mean().item()
-        top_target_act = top_steered[:, top_dim_idx].mean().item()
-        dag_target_act = dag_steered[:, top_dim_idx].mean().item()
+        for i in range(0, n_neg, eval_batch_size):
+            batch = negative_acts[i:i + eval_batch_size]
+            top_batch = batch + strength * top_only_vector.unsqueeze(0)
+            dag_batch = batch + strength * dag_vector.unsqueeze(0)
+
+            orig_target_act += batch[:, top_dim_idx].sum().item()
+            top_target_act += top_batch[:, top_dim_idx].sum().item()
+            dag_target_act += dag_batch[:, top_dim_idx].sum().item()
+
+        orig_target_act /= n_neg
+        top_target_act /= n_neg
+        dag_target_act /= n_neg
         positive_target_act = positive_acts[:, top_dim_idx].mean().item()
 
         print(f"  Target dim mean activation:")
@@ -1016,37 +1062,52 @@ def compare_dag_vs_top_steering(
         print(f"    Top-only steered:    {top_target_act:.4f} (delta: {top_target_act - orig_target_act:+.4f})")
         print(f"    DAG steered:         {dag_target_act:.4f} (delta: {dag_target_act - orig_target_act:+.4f})")
 
-        # Measure 2: Correlation with positive class after steering
-        # Using correlation with mean positive activation pattern
-        positive_mean = positive_acts.mean(dim=0)
+        # Measure 2: Cosine similarity with positive class centroid (batched)
+        orig_sim = batched_cosine_sim(negative_acts, eval_batch_size)
 
-        # Cosine similarity with positive class centroid
-        def cosine_sim(a, b):
-            return (a @ b) / (a.norm() * b.norm() + 1e-10)
+        # For steered versions, compute in batches with steering applied on-the-fly
+        top_sim_total = 0.0
+        dag_sim_total = 0.0
+        for i in range(0, n_neg, eval_batch_size):
+            batch = negative_acts[i:i + eval_batch_size]
+            top_batch = batch + strength * top_only_vector.unsqueeze(0)
+            dag_batch = batch + strength * dag_vector.unsqueeze(0)
 
-        orig_sim = t.stack([cosine_sim(negative_acts[i], positive_mean) for i in range(len(negative_acts))]).mean().item()
-        top_sim = t.stack([cosine_sim(top_steered[i], positive_mean) for i in range(len(top_steered))]).mean().item()
-        dag_sim = t.stack([cosine_sim(dag_steered[i], positive_mean) for i in range(len(dag_steered))]).mean().item()
+            # Cosine sim for top-steered
+            dots_top = top_batch @ positive_mean
+            norms_top = top_batch.norm(dim=1) + 1e-10
+            top_sim_total += (dots_top / (norms_top * positive_mean_norm)).sum().item()
+
+            # Cosine sim for dag-steered
+            dots_dag = dag_batch @ positive_mean
+            norms_dag = dag_batch.norm(dim=1) + 1e-10
+            dag_sim_total += (dots_dag / (norms_dag * positive_mean_norm)).sum().item()
+
+        top_sim = top_sim_total / n_neg
+        dag_sim = dag_sim_total / n_neg
 
         print(f"  Cosine similarity with positive centroid:")
         print(f"    Original:     {orig_sim:.4f}")
         print(f"    Top-only:     {top_sim:.4f} (delta: {top_sim - orig_sim:+.4f})")
         print(f"    DAG-based:    {dag_sim:.4f} (delta: {dag_sim - orig_sim:+.4f})")
 
-        # Measure 3: Linear probe accuracy simulation
-        # Train a simple linear classifier on original data, test on steered data
-        # Using logistic regression proxy: sigmoid(w * act) where w is correlation vector
-        probe_weights = corr_matrix[:, list(labels.keys()).index(target_label)]
+        # Measure 3: Linear probe score (batched)
+        orig_probe = batched_probe_score(negative_acts, eval_batch_size)
+        positive_probe = batched_probe_score(positive_acts, eval_batch_size)
 
-        def probe_score(acts):
-            scores = acts @ probe_weights
-            probs = t.sigmoid(scores)
-            return probs.mean().item()
+        # For steered versions
+        top_probe_total = 0.0
+        dag_probe_total = 0.0
+        for i in range(0, n_neg, eval_batch_size):
+            batch = negative_acts[i:i + eval_batch_size]
+            top_batch = batch + strength * top_only_vector.unsqueeze(0)
+            dag_batch = batch + strength * dag_vector.unsqueeze(0)
 
-        orig_probe = probe_score(negative_acts)
-        top_probe = probe_score(top_steered)
-        dag_probe = probe_score(dag_steered)
-        positive_probe = probe_score(positive_acts)
+            top_probe_total += t.sigmoid(top_batch @ probe_weights).sum().item()
+            dag_probe_total += t.sigmoid(dag_batch @ probe_weights).sum().item()
+
+        top_probe = top_probe_total / n_neg
+        dag_probe = dag_probe_total / n_neg
 
         print(f"  Probe score (prob of positive class):")
         print(f"    Original (negative): {orig_probe:.4f}")
@@ -1216,6 +1277,12 @@ def main():
         default="gender",
         help="Target label to steer toward (compare-steering only, default: gender)",
     )
+    parser.add_argument(
+        "--eval-batch-size",
+        type=int,
+        default=256,
+        help="Batch size for evaluation metrics (compare-steering only, reduce if OOM)",
+    )
     parser.add_argument("--output", type=Path, help="Output file for results")
 
     args = parser.parse_args()
@@ -1235,6 +1302,7 @@ def main():
             activation_batch_size=args.activation_batch_size,
             steering_strengths=args.steering_strengths,
             target_label=args.target_label,
+            eval_batch_size=args.eval_batch_size,
         )
 
         # Save results if output specified
