@@ -791,6 +791,330 @@ def evaluate_bias_in_bios_dag(
     }
 
 
+def compare_dag_vs_top_steering(
+    model_path: Path,
+    n_samples: int = 500,
+    lambda1: float = 0.02,
+    correlation_threshold: float = 0.3,
+    max_texts: Optional[int] = None,
+    embedding_model: str = "EleutherAI/pythia-70m-deduped",
+    layer: int = 5,
+    embedding_batch_size: int = 128,
+    activation_batch_size: int = 512,
+    steering_strengths: List[float] = [0.5, 1.0, 2.0],
+    target_label: str = "gender",
+) -> Dict[str, Any]:
+    """
+    Compare steering effectiveness between:
+    1. DAG-based steering: using dimensions identified by DAG with learned coefficients
+    2. Top-only steering: using only the single top-correlated dimension
+
+    This evaluates on bias-in-bios dataset, measuring how well each steering approach
+    can shift activations toward the target concept (e.g., female gender).
+
+    Args:
+        model_path: Path to trained SSAE model
+        n_samples: Number of pairs to sample for DAG learning
+        lambda1: DAGMA regularization parameter
+        correlation_threshold: Minimum correlation for dimension selection
+        max_texts: Optional limit on number of texts to process
+        embedding_model: Model to use for extracting embeddings
+        layer: Layer to extract embeddings from
+        embedding_batch_size: Batch size for embedding extraction
+        activation_batch_size: Batch size for SSAE activation extraction
+        steering_strengths: List of steering strength multipliers to test
+        target_label: Label to steer toward (default: "gender" for female direction)
+
+    Returns:
+        Dictionary containing comparison results for both steering methods
+    """
+    # Load bias-in-bios dataset
+    texts, labels, professions = load_bias_in_bios()
+
+    # Optionally limit dataset size
+    if max_texts is not None and max_texts < len(texts):
+        print(f"Limiting to first {max_texts} texts...")
+        texts = texts[:max_texts]
+        labels = {k: v[:max_texts] for k, v in labels.items()}
+
+    # Get sentence embeddings
+    print(f"\nExtracting embeddings using {embedding_model} layer {layer}...")
+    embeddings = get_sentence_embeddings(
+        texts, model_name=embedding_model, layer=layer, batch_size=embedding_batch_size
+    )
+    print(f"Embeddings shape: {embeddings.shape}")
+
+    # Load SSAE model
+    model = load_model(model_path)
+    print(f"Loaded model from {model_path}")
+
+    # Get SSAE activations
+    print("\nGetting SSAE activations...")
+    activations = get_activations(model, embeddings, batch_size=activation_batch_size)
+    print(f"Activations shape: {activations.shape}")
+
+    # Get target label data
+    if target_label not in labels:
+        raise ValueError(f"Target label '{target_label}' not found in labels. Available: {list(labels.keys())[:10]}")
+
+    target_labels = t.tensor(labels[target_label], dtype=t.float32)
+    print(f"\nTarget label: {target_label}")
+    print(f"Label distribution: {target_labels.sum().int().item()} positive, {(1 - target_labels).sum().int().item()} negative")
+
+    # Identify concept dimensions
+    print("\n" + "=" * 80)
+    print("IDENTIFYING CONCEPT DIMENSIONS")
+    print("=" * 80)
+    dim_labels, label_to_dims, corr_matrix = identify_concept_dimensions(
+        activations, labels, top_n=2, correlation_threshold=correlation_threshold
+    )
+
+    # Get dimensions for target label
+    if target_label not in label_to_dims:
+        raise ValueError(f"No dimensions found for target label '{target_label}'")
+
+    target_dims = label_to_dims[target_label]
+    top_dim_idx, top_dim_corr = target_dims[0]
+
+    print(f"\nTarget label '{target_label}' dimensions:")
+    print(f"  Top dimension: {top_dim_idx} (correlation: {top_dim_corr:.4f})")
+    print(f"  Total dimensions above threshold: {len(target_dims)}")
+    for i, (dim_idx, corr) in enumerate(target_dims[:5]):
+        print(f"    {i+1}. Dim {dim_idx}: {corr:.4f}")
+
+    # Collect relevant dimensions for DAG (union of top + above threshold)
+    relevant_dims = set()
+    for label_name, dims_list in label_to_dims.items():
+        for dim_idx, corr in dims_list:
+            relevant_dims.add(dim_idx)
+    relevant_dims_sorted = sorted(list(relevant_dims))
+
+    print(f"\nTotal relevant dimensions for DAG: {len(relevant_dims_sorted)}")
+
+    # Create dim_labels mapping for DAG
+    dim_labels_for_dag = {}
+    for dim_idx in relevant_dims_sorted:
+        labels_for_dim = []
+        for label_name, dims_list in label_to_dims.items():
+            for d_idx, corr in dims_list:
+                if d_idx == dim_idx:
+                    labels_for_dim.append((label_name, corr))
+        if labels_for_dim:
+            labels_for_dim.sort(key=lambda x: abs(x[1]), reverse=True)
+            dim_labels_for_dag[dim_idx] = labels_for_dim
+
+    # Learn DAG
+    print("\n" + "=" * 80)
+    print("LEARNING DAG ON ACTIVATION DIFFERENCES")
+    print("=" * 80)
+    W_est = learn_latent_dag(
+        activations,
+        n_samples=n_samples,
+        lambda1=lambda1,
+        top_k=20,
+        dim_labels=dim_labels_for_dag,
+        top_dims=None,  # Use specific_dims instead
+        specific_dims=relevant_dims_sorted,
+    )
+
+    # Create mapping from subset to original indices
+    subset_to_original = {i: relevant_dims_sorted[i] for i in range(len(relevant_dims_sorted))}
+    original_to_subset = {dim: i for i, dim in enumerate(relevant_dims_sorted)}
+
+    # Find target dimension in subset indices
+    if top_dim_idx not in original_to_subset:
+        raise ValueError(f"Top dimension {top_dim_idx} not in relevant dims subset")
+
+    top_dim_subset_idx = original_to_subset[top_dim_idx]
+
+    # Extract DAG coefficients for target dimension
+    # W_est[i, j] represents influence of dim i on dim j
+    # We want to find which dimensions influence the target dimension
+    target_incoming = W_est[:, top_dim_subset_idx].numpy()  # Coefficients of dims influencing target
+    target_outgoing = W_est[top_dim_subset_idx, :].numpy()  # Coefficients of target influencing others
+
+    # Find significant DAG connections to/from target dimension
+    significant_threshold = 0.01
+    incoming_dims = [(subset_to_original[i], coef) for i, coef in enumerate(target_incoming)
+                     if abs(coef) > significant_threshold and i != top_dim_subset_idx]
+    outgoing_dims = [(subset_to_original[i], coef) for i, coef in enumerate(target_outgoing)
+                     if abs(coef) > significant_threshold and i != top_dim_subset_idx]
+
+    print(f"\nDAG connections for target dimension {top_dim_idx}:")
+    print(f"  Incoming connections (dims influencing target): {len(incoming_dims)}")
+    for dim_idx, coef in sorted(incoming_dims, key=lambda x: abs(x[1]), reverse=True)[:5]:
+        dim_label = dim_labels_for_dag.get(dim_idx, [("unknown", 0)])[0][0]
+        print(f"    Dim {dim_idx} ({dim_label}): {coef:.4f}")
+    print(f"  Outgoing connections (target influencing dims): {len(outgoing_dims)}")
+    for dim_idx, coef in sorted(outgoing_dims, key=lambda x: abs(x[1]), reverse=True)[:5]:
+        dim_label = dim_labels_for_dag.get(dim_idx, [("unknown", 0)])[0][0]
+        print(f"    Dim {dim_idx} ({dim_label}): {coef:.4f}")
+
+    # Build steering vectors for comparison
+    n_features = activations.shape[1]
+
+    # 1. Top-only steering vector: only the top correlated dimension
+    top_only_vector = t.zeros(n_features)
+    steering_direction = 1.0 if top_dim_corr > 0 else -1.0  # Steer in direction of positive label
+    top_only_vector[top_dim_idx] = steering_direction
+
+    # 2. DAG-based steering vector: target dim + incoming influences weighted by DAG coefficients
+    dag_vector = t.zeros(n_features)
+    dag_vector[top_dim_idx] = steering_direction
+
+    # Add incoming dimensions with their DAG coefficients as weights
+    for dim_idx, coef in incoming_dims:
+        # Scale by the DAG coefficient - dimensions that influence target should be steered too
+        dag_vector[dim_idx] = coef * steering_direction
+
+    # Normalize DAG vector to have same L2 norm as top-only for fair comparison
+    dag_vector = dag_vector * (top_only_vector.norm() / (dag_vector.norm() + 1e-10))
+
+    print(f"\nSteering vectors:")
+    print(f"  Top-only: {(top_only_vector != 0).sum().item()} non-zero dims, norm={top_only_vector.norm():.4f}")
+    print(f"  DAG-based: {(dag_vector != 0).sum().item()} non-zero dims, norm={dag_vector.norm():.4f}")
+
+    # Evaluate steering effectiveness
+    print("\n" + "=" * 80)
+    print("EVALUATING STEERING EFFECTIVENESS")
+    print("=" * 80)
+
+    results = {
+        "target_label": target_label,
+        "top_dim_idx": int(top_dim_idx),
+        "top_dim_corr": float(top_dim_corr),
+        "n_dag_dims": len(incoming_dims) + 1,
+        "steering_strengths": steering_strengths,
+        "comparison": {},
+    }
+
+    # Split data into positive and negative samples
+    positive_mask = target_labels == 1
+    negative_mask = target_labels == 0
+
+    positive_acts = activations[positive_mask]
+    negative_acts = activations[negative_mask]
+
+    print(f"\nSamples: {positive_acts.shape[0]} positive, {negative_acts.shape[0]} negative")
+
+    for strength in steering_strengths:
+        print(f"\n--- Steering strength: {strength} ---")
+
+        # Apply steering to negative samples (trying to make them look like positive)
+        top_steered = negative_acts + strength * top_only_vector.unsqueeze(0)
+        dag_steered = negative_acts + strength * dag_vector.unsqueeze(0)
+
+        # Measure 1: Mean activation change in target dimension
+        orig_target_act = negative_acts[:, top_dim_idx].mean().item()
+        top_target_act = top_steered[:, top_dim_idx].mean().item()
+        dag_target_act = dag_steered[:, top_dim_idx].mean().item()
+        positive_target_act = positive_acts[:, top_dim_idx].mean().item()
+
+        print(f"  Target dim mean activation:")
+        print(f"    Original (negative): {orig_target_act:.4f}")
+        print(f"    Positive samples:    {positive_target_act:.4f}")
+        print(f"    Top-only steered:    {top_target_act:.4f} (delta: {top_target_act - orig_target_act:+.4f})")
+        print(f"    DAG steered:         {dag_target_act:.4f} (delta: {dag_target_act - orig_target_act:+.4f})")
+
+        # Measure 2: Correlation with positive class after steering
+        # Using correlation with mean positive activation pattern
+        positive_mean = positive_acts.mean(dim=0)
+
+        # Cosine similarity with positive class centroid
+        def cosine_sim(a, b):
+            return (a @ b) / (a.norm() * b.norm() + 1e-10)
+
+        orig_sim = t.stack([cosine_sim(negative_acts[i], positive_mean) for i in range(len(negative_acts))]).mean().item()
+        top_sim = t.stack([cosine_sim(top_steered[i], positive_mean) for i in range(len(top_steered))]).mean().item()
+        dag_sim = t.stack([cosine_sim(dag_steered[i], positive_mean) for i in range(len(dag_steered))]).mean().item()
+
+        print(f"  Cosine similarity with positive centroid:")
+        print(f"    Original:     {orig_sim:.4f}")
+        print(f"    Top-only:     {top_sim:.4f} (delta: {top_sim - orig_sim:+.4f})")
+        print(f"    DAG-based:    {dag_sim:.4f} (delta: {dag_sim - orig_sim:+.4f})")
+
+        # Measure 3: Linear probe accuracy simulation
+        # Train a simple linear classifier on original data, test on steered data
+        # Using logistic regression proxy: sigmoid(w * act) where w is correlation vector
+        probe_weights = corr_matrix[:, list(labels.keys()).index(target_label)]
+
+        def probe_score(acts):
+            scores = acts @ probe_weights
+            probs = t.sigmoid(scores)
+            return probs.mean().item()
+
+        orig_probe = probe_score(negative_acts)
+        top_probe = probe_score(top_steered)
+        dag_probe = probe_score(dag_steered)
+        positive_probe = probe_score(positive_acts)
+
+        print(f"  Probe score (prob of positive class):")
+        print(f"    Original (negative): {orig_probe:.4f}")
+        print(f"    Positive samples:    {positive_probe:.4f}")
+        print(f"    Top-only steered:    {top_probe:.4f} (delta: {top_probe - orig_probe:+.4f})")
+        print(f"    DAG steered:         {dag_probe:.4f} (delta: {dag_probe - orig_probe:+.4f})")
+
+        # Store results for this strength
+        results["comparison"][f"strength_{strength}"] = {
+            "target_dim_activation": {
+                "original": orig_target_act,
+                "positive_reference": positive_target_act,
+                "top_only": top_target_act,
+                "dag_based": dag_target_act,
+                "top_delta": top_target_act - orig_target_act,
+                "dag_delta": dag_target_act - orig_target_act,
+            },
+            "cosine_similarity": {
+                "original": orig_sim,
+                "top_only": top_sim,
+                "dag_based": dag_sim,
+                "top_delta": top_sim - orig_sim,
+                "dag_delta": dag_sim - orig_sim,
+            },
+            "probe_score": {
+                "original": orig_probe,
+                "positive_reference": positive_probe,
+                "top_only": top_probe,
+                "dag_based": dag_probe,
+                "top_delta": top_probe - orig_probe,
+                "dag_delta": dag_probe - orig_probe,
+            },
+        }
+
+        # Summary comparison
+        improvement_ratio = (dag_sim - orig_sim) / (top_sim - orig_sim + 1e-10)
+        print(f"  DAG vs Top improvement ratio (cosine sim): {improvement_ratio:.2f}x")
+
+    # Store DAG info
+    results["dag_info"] = {
+        "incoming_dims": [(int(d), float(c)) for d, c in incoming_dims],
+        "outgoing_dims": [(int(d), float(c)) for d, c in outgoing_dims],
+        "relevant_dims_count": len(relevant_dims_sorted),
+    }
+
+    # Summary
+    print("\n" + "=" * 80)
+    print("SUMMARY: DAG vs TOP-ONLY STEERING COMPARISON")
+    print("=" * 80)
+
+    for strength in steering_strengths:
+        comp = results["comparison"][f"strength_{strength}"]
+        print(f"\nStrength {strength}:")
+        print(f"  Cosine similarity improvement:")
+        print(f"    Top-only: {comp['cosine_similarity']['top_delta']:+.4f}")
+        print(f"    DAG-based: {comp['cosine_similarity']['dag_delta']:+.4f}")
+        dag_better = comp['cosine_similarity']['dag_delta'] > comp['cosine_similarity']['top_delta']
+        print(f"    Winner: {'DAG' if dag_better else 'Top-only'}")
+
+        print(f"  Probe score improvement:")
+        print(f"    Top-only: {comp['probe_score']['top_delta']:+.4f}")
+        print(f"    DAG-based: {comp['probe_score']['dag_delta']:+.4f}")
+        dag_better_probe = comp['probe_score']['dag_delta'] > comp['probe_score']['top_delta']
+        print(f"    Winner: {'DAG' if dag_better_probe else 'Top-only'}")
+
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Evaluate SSAE on individual sentence labels or bias-in-bios with DAG learning"
@@ -802,8 +1126,8 @@ def main():
         "--dataset",
         type=str,
         default="labeled-sentences",
-        choices=["labeled-sentences", "bias-in-bios"],
-        help="Dataset to use for evaluation",
+        choices=["labeled-sentences", "bias-in-bios", "compare-steering"],
+        help="Dataset to use for evaluation. 'compare-steering' runs DAG vs top-only steering comparison.",
     )
     parser.add_argument(
         "--threshold",
@@ -879,12 +1203,49 @@ def main():
         default=100,
         help="Number of top dimensions to use for DAG learning (bias-in-bios only, for speed)",
     )
+    parser.add_argument(
+        "--steering-strengths",
+        nargs="+",
+        type=float,
+        default=[0.5, 1.0, 2.0],
+        help="Steering strength multipliers to test (compare-steering only)",
+    )
+    parser.add_argument(
+        "--target-label",
+        type=str,
+        default="gender",
+        help="Target label to steer toward (compare-steering only, default: gender)",
+    )
     parser.add_argument("--output", type=Path, help="Output file for results")
 
     args = parser.parse_args()
 
     # Evaluate model based on dataset choice
-    if args.dataset == "bias-in-bios":
+    if args.dataset == "compare-steering":
+        # Run DAG vs top-only steering comparison
+        results = compare_dag_vs_top_steering(
+            args.model_path,
+            n_samples=args.n_samples,
+            lambda1=args.lambda1,
+            correlation_threshold=args.correlation_threshold,
+            max_texts=args.max_texts,
+            embedding_model=args.embedding_model,
+            layer=args.layer,
+            embedding_batch_size=args.embedding_batch_size,
+            activation_batch_size=args.activation_batch_size,
+            steering_strengths=args.steering_strengths,
+            target_label=args.target_label,
+        )
+
+        # Save results if output specified
+        if args.output:
+            with open(args.output, "w") as f:
+                json.dump(results, f, indent=2)
+            print(f"\nResults saved to {args.output}")
+
+        return
+
+    elif args.dataset == "bias-in-bios":
         results = evaluate_bias_in_bios_dag(
             args.model_path,
             n_samples=args.n_samples,
