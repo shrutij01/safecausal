@@ -19,7 +19,11 @@ from sklearn.metrics import matthews_corrcoef
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from ssae import DictLinearAE
-from loaders import load_llamascope_checkpoint, load_gemmascope_checkpoint, load_pythia_sae_checkpoint
+from loaders import (
+    load_llamascope_checkpoint,
+    load_gemmascope_checkpoint,
+    load_pythia_sae_checkpoint,
+)
 
 
 def load_sae_model(model_path: Path):
@@ -45,15 +49,23 @@ def load_sae_model(model_path: Path):
     return model
 
 
-def load_reference_sae(embedding_model: str, layer: int = None, hf_token: str = None):
+def load_reference_sae(
+    embedding_model: str, layer: int = None, hf_token: str = None
+):
     """Load reference SAE based on embedding model."""
     if embedding_model == "pythia":
         layer = layer or 5
-        decoder_weight, decoder_bias, encoder_weight, encoder_bias = load_pythia_sae_checkpoint(layer, hf_token)
+        decoder_weight, decoder_bias, encoder_weight, encoder_bias = (
+            load_pythia_sae_checkpoint(layer, hf_token)
+        )
     elif embedding_model == "gemma":
-        decoder_weight, decoder_bias, encoder_weight, encoder_bias = load_gemmascope_checkpoint()
+        decoder_weight, decoder_bias, encoder_weight, encoder_bias = (
+            load_gemmascope_checkpoint()
+        )
     elif embedding_model == "llama":
-        decoder_weight, decoder_bias, encoder_weight, encoder_bias = load_llamascope_checkpoint()
+        decoder_weight, decoder_bias, encoder_weight, encoder_bias = (
+            load_llamascope_checkpoint()
+        )
     else:
         raise ValueError(f"Unknown embedding model: {embedding_model}")
 
@@ -81,11 +93,13 @@ def extract_embeddings(texts, embedding_model: str, max_samples: int = None):
 
     if embedding_model == "pythia":
         from transformers import AutoTokenizer, AutoModelForCausalLM
+
         model_name = "EleutherAI/pythia-70m-deduped"
         layer = 5
         batch_size = 32
     elif embedding_model == "gemma":
         from transformers import AutoTokenizer, AutoModelForCausalLM
+
         model_name = "google/gemma-2-2b-it"
         layer = 25  # Changed to match Gemmascope layer 25
         batch_size = 16
@@ -94,7 +108,9 @@ def extract_embeddings(texts, embedding_model: str, max_samples: int = None):
 
     print(f"Loading {embedding_model} model: {model_name}")
     tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.float32)
+    model = AutoModelForCausalLM.from_pretrained(
+        model_name, torch_dtype=torch.float32
+    )
 
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -103,20 +119,30 @@ def extract_embeddings(texts, embedding_model: str, max_samples: int = None):
     print(f"Extracting embeddings for {len(texts)} samples...")
 
     for i in range(0, len(texts), batch_size):
-        batch_texts = texts[i:i+batch_size]
+        batch_texts = texts[i : i + batch_size]
 
         # Tokenize
-        inputs = tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True, max_length=512)
+        inputs = tokenizer(
+            batch_texts,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+            max_length=512,
+        )
 
         with torch.no_grad():
             outputs = model(**inputs, output_hidden_states=True)
             # Get embeddings from specified layer, last token
-            hidden_states = outputs.hidden_states[layer]  # [batch, seq_len, hidden_dim]
+            hidden_states = outputs.hidden_states[
+                layer
+            ]  # [batch, seq_len, hidden_dim]
 
             batch_embeddings = []
-            for j, input_ids in enumerate(inputs['input_ids']):
+            for j, input_ids in enumerate(inputs["input_ids"]):
                 # Find last non-padding token
-                non_pad_indices = (input_ids != tokenizer.pad_token_id).nonzero(as_tuple=True)[0]
+                non_pad_indices = (
+                    input_ids != tokenizer.pad_token_id
+                ).nonzero(as_tuple=True)[0]
                 if len(non_pad_indices) > 0:
                     last_token_idx = non_pad_indices[-1]
                     embedding = hidden_states[j, last_token_idx]
@@ -136,7 +162,7 @@ def get_sae_activations(model, embeddings):
 
     with torch.no_grad():
         for i in range(0, len(embeddings), batch_size):
-            batch = embeddings[i:i+batch_size]
+            batch = embeddings[i : i + batch_size]
             _, acts = model(batch)
             activations.append(acts.cpu())
 
@@ -163,7 +189,9 @@ def compute_max_correlation_mcc(activations, labels, threshold: float = 0.1):
 
     mask = denominator.squeeze() != 0
     correlations = torch.zeros(activations.shape[1])
-    correlations[mask] = numerator.squeeze()[mask] / denominator.squeeze()[mask]
+    correlations[mask] = (
+        numerator.squeeze()[mask] / denominator.squeeze()[mask]
+    )
 
     # Find max correlation feature
     abs_correlations = correlations.abs()
@@ -185,17 +213,30 @@ def compute_max_correlation_mcc(activations, labels, threshold: float = 0.1):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate bias-in-bios gender detection MCC")
-    parser.add_argument("model_path", type=Path, help="Path to SSAE model directory")
-    parser.add_argument("--embedding-model", choices=["pythia", "gemma", "llama"], default="pythia",
-                        help="Embedding model to use")
-    parser.add_argument("--compare-sae", action="store_true",
-                        help="Compare with reference SAE")
-    parser.add_argument("--max-samples", type=int, default=1000,
-                        help="Max samples to evaluate")
-    parser.add_argument("--threshold", type=float, default=0.1,
-                        help="Activation threshold")
-    parser.add_argument("--layer", type=int, help="Layer for reference SAE (pythia only)")
+    parser = argparse.ArgumentParser(
+        description="Evaluate bias-in-bios gender detection MCC"
+    )
+    parser.add_argument(
+        "model_path", type=Path, help="Path to SSAE model directory"
+    )
+    parser.add_argument(
+        "--embedding-model",
+        choices=["pythia", "gemma", "llama"],
+        default="pythia",
+        help="Embedding model to use",
+    )
+    parser.add_argument(
+        "--compare-sae", action="store_true", help="Compare with reference SAE"
+    )
+    parser.add_argument(
+        "--max-samples", type=int, default=1000, help="Max samples to evaluate"
+    )
+    parser.add_argument(
+        "--threshold", type=float, default=0.1, help="Activation threshold"
+    )
+    parser.add_argument(
+        "--layer", type=int, help="Layer for reference SAE (pythia only)"
+    )
     parser.add_argument("--hf-token", type=str, help="Hugging Face token")
 
     args = parser.parse_args()
@@ -208,6 +249,7 @@ def main():
     # Sample if needed
     if args.max_samples and len(test_data) > args.max_samples:
         import random
+
         random.seed(42)
         indices = random.sample(range(len(test_data)), args.max_samples)
         test_data = test_data.select(indices)
@@ -217,10 +259,14 @@ def main():
     gender_labels = [item["gender"] for item in test_data]  # 0=male, 1=female
 
     print(f"Loaded {len(texts)} samples")
-    print(f"Gender distribution: {sum(gender_labels)} female, {len(gender_labels) - sum(gender_labels)} male")
+    print(
+        f"Gender distribution: {sum(gender_labels)} female, {len(gender_labels) - sum(gender_labels)} male"
+    )
 
     # Extract embeddings
-    embeddings = extract_embeddings(texts, args.embedding_model, args.max_samples)
+    embeddings = extract_embeddings(
+        texts, args.embedding_model, args.max_samples
+    )
     print(f"Embeddings shape: {embeddings.shape}")
 
     # Evaluate custom SSAE
@@ -230,7 +276,9 @@ def main():
 
     custom_model = load_sae_model(args.model_path)
     custom_activations = get_sae_activations(custom_model, embeddings)
-    custom_results = compute_max_correlation_mcc(custom_activations, gender_labels, args.threshold)
+    custom_results = compute_max_correlation_mcc(
+        custom_activations, gender_labels, args.threshold
+    )
 
     print(f"Custom SSAE MCC: {custom_results['mcc']:.4f}")
     print(f"Best feature: {custom_results['feature_idx']}")
@@ -243,9 +291,13 @@ def main():
         print(f"{'='*50}")
 
         try:
-            ref_model = load_reference_sae(args.embedding_model, args.layer, args.hf_token)
+            ref_model = load_reference_sae(
+                args.embedding_model, args.layer, args.hf_token
+            )
             ref_activations = get_sae_activations(ref_model, embeddings)
-            ref_results = compute_max_correlation_mcc(ref_activations, gender_labels, args.threshold)
+            ref_results = compute_max_correlation_mcc(
+                ref_activations, gender_labels, args.threshold
+            )
 
             print(f"Reference SAE MCC: {ref_results['mcc']:.4f}")
             print(f"Best feature: {ref_results['feature_idx']}")
@@ -257,12 +309,18 @@ def main():
             print(f"{'='*50}")
             print(f"Custom SSAE MCC:    {custom_results['mcc']:.4f}")
             print(f"Reference SAE MCC:  {ref_results['mcc']:.4f}")
-            print(f"Difference:         {abs(custom_results['mcc'] - ref_results['mcc']):.4f}")
+            print(
+                f"Difference:         {abs(custom_results['mcc'] - ref_results['mcc']):.4f}"
+            )
 
-            if custom_results['mcc'] > ref_results['mcc']:
-                print(f"🥇 WINNER: Custom SSAE (+{custom_results['mcc'] - ref_results['mcc']:.4f})")
-            elif ref_results['mcc'] > custom_results['mcc']:
-                print(f"🥇 WINNER: Reference SAE (+{ref_results['mcc'] - custom_results['mcc']:.4f})")
+            if custom_results["mcc"] > ref_results["mcc"]:
+                print(
+                    f"🥇 WINNER: Custom SSAE (+{custom_results['mcc'] - ref_results['mcc']:.4f})"
+                )
+            elif ref_results["mcc"] > custom_results["mcc"]:
+                print(
+                    f"🥇 WINNER: Reference SAE (+{ref_results['mcc'] - custom_results['mcc']:.4f})"
+                )
             else:
                 print("🤝 TIE!")
 

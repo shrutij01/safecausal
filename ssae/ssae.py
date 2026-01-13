@@ -814,7 +814,9 @@ def make_dataloader(cfg) -> DataLoader:
         else:
             differences = dataset.data[1:, :] - dataset.data[:-1, :]
 
-        print(f"Applying ZCA whitening to differences (shape: {differences.shape})...")
+        print(
+            f"Applying ZCA whitening to differences (shape: {differences.shape})..."
+        )
         whitener = DataWhitener(epsilon=cfg.whiten_epsilon)
         whitened_differences = whitener.fit_transform(differences)
 
@@ -822,7 +824,10 @@ def make_dataloader(cfg) -> DataLoader:
             dataset.data = np.zeros_like(dataset.data)
             dataset.data[:, 1, :] = whitened_differences
         else:
-            new_data = np.zeros((len(differences) + 1, differences.shape[1]), dtype=differences.dtype)
+            new_data = np.zeros(
+                (len(differences) + 1, differences.shape[1]),
+                dtype=differences.dtype,
+            )
             new_data[1:, :] = np.cumsum(whitened_differences, axis=0)
             dataset.data = new_data
 
@@ -883,6 +888,19 @@ def make_optim(dict: torch.nn.Module, ssae, cfg: Cfg):
     dual_optimizer = cooper.optim.ExtraAdam(
         ssae.dual_parameters(), lr=dual_lr, maximize=True
     )
+    # which opt for primal, which for dual
+    # simultaneous update of both primal and dual variables?
+    # or do extrapolation? expensive but works better
+    # start without extrapolation with sgd on dual
+    # if doesnt work, use extrapolation
+    # ExtraAdam on primal, usually momentum on dual is not a good idea
+    # theory to say shouldn't use momentum with linear players
+    # get more sparsity than needed when use this
+    # basic strategy: alternating primal, dual updates; this has been a bit more stable
+    # then sgd on the dual and sth else on the primal- alternating
+    # learning rate: fixed for the dual. can do anything for the primal
+    # think it's not Adam on dual and that it is a linear player
+    # dual lr order of magnitude less than primal lr (like / 10)
 
     # Setup the constrained optimizer using Cooper's Lagrangian formulation
     coop_optimizer = cooper.optim.ExtrapolationConstrainedOptimizer(
@@ -890,6 +908,24 @@ def make_optim(dict: torch.nn.Module, ssae, cfg: Cfg):
         primal_optimizers=primal_optimizer,
         dual_optimizers=dual_optimizer,
     )
+    # extrapolation helps a lot to get rid of oscillations
+    # extrapolation simulates the play of the dual, looking ahead
+    # cheaper: augmented lagrangian, less expensive than lagrangian with extrapolation
+    # cuz dont have to store copy of model, doesnt simulate update of toher player explicitly
+    # simulates it implicitly
+    # dual uses whatever primal is using
+    # optimistic gradient: iteraet + lr * latest gradient + coef * (diff between latest gradient and prev one)
+    # (kind of same family of methods) extrapolation from the past
+    # convergence rate as good as extra gradient but cheaper
+    # do optimistic for dual essentially as good as extra gradient on both
+    # potential issue: new hp omega
+    # omega tuning intuition: larger means more damping of system and other way around
+    # coeff 0: graident ascent, 1: osc smaller in aplitude
+    # shuldn't go farther than 1 else way more damping
+    # one or more orders of magnitude larger than dual but always larger than dual
+
+    # look at weight init
+    # scaling of primal different from dual, in the context of opt dual variables
     return coop_optimizer
 
 
