@@ -191,43 +191,7 @@ class DataWhitener:
 - Equalizes variance across dimensions, preventing dominant features from dominating learning
 - Improves optimization landscape by reducing condition number
 
-##### 4. **Pairwise Concept Probing**
 
-Our evaluation uses *change detection* rather than direct classification:
-
-```
-Label = 1 if concept_changed(sentence_1, sentence_2) else 0
-Probe input = SAE(z₂) - SAE(z₁)  # difference in SAE space
-```
-
-**Why this helps identifiability:**
-- Tests whether SAE features capture *changes* in concepts, not just correlations
-- More robust to spurious correlations in the data
-- Aligned with the causal interpretation: "does intervening on this feature change the concept?"
-
-##### 5. **Hierarchical Metric Aggregation**
-
-We use **macro-averaging by concept prefix** rather than micro-averaging:
-
-```python
-# Group concepts by type
-groups = {
-    "domain": ["domain-science", "domain-fantasy", "domain-news", "domain-other"],
-    "sentiment": ["sentiment-positive", "sentiment-neutral", "sentiment-negative"],
-    "voice": ["voice-active", "voice-passive"],
-    "tense": ["tense-present", "tense-past"],
-}
-
-# Average within groups, then across groups
-final_score = mean([mean(scores[g]) for g in groups])
-```
-
-**Why this matters:**
-- Prevents concept types with more values (e.g., domain with 4) from dominating metrics
-- Provides equal weight to each *type* of concept, not each *value*
-- More accurately reflects true multi-concept steering capability
-
----
 
 ## Key Features
 
@@ -281,40 +245,6 @@ python ssae/ssae.py \
 ```
 
 ## Architecture
-
-### Core Components
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     SSAE Architecture                      │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
-│  │   Language   │───▶│  Embedding   │───▶│    SSAE      │       │
-│  │    Model     │    │  Extractor   │    │   Training   │       │
-│  └──────────────┘    └──────────────┘    └──────────────┘       │
-│         │                   │                   │                │
-│         │                   ▼                   ▼                │
-│         │            ┌──────────────┐    ┌──────────────┐       │
-│         │            │   h5 File    │    │ Trained SAE  │       │
-│         │            │ (Embeddings) │    │   Weights    │       │
-│         │            └──────────────┘    └──────────────┘       │
-│         │                   │                   │                │
-│         │                   └─────────┬─────────┘                │
-│         │                             ▼                          │
-│         │                   ┌──────────────┐                    │
-│         │                   │    Probe     │                    │
-│         │                   │   Training   │                    │
-│         │                   └──────────────┘                    │
-│         │                             │                          │
-│         ▼                             ▼                          │
-│  ┌──────────────┐           ┌──────────────┐                    │
-│  │  Generation  │           │   K-Sweep    │                    │
-│  │  Evaluation  │           │   Analysis   │                    │
-│  └──────────────┘           └──────────────┘                    │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
 
 ### SSAE Training Pipeline
 
