@@ -39,7 +39,6 @@ from scripts.evaluate_labeled_sentences import get_sentence_embeddings
 from transformers import AutoModelForCausalLM
 import yaml
 
-ACCESS_TOKEN = "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"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -80,8 +79,6 @@ class ExternalSAEModel:
     def eval(self):
         """Set to eval mode (no-op for this implementation)."""
         pass
-
-
 
 
 def _generate_base(
@@ -246,16 +243,23 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
         labels.extend([0, 1])
 
     # Get embeddings with smaller batch size to avoid OOM
-    print(f"Extracting embeddings for {len(questions)} questions in batches...")
+    print(
+        f"Extracting embeddings for {len(questions)} questions in batches..."
+    )
     embeddings = get_sentence_embeddings(
-        questions, model_name=args.llm, layer=embedding_layer, batch_size=8  # Reduced batch size
+        questions,
+        model_name=args.llm,
+        layer=embedding_layer,
+        batch_size=8,  # Reduced batch size
     )
     if isinstance(embeddings, list):
         embeddings = np.array(embeddings)
 
     embeddings_tensor = torch.tensor(embeddings, dtype=torch.float32)
     labels_tensor = torch.tensor(labels, dtype=torch.float32).unsqueeze(1)
-    print(f"Embeddings shape: {embeddings_tensor.shape}, Labels shape: {labels_tensor.shape}")
+    print(
+        f"Embeddings shape: {embeddings_tensor.shape}, Labels shape: {labels_tensor.shape}"
+    )
 
     # Load and evaluate SSAE
     from ssae import DictLinearAE
@@ -271,13 +275,13 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
     ssae_model.eval()
 
     # Process SSAE activations in batches to avoid OOM
-    batch_size = getattr(args, 'batch_size', 32)
+    batch_size = getattr(args, "batch_size", 32)
     ssae_acts_list = []
     print(f"Processing SSAE activations in batches of {batch_size}...")
 
     with torch.no_grad():
         for i in range(0, len(embeddings_tensor), batch_size):
-            batch = embeddings_tensor[i:i + batch_size]
+            batch = embeddings_tensor[i : i + batch_size]
             batch_acts = ssae_model.encoder(batch)
             ssae_acts_list.append(batch_acts.cpu())
 
@@ -290,8 +294,12 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
     best_feature_idx = ssae_corr_vector.abs().argmax().item()
 
     # Compute MCC for best feature using same method as evaluate_labeled_sentences.py
-    best_feature_acts = (ssae_acts[:, best_feature_idx] > 0.1).float()  # Binarize activations
-    ssae_mcc = compute_mcc_between_logits_and_labels(best_feature_acts.numpy(), labels_tensor.squeeze().numpy())
+    best_feature_acts = (
+        ssae_acts[:, best_feature_idx] > 0.1
+    ).float()  # Binarize activations
+    ssae_mcc = compute_mcc_between_logits_and_labels(
+        best_feature_acts.numpy(), labels_tensor.squeeze().numpy()
+    )
 
     # Set both max and mean to the same value (no averaging)
     ssae_max_mcc = ssae_mcc
@@ -325,11 +333,13 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
 
             # Process Pythia SAE activations in batches
             pythia_acts_list = []
-            print(f"Processing Pythia SAE activations in batches of {batch_size}...")
+            print(
+                f"Processing Pythia SAE activations in batches of {batch_size}..."
+            )
 
             with torch.no_grad():
                 for i in range(0, len(embeddings_tensor), batch_size):
-                    batch = embeddings_tensor[i:i + batch_size]
+                    batch = embeddings_tensor[i : i + batch_size]
                     batch_acts = pythia_model.encoder(batch)
                     pythia_acts_list.append(batch_acts.cpu())
 
@@ -344,8 +354,13 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
             pythia_best_feature_idx = pythia_corr_vector.abs().argmax().item()
 
             # Compute MCC for best feature using same method as evaluate_labeled_sentences.py
-            pythia_best_feature_acts = (pythia_acts[:, pythia_best_feature_idx] > 0.1).float()
-            pythia_mcc = compute_mcc_between_logits_and_labels(pythia_best_feature_acts.numpy(), labels_tensor.squeeze().numpy())
+            pythia_best_feature_acts = (
+                pythia_acts[:, pythia_best_feature_idx] > 0.1
+            ).float()
+            pythia_mcc = compute_mcc_between_logits_and_labels(
+                pythia_best_feature_acts.numpy(),
+                labels_tensor.squeeze().numpy(),
+            )
 
             # Set both max and mean to the same value (no averaging)
             external_max_mcc = pythia_mcc
@@ -374,11 +389,13 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
 
             # Process Gemma Scope activations in batches
             gemma_acts_list = []
-            print(f"Processing Gemma Scope activations in batches of {batch_size}...")
+            print(
+                f"Processing Gemma Scope activations in batches of {batch_size}..."
+            )
 
             with torch.no_grad():
                 for i in range(0, len(embeddings_tensor), batch_size):
-                    batch = embeddings_tensor[i:i + batch_size]
+                    batch = embeddings_tensor[i : i + batch_size]
                     batch_acts = gemma_model.encoder(batch)
                     gemma_acts_list.append(batch_acts.cpu())
 
@@ -391,8 +408,13 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
             gemma_best_feature_idx = gemma_corr_vector.abs().argmax().item()
 
             # Compute MCC for best feature using same method as evaluate_labeled_sentences.py
-            gemma_best_feature_acts = (gemma_acts[:, gemma_best_feature_idx] > 0.1).float()
-            gemma_mcc = compute_mcc_between_logits_and_labels(gemma_best_feature_acts.numpy(), labels_tensor.squeeze().numpy())
+            gemma_best_feature_acts = (
+                gemma_acts[:, gemma_best_feature_idx] > 0.1
+            ).float()
+            gemma_mcc = compute_mcc_between_logits_and_labels(
+                gemma_best_feature_acts.numpy(),
+                labels_tensor.squeeze().numpy(),
+            )
 
             # Set both max and mean to the same value (no averaging)
             external_max_mcc = gemma_mcc
@@ -405,7 +427,9 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
     else:
         # Unsupported model
         print(f"→ No matching external SAE found for model: {args.llm}")
-        print("→ Supported models: pythia (uses Pythia SAE), gemma (uses Gemma Scope)")
+        print(
+            "→ Supported models: pythia (uses Pythia SAE), gemma (uses Gemma Scope)"
+        )
         external_name = "Unsupported"
 
     # Print simple results
@@ -421,13 +445,19 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
     if external_name not in ["Failed", "Unsupported"]:
         print(f"\n{external_name} Statistics:")
         print(f"  Max MCC: {external_max_mcc:.4f}")
-        print(f"  Mean MCC: {external_mean_mcc:.4f} ± {external_std_error:.4f}")
+        print(
+            f"  Mean MCC: {external_mean_mcc:.4f} ± {external_std_error:.4f}"
+        )
 
         print(f"\nComparison:")
         max_diff = external_max_mcc - ssae_max_mcc
         mean_diff = external_mean_mcc - ssae_mean_mcc
-        print(f"  Max MCC difference ({external_name} - SSAE): {max_diff:+.4f}")
-        print(f"  Mean MCC difference ({external_name} - SSAE): {mean_diff:+.4f}")
+        print(
+            f"  Max MCC difference ({external_name} - SSAE): {max_diff:+.4f}"
+        )
+        print(
+            f"  Mean MCC difference ({external_name} - SSAE): {mean_diff:+.4f}"
+        )
 
         if abs(mean_diff) < 0.001:
             print(f"→ Similar mean performance")
@@ -443,14 +473,26 @@ def compute_mcc_comparison(args, dataset_name="refusal"):
         "ssae": {
             "max_mcc": ssae_max_mcc,
             "mean_mcc": ssae_mean_mcc,
-            "std_error": ssae_std_error
+            "std_error": ssae_std_error,
         },
         "external_sae": {
             "name": external_name,
-            "max_mcc": external_max_mcc if external_name not in ["Failed", "Unsupported"] else None,
-            "mean_mcc": external_mean_mcc if external_name not in ["Failed", "Unsupported"] else None,
-            "std_error": external_std_error if external_name not in ["Failed", "Unsupported"] else None
-        }
+            "max_mcc": (
+                external_max_mcc
+                if external_name not in ["Failed", "Unsupported"]
+                else None
+            ),
+            "mean_mcc": (
+                external_mean_mcc
+                if external_name not in ["Failed", "Unsupported"]
+                else None
+            ),
+            "std_error": (
+                external_std_error
+                if external_name not in ["Failed", "Unsupported"]
+                else None
+            ),
+        },
     }
 
 
@@ -495,8 +537,6 @@ def compute_mcc_between_logits_and_labels(logits, labels):
     return mcc.item()
 
 
-
-
 def get_gemmascope_steering_vector(args, dataset_name="refusal"):
     """Extract steering vector from Gemmascope using the same logic as SSAE."""
     # Load dataset and get embeddings
@@ -504,7 +544,9 @@ def get_gemmascope_steering_vector(args, dataset_name="refusal"):
     data_path = os.path.join(script_dir, "..", "data", f"{dataset_name}.json")
 
     if not os.path.exists(data_path):
-        raise FileNotFoundError(f"{dataset_name.capitalize()} data not found at {data_path}")
+        raise FileNotFoundError(
+            f"{dataset_name.capitalize()} data not found at {data_path}"
+        )
 
     dataset_data = data_utils.load_json(data_path)
 
@@ -537,9 +579,14 @@ def get_gemmascope_steering_vector(args, dataset_name="refusal"):
         labels.extend([0, 1])
 
     # Get embeddings
-    print(f"Extracting Gemma embeddings for {len(questions)} questions in batches...")
+    print(
+        f"Extracting Gemma embeddings for {len(questions)} questions in batches..."
+    )
     embeddings = get_sentence_embeddings(
-        questions, model_name="google/gemma-2-2b-it", layer=embedding_layer, batch_size=8
+        questions,
+        model_name="google/gemma-2-2b-it",
+        layer=embedding_layer,
+        batch_size=8,
     )
     if isinstance(embeddings, list):
         embeddings = np.array(embeddings)
@@ -569,7 +616,7 @@ def get_gemmascope_steering_vector(args, dataset_name="refusal"):
 
     with torch.no_grad():
         for i in range(0, len(embeddings_tensor), batch_size):
-            batch = embeddings_tensor[i:i + batch_size]
+            batch = embeddings_tensor[i : i + batch_size]
             batch_acts = gemma_model.encoder(batch)
             gemma_acts_list.append(batch_acts.cpu())
 
@@ -581,10 +628,14 @@ def get_gemmascope_steering_vector(args, dataset_name="refusal"):
 
     # Compute MCC for best feature
     best_feature_acts = (gemma_acts[:, best_feature_idx] > 0.1).float()
-    mcc = compute_mcc_between_logits_and_labels(best_feature_acts.numpy(), labels_tensor.squeeze().numpy())
+    mcc = compute_mcc_between_logits_and_labels(
+        best_feature_acts.numpy(), labels_tensor.squeeze().numpy()
+    )
 
     # Extract steering vector from decoder
-    steering_vector = gemma_decoder_weight[:, best_feature_idx]  # Shape: (rep_dim,)
+    steering_vector = gemma_decoder_weight[
+        :, best_feature_idx
+    ]  # Shape: (rep_dim,)
 
     return (
         steering_vector,
@@ -662,7 +713,7 @@ def main(args, generate_configs):
 
     # Original generation functionality
     # Get steering vector using the specified dataset
-    if hasattr(args, 'use_gemmascope') and args.use_gemmascope:
+    if hasattr(args, "use_gemmascope") and args.use_gemmascope:
         print("\n=== Using Gemmascope Steering Vector ===")
         steering_vector, feature_idx, correlation, used_layer, dataset_used = (
             get_gemmascope_steering_vector(args, dataset_name)
@@ -714,11 +765,10 @@ def main(args, generate_configs):
     else:
         # Default to Llama-style loading for other models
         tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
-            args.llm, token=ACCESS_TOKEN
+            args.llm
         )
         llm = transformers.LlamaForCausalLM.from_pretrained(
             args.llm,
-            token=ACCESS_TOKEN,
             low_cpu_mem_usage=True,
             cache_dir="./model_cache",
             attn_implementation="flash_attention_2",
@@ -842,7 +892,11 @@ def main(args, generate_configs):
         prompt_results.append(prompt_result)
 
     # Save results
-    steering_type = "gemmascope" if (hasattr(args, 'use_gemmascope') and args.use_gemmascope) else "ssae"
+    steering_type = (
+        "gemmascope"
+        if (hasattr(args, "use_gemmascope") and args.use_gemmascope)
+        else "ssae"
+    )
     results = {
         "dataset": dataset_name,
         "steering_type": steering_type,

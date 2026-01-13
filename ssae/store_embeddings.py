@@ -14,7 +14,6 @@ from transformers import GPTNeoXForCausalLM, AutoTokenizer
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 
-ACCESS_TOKEN = "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"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
@@ -297,14 +296,13 @@ def load_model_and_tokenizer(model_id):
             # Try with torch_dtype and device_map for better memory management
             model = transformers.LlamaForCausalLM.from_pretrained(
                 model_id,
-                token=ACCESS_TOKEN,
                 torch_dtype=torch.float16,
                 device_map="auto",
                 low_cpu_mem_usage=True,
                 trust_remote_code=True,
             )
             tokenizer = transformers.LlamaTokenizer.from_pretrained(
-                model_id, token=ACCESS_TOKEN, trust_remote_code=True
+                model_id, trust_remote_code=True
             )
         except Exception as e:
             print(
@@ -312,11 +310,10 @@ def load_model_and_tokenizer(model_id):
             )
             # Fallback to AutoTokenizer if LlamaTokenizer fails
             tokenizer = transformers.AutoTokenizer.from_pretrained(
-                model_id, token=ACCESS_TOKEN, trust_remote_code=True
+                model_id, trust_remote_code=True
             )
             model = transformers.AutoModelForCausalLM.from_pretrained(
                 model_id,
-                token=ACCESS_TOKEN,
                 torch_dtype=torch.float16,
                 device_map="auto",
                 low_cpu_mem_usage=True,
@@ -331,25 +328,23 @@ def load_model_and_tokenizer(model_id):
         try:
             model = transformers.LlamaForCausalLM.from_pretrained(
                 model_id,
-                token=ACCESS_TOKEN,
                 torch_dtype=torch.float16,
                 device_map="auto",
                 low_cpu_mem_usage=True,
                 trust_remote_code=True,
             )
             tokenizer = transformers.LlamaTokenizer.from_pretrained(
-                model_id, token=ACCESS_TOKEN, trust_remote_code=True
+                model_id, trust_remote_code=True
             )
         except Exception as e:
             print(
                 f"Failed to load with LlamaTokenizer, trying AutoTokenizer: {e}"
             )
             tokenizer = transformers.AutoTokenizer.from_pretrained(
-                model_id, token=ACCESS_TOKEN, trust_remote_code=True
+                model_id, trust_remote_code=True
             )
             model = transformers.AutoModelForCausalLM.from_pretrained(
                 model_id,
-                token=ACCESS_TOKEN,
                 torch_dtype=torch.float16,
                 device_map="auto",
                 low_cpu_mem_usage=True,

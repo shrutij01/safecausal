@@ -18,7 +18,6 @@ from scripts.evaluate_labeled_sentences import get_sentence_embeddings
 from transformers import AutoModelForCausalLM
 import yaml
 
-ACCESS_TOKEN = "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"
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -145,7 +144,9 @@ def get_steering_vectors_for_features(args, features_list):
     from scripts.evaluate_labeled_sentences import load_labeled_sentences_test
 
     sentences, all_labels = load_labeled_sentences_test()
-    print(f"Loaded {len(sentences)} labeled sentences with {len(all_labels)} label types")
+    print(
+        f"Loaded {len(sentences)} labeled sentences with {len(all_labels)} label types"
+    )
 
     # Load SSAE model config to get the embedding layer
     config_path = os.path.join(args.modeldir, "cfg.yaml")
@@ -153,7 +154,9 @@ def get_steering_vectors_for_features(args, features_list):
         cfg = yaml.safe_load(f)
 
     # Get the layer used for embeddings from the nested config structure
-    embedding_layer = cfg.get("llm_layer", cfg.get("extra", {}).get("llm_layer", 5))
+    embedding_layer = cfg.get(
+        "llm_layer", cfg.get("extra", {}).get("llm_layer", 5)
+    )
     print(f"Using embedding layer {embedding_layer} from SSAE config")
 
     # Get embeddings for the sentences using the same model and layer as will be used for steering
@@ -206,19 +209,27 @@ def get_steering_vectors_for_features(args, features_list):
         feature_key = f"{feature_type}-{feature_value}"
 
         if feature_key not in all_labels:
-            print(f"Warning: Feature '{feature_key}' not found in labels. Available: {list(all_labels.keys())}")
+            print(
+                f"Warning: Feature '{feature_key}' not found in labels. Available: {list(all_labels.keys())}"
+            )
             continue
 
         # Convert labels to tensor (binarize)
         labels = all_labels[feature_key]
-        labels_tensor = torch.tensor(labels, dtype=torch.float32).unsqueeze(1)  # Shape: (N, 1)
-        print(f"Processing feature '{feature_key}' with {sum(labels)}/{len(labels)} positive labels")
+        labels_tensor = torch.tensor(labels, dtype=torch.float32).unsqueeze(
+            1
+        )  # Shape: (N, 1)
+        print(
+            f"Processing feature '{feature_key}' with {sum(labels)}/{len(labels)} positive labels"
+        )
 
         # Compute correlation using the same method as evaluate_labeled_sentences.py
         acts_centered = acts - acts.mean(dim=0, keepdim=True)
         acts_std = acts_centered.norm(dim=0, keepdim=True)
 
-        label_centered = labels_tensor - labels_tensor.mean(dim=0, keepdim=True)
+        label_centered = labels_tensor - labels_tensor.mean(
+            dim=0, keepdim=True
+        )
         label_std = label_centered.norm(dim=0, keepdim=True)
 
         # Correlation computation
@@ -238,13 +249,15 @@ def get_steering_vectors_for_features(args, features_list):
         )
 
         # Get the decoder column for this feature as steering vector
-        steering_vector = decoder_weight[:, best_feature_idx]  # Shape: (rep_dim,)
+        steering_vector = decoder_weight[
+            :, best_feature_idx
+        ]  # Shape: (rep_dim,)
 
         steering_vectors[feature_key] = {
-            'vector': steering_vector,
-            'feature_idx': best_feature_idx,
-            'correlation': max_correlation,
-            'layer': embedding_layer
+            "vector": steering_vector,
+            "feature_idx": best_feature_idx,
+            "correlation": max_correlation,
+            "layer": embedding_layer,
         }
 
     return steering_vectors
@@ -272,20 +285,24 @@ def main(args, generate_configs):
         return
 
     # Use the feature specified by user or default to first available
-    if hasattr(args, 'feature') and args.feature:
+    if hasattr(args, "feature") and args.feature:
         selected_feature = args.feature
         if selected_feature not in steering_vectors:
-            print(f"Feature '{selected_feature}' not available. Available: {list(steering_vectors.keys())}")
+            print(
+                f"Feature '{selected_feature}' not available. Available: {list(steering_vectors.keys())}"
+            )
             return
     else:
         selected_feature = list(steering_vectors.keys())[0]
-        print(f"No specific feature requested, using first available: {selected_feature}")
+        print(
+            f"No specific feature requested, using first available: {selected_feature}"
+        )
 
     steering_info = steering_vectors[selected_feature]
-    steering_vector = steering_info['vector']
-    feature_idx = steering_info['feature_idx']
-    correlation = steering_info['correlation']
-    used_layer = steering_info['layer']
+    steering_vector = steering_info["vector"]
+    feature_idx = steering_info["feature_idx"]
+    correlation = steering_info["correlation"]
+    used_layer = steering_info["layer"]
 
     print(
         f"Using feature '{selected_feature}' steering vector from dimension {feature_idx} (correlation: {correlation:.4f})"
@@ -363,16 +380,15 @@ def main(args, generate_configs):
             args.llm,
             torch_dtype=torch.bfloat16,
             low_cpu_mem_usage=True,
-            attn_implementation="eager"  # Use eager attention for better compatibility
+            attn_implementation="eager",  # Use eager attention for better compatibility
         ).to(device)
     else:
         # Default to Llama-style loading for other models
         tokenizer = transformers.PreTrainedTokenizerFast.from_pretrained(
-            args.llm, token=ACCESS_TOKEN
+            args.llm,
         )
         llm = transformers.LlamaForCausalLM.from_pretrained(
             args.llm,
-            token=ACCESS_TOKEN,
             low_cpu_mem_usage=True,
             cache_dir="./model_cache",
             attn_implementation="flash_attention_2",
@@ -381,9 +397,7 @@ def main(args, generate_configs):
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
 
-    print(
-        f"Testing with {len(test_prompts)} predefined prompts"
-    )
+    print(f"Testing with {len(test_prompts)} predefined prompts")
     inputs = tokenizer(
         test_prompts, return_tensors="pt", padding=True, truncation=True
     )
@@ -416,7 +430,6 @@ def main(args, generate_configs):
     positive_text = generate(
         llm, tokenizer, inputs, positive_config, interv_configs
     )
-
 
     # Generate with random steering vector
     print(f"\n=== Generating with random steering vector ===")
@@ -466,7 +479,13 @@ def main(args, generate_configs):
             "steering_alpha": args.steering_alpha,
             "concept": behavior_name,
         },
-        "all_steering_vectors": {k: {"feature_idx": v["feature_idx"], "correlation": v["correlation"]} for k, v in steering_vectors.items()},
+        "all_steering_vectors": {
+            k: {
+                "feature_idx": v["feature_idx"],
+                "correlation": v["correlation"],
+            }
+            for k, v in steering_vectors.items()
+        },
         "prompt_results": prompt_results,
     }
 

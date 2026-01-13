@@ -28,8 +28,6 @@ os.environ["HF_DATASETS_CACHE"] = os.environ.get(
     "HF_DATASETS_CACHE", "/network/scratch/j/joshi.shruti/hf_cache/datasets"
 )
 
-ACCESS_TOKEN = "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"
-
 
 def load_jsonl(filepath: str):
     with open(filepath, "r", encoding="utf-8") as f:
@@ -599,13 +597,11 @@ def get_sentence_embeddings(
             "EleutherAI/pythia-70m-deduped",
             revision="step3000",
             cache_dir="./pythia-70m-deduped/step3000",
-            token=ACCESS_TOKEN,
         ).to(device)
         tokenizer = AutoTokenizer.from_pretrained(
             "EleutherAI/pythia-70m-deduped",
             revision="step3000",
             cache_dir="./pythia-70m-deduped/step3000",
-            token=ACCESS_TOKEN,
         )
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
@@ -613,12 +609,10 @@ def get_sentence_embeddings(
         model = AutoModelForCausalLM.from_pretrained(
             "google/gemma-2-2b-it",
             cache_dir="./gemma-2-2b-it",
-            token=ACCESS_TOKEN,
         ).to(device)
         tokenizer = AutoTokenizer.from_pretrained(
             "google/gemma-2-2b-it",
             cache_dir="./gemma-2-2b-it",
-            token=ACCESS_TOKEN,
         )
         tokenizer.pad_token = tokenizer.eos_token
         tokenizer.padding_side = "left"
@@ -2621,13 +2615,12 @@ def run_causal_intervention_experiment(args):
     print(f"\nLoading language model: {args.lm_model_name}")
     lm_model = AutoModelForCausalLM.from_pretrained(
         args.lm_model_name,
-        token=ACCESS_TOKEN,
         torch_dtype=t.float32,
         device_map="cuda",
         low_cpu_mem_usage=True,
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        args.lm_model_name, token=ACCESS_TOKEN
+        args.lm_model_name
     )
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
@@ -3528,7 +3521,6 @@ def run_k_sweep_attribution(args):
     # Load in float32 for better numerical precision
     lm_model = AutoModelForCausalLM.from_pretrained(
         args.lm_model_name,
-        token=ACCESS_TOKEN,
         torch_dtype=t.float32,  # Use float32 for better numerical precision
         device_map="cuda",  # Directly load to GPU instead of CPU->GPU transfer
         low_cpu_mem_usage=True,  # Reduce CPU memory usage during loading
