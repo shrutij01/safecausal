@@ -44,11 +44,13 @@ kval_topk_values=(
 
 # ------------------------------------------------------------------------------
 # Regularization (--gamma-reg)
-# For relu/jumprelu: controls L1/L0 regularization strength
-# For topk: not used (structural sparsity)
-# -1 = auto: 0.01 for jumprelu, 0.1 otherwise
+# For relu: controls L1 regularization strength on codes
+# For jumprelu: controls L0 regularization strength (step function penalty)
+# For topk: not used (structural sparsity, gamma * 0 = 0)
+# Codes are at natural scale (no lambda scaling), so small values needed
 # ------------------------------------------------------------------------------
 gamma_regs=(
+    "--gamma-reg 0.0001"
     "--gamma-reg 0.001"
     "--gamma-reg 0.01"
 )

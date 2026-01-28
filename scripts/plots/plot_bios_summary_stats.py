@@ -1,149 +1,117 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
+# -----------------------------
 # Data
+# -----------------------------
 ssae = {
-    "baseline": {"male": 13, "female": 1, "neutral": 22},
     "strengths": {
         0.0: {"male": 13, "female": 1, "neutral": 22},
         0.5: {"male": 13, "female": 7, "neutral": 16},
         1.0: {"male": 7, "female": 25, "neutral": 4},
         2.0: {"male": 0, "female": 36, "neutral": 0},
         5.0: {"male": 1, "female": 31, "neutral": 4},
-    },
+    }
 }
 
 gemma = {
-    "baseline": {"male": 13, "female": 1, "neutral": 22},
     "strengths": {
         0.0: {"male": 13, "female": 1, "neutral": 22},
         0.5: {"male": 13, "female": 3, "neutral": 20},
         1.0: {"male": 12, "female": 7, "neutral": 17},
         2.0: {"male": 9, "female": 24, "neutral": 3},
         5.0: {"male": 3, "female": 30, "neutral": 2},
-    },
+    }
 }
 
 strengths = [0.0, 0.5, 1.0, 2.0, 5.0]
+x = np.arange(len(strengths))
 
 
-def extract_counts(model, category):
-    return [model["strengths"][s][category] for s in strengths]
+def normalize(model):
+    female, nonfemale = [], []
+    for s in strengths:
+        f = model["strengths"][s]["female"]
+        m = model["strengths"][s]["male"]
+        n = model["strengths"][s]["neutral"]
+        total = f + m + n
+        female.append(f / total)
+        nonfemale.append((m + n) / total)
+    return np.array(female), np.array(nonfemale)
 
 
-# Extract series
-ssae_male = extract_counts(ssae, "male")
-ssae_female = extract_counts(ssae, "female")
-ssae_neutral = extract_counts(ssae, "neutral")
+ssae_f, ssae_nf = normalize(ssae)
+gemma_f, gemma_nf = normalize(gemma)
 
-gemma_male = extract_counts(gemma, "male")
-gemma_female = extract_counts(gemma, "female")
-gemma_neutral = extract_counts(gemma, "neutral")
-
-# Bigger bold fonts
 plt.rcParams.update(
     {
-        "font.size": 22,
-        "axes.titlesize": 26,
-        "axes.labelsize": 24,
-        "xtick.labelsize": 22,
-        "ytick.labelsize": 22,
-        "legend.fontsize": 23,
-        "font.weight": "bold",
+        "font.size": 18,
+        "axes.titlesize": 20,
+        "axes.labelsize": 20,
+        "xtick.labelsize": 18,
+        "ytick.labelsize": 18,
+        "legend.fontsize": 18,
         "axes.labelweight": "bold",
         "axes.titleweight": "bold",
     }
 )
 
-fig, ax = plt.subplots(figsize=(18, 11))
+# Colorblind-safe, non-competing
+FEMALE_COLOR = "#3b4cc0"  # deep indigo
+NONFEMALE_COLOR = "#b0b0b0"  # neutral gray
 
-# SSAE Female (bright magenta, solid, thick)
-ax.plot(
-    strengths,
-    ssae_female,
-    color="#ff00ff",
-    linestyle="-",
-    marker="o",
-    markersize=12,
-    linewidth=5,
-    label=r"$\mathbf{Female;\ SSAE}$",
+bar_width = 0.75
+
+# -----------------------------
+# Figure: stacked bars
+# -----------------------------
+fig, axes = plt.subplots(2, 1, figsize=(14, 9), sharex=True)
+
+# ---- SSAE ----
+ax = axes[0]
+ax.bar(x, ssae_f, width=bar_width, color=FEMALE_COLOR, label="Female")
+ax.bar(
+    x,
+    ssae_nf,
+    bottom=ssae_f,
+    width=bar_width,
+    color=NONFEMALE_COLOR,
+    label="Male + Neutral",
 )
 
-# SSAE Male (dark purple, dashed, faded)
-ax.plot(
-    strengths,
-    ssae_male,
-    color="purple",
-    linestyle="--",
-    marker="s",
-    markersize=10,
-    linewidth=4,
-    alpha=0.6,
-    label=r"$\mathbf{Male;\ SSAE}$",
+ax.set_title("SSAE")
+ax.set_ylabel("Proportion of generations")
+ax.set_ylim(0, 1.0)
+ax.grid(axis="y", linestyle="--", alpha=0.4)
+ax.legend(frameon=False, loc="upper left")
+
+# ---- GemmaScope2B ----
+ax = axes[1]
+ax.bar(x, gemma_f, width=bar_width, color=FEMALE_COLOR)
+ax.bar(x, gemma_nf, bottom=gemma_f, width=bar_width, color=NONFEMALE_COLOR)
+
+ax.set_title("GemmaScope2B")
+ax.set_ylabel("Proportion of generations")
+ax.set_ylim(0, 1.0)
+ax.grid(axis="y", linestyle="--", alpha=0.4)
+
+# -----------------------------
+# Shared x-axis
+# -----------------------------
+axes[1].set_xticks(x)
+axes[1].set_xticklabels([str(s) for s in strengths])
+axes[1].set_xlabel("Steering strength")
+
+# -----------------------------
+# Suptitle
+# -----------------------------
+fig.suptitle(
+    "Bias in Bios: Number of Gender Indicators for Steering Strength",
+    fontsize=22,
+    fontweight="bold",
+    y=0.98,
 )
 
-# SSAE Neutral (dark gray, dotted, faded)
-ax.plot(
-    strengths,
-    ssae_neutral,
-    color="gray",
-    linestyle=":",
-    marker="^",
-    markersize=10,
-    linewidth=4,
-    alpha=0.6,
-    label=r"$\mathbf{Neutral;\ SSAE}$",
-)
-
-# Gemma Female (bright cyan, solid, thick)
-ax.plot(
-    strengths,
-    gemma_female,
-    color="#00ffff",
-    linestyle="-",
-    marker="o",
-    markersize=12,
-    linewidth=5,
-    label=r"$\mathbf{Female;\ GemmaScope2B}$",
-)
-
-# Gemma Male (dark blue, dashed, faded)
-ax.plot(
-    strengths,
-    gemma_male,
-    color="blue",
-    linestyle="--",
-    marker="s",
-    markersize=10,
-    linewidth=4,
-    alpha=0.6,
-    label=r"$\mathbf{Male;\ GemmaScope2B}$",
-)
-
-# Gemma Neutral (black dotted, faded)
-ax.plot(
-    strengths,
-    gemma_neutral,
-    color="black",
-    linestyle=":",
-    marker="^",
-    markersize=10,
-    linewidth=4,
-    alpha=0.6,
-    label=r"$\mathbf{Neutral;\ GemmaScope2B}$",
-)
-
-# Labels & Title
-ax.set_xticks(strengths)
-ax.set_xlabel(r"$\mathbf{Steering\ Strength}$")
-ax.set_ylabel(r"$\mathbf{Counts\ of\ Female\ vs.\ Male\ Generations}$")
-ax.set_title(
-    r"$\mathbf{Bias\ in\ Bios:\ Gender\ Indicators\ vs.\ Steering\ Strength}$"
-)
-
-ax.legend(ncol=2, frameon=False)
-ax.grid(True, linestyle="--", alpha=0.6)
-
-plt.tight_layout()
-plt.savefig("bios_summary_stats_bold.png", dpi=300)
-# plt.show()
+plt.tight_layout(rect=[0, 0, 1, 0.95])
+# plt.savefig("bios_gender_transition_bars.png", dpi=300, bbox_inches="tight")
+plt.show()
