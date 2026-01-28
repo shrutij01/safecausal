@@ -947,7 +947,7 @@ def make_dataloader(cfg) -> DataLoader:
         print(
             f"   Quick mode is only allowed for: {', '.join(allowed_quick_datasets)}"
         )
-        cfg.quick = False
+        object.__setattr__(cfg, "quick", False)
 
     # Set max_samples based on quick flag and dataset
     if cfg.quick and dataset_name in allowed_quick_datasets:
