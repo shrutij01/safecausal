@@ -7,8 +7,8 @@
 embedding_files=(
     "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_gemma2_25_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_gemma2_25_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.h5"
+    # "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_gemma2_25_last_token.h5"
+    # "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/truthful-qa/truthful-qa_gemma2_25_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/truthful-qa/truthful-qa_pythia70m_5_last_token.h5"
 )
@@ -16,8 +16,8 @@ embedding_files=(
 data_configs=(
     "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_gemma2_25_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_gemma2_25_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.yaml"
+    # "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_gemma2_25_last_token.yaml"
+    # "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/truthful-qa/truthful-qa_gemma2_25_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/truthful-qa/truthful-qa_pythia70m_5_last_token.yaml"
 )
