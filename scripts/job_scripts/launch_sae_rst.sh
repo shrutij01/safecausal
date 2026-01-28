@@ -44,9 +44,7 @@ sae_types=(
 # Top-k values (only used when --sae-type topk)
 # These will be combined with topk SAE type only
 kval_topk_values=(
-    "--kval-topk 16"
     "--kval-topk 32"
-    "--kval-topk 64"
 )
 
 # ------------------------------------------------------------------------------
@@ -57,9 +55,7 @@ kval_topk_values=(
 # Codes are at natural scale (no lambda scaling), so small values needed
 # ------------------------------------------------------------------------------
 gamma_regs=(
-    "--gamma-reg 1e-7"
     "--gamma-reg 1e-6"
-    "--gamma-reg 1e-5"
 )
 
 # ------------------------------------------------------------------------------
