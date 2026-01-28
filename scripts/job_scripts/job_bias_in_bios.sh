@@ -56,8 +56,8 @@ dual_optims=(
     "--dual-optim extra-adam"
 )
 dual_lr_divs=(
-    # "--dual-lr-div 2.0"
-    "--dual-lr-div 10.0"
+    "--dual-lr-div 2.0"
+    # "--dual-lr-div 10.0"
 )
 
 # Sparsity constraint type
