@@ -702,6 +702,7 @@ class Cfg:
     ind_th: float = 0.1
     seed: int = 0
     renorm_epochs: int = 50
+    dual_lr_div: float = 2.0
     use_amp: bool = True
     quick: bool = False
 
@@ -736,6 +737,8 @@ def parse_cfg() -> Cfg:
     add("--ind-th", type=float, default=0.1)
     add("--seed", type=int, default=0)
     add("--renorm-epochs", type=int, default=50)
+    add("--dual-lr-div", type=float, default=2.0,
+        help="Divisor for dual learning rate: dual_lr = lr / dual_lr_div")
     add("--use-amp", action="store_true", default=True)
     add(
         "--quick",
@@ -882,7 +885,7 @@ def make_ssae(cfg: Cfg, dev: torch.device):
 
 def make_optim(dict: torch.nn.Module, ssae, cfg: Cfg):
     primal_optimizer = cooper.optim.ExtraAdam(dict.parameters(), lr=cfg.lr)
-    dual_lr = cfg.lr / 2  # dual_lr should be less than primal_lr
+    dual_lr = cfg.lr / cfg.dual_lr_div  # dual_lr should be less than primal_lr
     # 0.5 is common from extra gradient method literature
     # todo: how to select the dual optimizer?
     dual_optimizer = cooper.optim.ExtraAdam(
