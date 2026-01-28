@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # ==============================================================================
 # SAE baseline training on bias-in-bios dataset
 #
@@ -141,9 +140,9 @@ module load python/3.10
 module load cuda/12.6.0/cudnn
 source /home/mila/j/joshi.shruti/venvs/agents/bin/activate
 export PYTHONPATH="/home/mila/j/joshi.shruti/causalrepl_space/safecausal:\$PYTHONPATH"
-cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal/ssae
+cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal
 
-python sae.py ${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${sae_type} ${kval} ${batch_size} ${epochs} ${warmup} ${wd} ${gc} ${seed}
+python -m ssae.sae ${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${sae_type} ${kval} ${batch_size} ${epochs} ${warmup} ${wd} ${gc} ${seed}
 EOF
                                                     chmod +x "${script_name}"
                                                     sbatch "${script_name}"
@@ -168,9 +167,9 @@ module load python/3.10
 module load cuda/12.6.0/cudnn
 source /home/mila/j/joshi.shruti/venvs/agents/bin/activate
 export PYTHONPATH="/home/mila/j/joshi.shruti/causalrepl_space/safecausal:\$PYTHONPATH"
-cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal/ssae
+cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal
 
-python sae.py ${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${sae_type} ${gamma_reg} ${batch_size} ${epochs} ${warmup} ${wd} ${gc} ${seed}
+python -m ssae.sae ${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${sae_type} ${gamma_reg} ${batch_size} ${epochs} ${warmup} ${wd} ${gc} ${seed}
 EOF
                                                     chmod +x "${script_name}"
                                                     sbatch "${script_name}"
