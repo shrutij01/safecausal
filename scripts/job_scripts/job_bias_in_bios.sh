@@ -11,16 +11,14 @@ data_configs=(
     "/network/scratch/j/joshi.shruti/ssae/bias-in-bios/bias-in-bios_pythia70m_5_last_token.yaml"
 )
 
-# Updated parameter names to match refactored code
-encoding_dims=(
-    "--oc 4096"    # overcompleteness factor
-)
+# Note: --oc defaults to embedding_dim (rep_dim from YAML config) and is capped
+# at embedding_dim, so we don't need to specify it explicitly.
 schedules=(
     "--schedule 3000" #"--schedule 5000"   # scheduler-epochs
 )
 # Target sparsity
 # - For l1: average absolute activation per (sample, feature) pair
-# - For step_l0: fraction of active features (0.05 = 5% of 4096 = ~200 features)
+# - For step_l0: fraction of active features (0.05 = 5% of embedding_dim)
 targets_l1=(
     "--target 0.005"
 )
@@ -57,6 +55,7 @@ dual_optims=(
 )
 dual_lr_divs=(
     "--dual-lr-div 2.0"
+    "--dual-lr-div 5.0"
     # "--dual-lr-div 10.0"
 )
 
@@ -65,7 +64,7 @@ dual_lr_divs=(
 # - step_l0: constrains fraction of active features via differentiable step function
 sparsity_types=(
     "--sparsity-type l1"
-    "--sparsity-type step_l0"
+    # "--sparsity-type step_l0"
 )
 
 # step_l0-specific parameters (only used when --sparsity-type step_l0)
@@ -130,40 +129,38 @@ for idx in "${!embedding_files[@]}"; do
     data_config="${data_configs[$idx]}"
 
     for lr in "${learning_rates[@]}"; do
-        for oc in "${encoding_dims[@]}"; do
-            for batch_size in "${batch_sizes[@]}"; do
-                for norm_type in "${norm_types[@]}"; do
-                    for loss_type in "${loss_types[@]}"; do
-                        for schedule in "${schedules[@]}"; do
-                            for renorm_epoch in "${renorm_epochs[@]}"; do
-                                for dual_optim in "${dual_optims[@]}"; do
-                                    for dual_lr_div in "${dual_lr_divs[@]}"; do
-                                        for epochs in "${num_epochs[@]}"; do
-                                            for sparsity_type in "${sparsity_types[@]}"; do
+        for batch_size in "${batch_sizes[@]}"; do
+            for norm_type in "${norm_types[@]}"; do
+                for loss_type in "${loss_types[@]}"; do
+                    for schedule in "${schedules[@]}"; do
+                        for renorm_epoch in "${renorm_epochs[@]}"; do
+                            for dual_optim in "${dual_optims[@]}"; do
+                                for dual_lr_div in "${dual_lr_divs[@]}"; do
+                                    for epochs in "${num_epochs[@]}"; do
+                                        for sparsity_type in "${sparsity_types[@]}"; do
 
-                                                # Select target array based on sparsity type
-                                                if [[ "$sparsity_type" == *"step_l0"* ]]; then
-                                                    target_list=("${targets_step_l0[@]}")
-                                                else
-                                                    target_list=("${targets_l1[@]}")
-                                                fi
+                                            # Select target array based on sparsity type
+                                            if [[ "$sparsity_type" == *"step_l0"* ]]; then
+                                                target_list=("${targets_step_l0[@]}")
+                                            else
+                                                target_list=("${targets_l1[@]}")
+                                            fi
 
-                                                for target in "${target_list[@]}"; do
-                                                    for seed in "${seeds[@]}"; do
+                                            for target in "${target_list[@]}"; do
+                                                for seed in "${seeds[@]}"; do
 
-                                                        base_flags="${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${dual_optim} ${dual_lr_div} ${epochs} ${sparsity_type} ${seed}"
+                                                    base_flags="${embedding_file} ${data_config} --quick ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${dual_optim} ${dual_lr_div} ${epochs} ${sparsity_type} ${seed}"
 
-                                                        if [[ "$sparsity_type" == *"step_l0"* ]]; then
-                                                            for sl0_th in "${step_l0_thresholds[@]}"; do
-                                                                for sl0_bw in "${step_l0_bandwidths[@]}"; do
-                                                                    submit_job "${base_flags} ${sl0_th} ${sl0_bw}"
-                                                                done
+                                                    if [[ "$sparsity_type" == *"step_l0"* ]]; then
+                                                        for sl0_th in "${step_l0_thresholds[@]}"; do
+                                                            for sl0_bw in "${step_l0_bandwidths[@]}"; do
+                                                                submit_job "${base_flags} ${sl0_th} ${sl0_bw}"
                                                             done
-                                                        else
-                                                            submit_job "${base_flags}"
-                                                        fi
+                                                        done
+                                                    else
+                                                        submit_job "${base_flags}"
+                                                    fi
 
-                                                    done
                                                 done
                                             done
                                         done

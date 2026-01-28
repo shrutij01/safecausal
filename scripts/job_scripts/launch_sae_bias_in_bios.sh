@@ -19,10 +19,9 @@ data_configs=(
 
 # ------------------------------------------------------------------------------
 # SAE architecture
+# Note: --oc defaults to embedding_dim (rep_dim from YAML config) and is capped
+# at embedding_dim, so we don't need to specify it explicitly.
 # ------------------------------------------------------------------------------
-encoding_dims=(
-    "--oc 4096"
-)
 
 # SAE types to train
 # - relu: standard ReLU SAE with L1 regularization
@@ -116,23 +115,22 @@ for idx in "${!embedding_files[@]}"; do
 
     for sae_type in "${sae_types[@]}"; do
         for lr in "${learning_rates[@]}"; do
-            for oc in "${encoding_dims[@]}"; do
-                for batch_size in "${batch_sizes[@]}"; do
-                    for loss_type in "${loss_types[@]}"; do
-                        for epochs in "${num_epochs[@]}"; do
-                            for warmup in "${warmup_iters[@]}"; do
-                                for wd in "${weight_decays[@]}"; do
-                                    for gc in "${grad_clips[@]}"; do
-                                        for renorm_epoch in "${renorm_epochs[@]}"; do
-                                            for seed in "${seeds[@]}"; do
+            for batch_size in "${batch_sizes[@]}"; do
+                for loss_type in "${loss_types[@]}"; do
+                    for epochs in "${num_epochs[@]}"; do
+                        for warmup in "${warmup_iters[@]}"; do
+                            for wd in "${weight_decays[@]}"; do
+                                for gc in "${grad_clips[@]}"; do
+                                    for renorm_epoch in "${renorm_epochs[@]}"; do
+                                        for seed in "${seeds[@]}"; do
 
-                                                # Shared base flags
-                                                base_flags="${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${sae_type} ${batch_size} ${epochs} ${warmup} ${wd} ${gc} ${renorm_epoch} ${seed}"
+                                            # Shared base flags (oc defaults to embedding_dim)
+                                            base_flags="${embedding_file} ${data_config} --quick ${lr} ${loss_type} ${sae_type} ${batch_size} ${epochs} ${warmup} ${wd} ${gc} ${renorm_epoch} ${seed}"
 
-                                                if [[ "$sae_type" == *"topk"* ]]; then
-                                                    for kval in "${kval_topk_values[@]}"; do
-                                                        script_name="generated_jobs/job_sae_bias_in_bios_${counter}.sh"
-                                                        cat > "${script_name}" << EOF
+                                            if [[ "$sae_type" == *"topk"* ]]; then
+                                                for kval in "${kval_topk_values[@]}"; do
+                                                    script_name="generated_jobs/job_sae_bias_in_bios_${counter}.sh"
+                                                    cat > "${script_name}" << EOF
 #!/bin/bash
 #SBATCH --job-name=${job_name}_${counter}
 #SBATCH --output=logs/job_%j.out
@@ -150,14 +148,14 @@ cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal
 
 python -m ssae.sae ${base_flags} ${kval}
 EOF
-                                                        chmod +x "${script_name}"
-                                                        sbatch "${script_name}"
-                                                        ((counter++))
-                                                    done
-                                                else
-                                                    for gamma_reg in "${gamma_regs[@]}"; do
-                                                        script_name="generated_jobs/job_sae_bias_in_bios_${counter}.sh"
-                                                        cat > "${script_name}" << EOF
+                                                    chmod +x "${script_name}"
+                                                    sbatch "${script_name}"
+                                                    ((counter++))
+                                                done
+                                            else
+                                                for gamma_reg in "${gamma_regs[@]}"; do
+                                                    script_name="generated_jobs/job_sae_bias_in_bios_${counter}.sh"
+                                                    cat > "${script_name}" << EOF
 #!/bin/bash
 #SBATCH --job-name=${job_name}_${counter}
 #SBATCH --output=logs/job_%j.out
@@ -175,13 +173,12 @@ cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal
 
 python -m ssae.sae ${base_flags} ${gamma_reg}
 EOF
-                                                        chmod +x "${script_name}"
-                                                        sbatch "${script_name}"
-                                                        ((counter++))
-                                                    done
-                                                fi
+                                                    chmod +x "${script_name}"
+                                                    sbatch "${script_name}"
+                                                    ((counter++))
+                                                done
+                                            fi
 
-                                            done
                                         done
                                     done
                                 done

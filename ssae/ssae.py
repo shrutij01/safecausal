@@ -799,7 +799,7 @@ class Cfg:
     batch: int = 32
     epochs: int = 20_000
     lr: float = 5e-4
-    oc: int = 10
+    oc: int = -1  # -1 → use rep_dim from YAML config (embedding_dim)
     n_concepts: int = 1
     warmup: int = 2_000
     schedule: int = 5_000
@@ -842,7 +842,8 @@ def parse_cfg() -> Cfg:
     add("--batch", type=int, default=32)
     add("--epochs", type=int, default=15_000)
     add("--lr", type=float, default=5e-4)
-    add("--oc", type=int, default=10)
+    add("--oc", type=int, default=-1,
+        help="Hidden dim (-1 = use embedding_dim, capped at embedding_dim)")
     add("--n-concepts", "-C", type=int, default=1)
     add("--warmup", type=int, default=2_000)
     add("--schedule", type=int, default=1_000)
@@ -914,6 +915,14 @@ def parse_cfg() -> Cfg:
     extra = {k: v for k, v in yaml_cfg.items() if k not in field_names}
     cfg = Cfg(**cli)
     object.__setattr__(cfg, "extra", SimpleNamespace(**extra))
+
+    # Resolve oc: default to rep_dim (embedding_dim), cap at rep_dim
+    rep_dim = cfg.extra.rep_dim
+    if cfg.oc <= 0:
+        object.__setattr__(cfg, "oc", rep_dim)
+    elif cfg.oc > rep_dim:
+        print(f"Warning: oc={cfg.oc} > rep_dim={rep_dim}, capping to {rep_dim}")
+        object.__setattr__(cfg, "oc", rep_dim)
 
     return cfg
 
