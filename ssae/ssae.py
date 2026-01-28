@@ -644,16 +644,21 @@ def main():
         num_batches = len(dataloader)
         dataset_size: int = len(dataloader.dataset)
 
+        # p_sparsity: proportion of (sample, feature) pairs that are active
+        p_sparsity = total_active_concepts / (dataset_size * cfg.hid)
+
         # Log epoch metrics with correct normalization
         epoch_metrics = {
             "epoch": ep,
             "recon_loss": total_recon_loss
             / num_batches,  # Average loss per batch
             "l0_sparsity": total_active_concepts
-            / dataset_size,  # Number of active neurons
+            / dataset_size,  # Number of active neurons per sample
+            "p_sparsity": p_sparsity,  # Proportion of active features (matches SAE)
             "sparsity_target": ssae.level,  # Current scheduled sparsity target
             "constraint_violation": total_sparsity_defect
             / num_batches,  # Same as sparsity_defect but clearer name
+            "lr": cfg.lr,  # Fixed LR (logged for consistency with SAE)
         }
 
         for k, v in epoch_metrics.items():
@@ -702,7 +707,8 @@ class Cfg:
     ind_th: float = 0.1
     seed: int = 0
     renorm_epochs: int = 50
-    dual_lr_div: float = 2.0
+    dual_lr_div: float = 10.0  # dual_lr = lr / dual_lr_div (10x smaller recommended)
+    dual_optim: str = "sgd"  # "sgd" (recommended) or "extra-adam"
     use_amp: bool = True
     quick: bool = False
 
@@ -737,8 +743,10 @@ def parse_cfg() -> Cfg:
     add("--ind-th", type=float, default=0.1)
     add("--seed", type=int, default=0)
     add("--renorm-epochs", type=int, default=50)
-    add("--dual-lr-div", type=float, default=2.0,
+    add("--dual-lr-div", type=float, default=10.0,
         help="Divisor for dual learning rate: dual_lr = lr / dual_lr_div")
+    add("--dual-optim", choices=["sgd", "extra-adam"], default="sgd",
+        help="Optimizer for dual variable: sgd (recommended) or extra-adam")
     add("--use-amp", action="store_true", default=True)
     add(
         "--quick",
@@ -886,11 +894,20 @@ def make_ssae(cfg: Cfg, dev: torch.device):
 def make_optim(dict: torch.nn.Module, ssae, cfg: Cfg):
     primal_optimizer = cooper.optim.ExtraAdam(dict.parameters(), lr=cfg.lr)
     dual_lr = cfg.lr / cfg.dual_lr_div  # dual_lr should be less than primal_lr
-    # 0.5 is common from extra gradient method literature
-    # todo: how to select the dual optimizer?
-    dual_optimizer = cooper.optim.ExtraAdam(
-        ssae.dual_parameters(), lr=dual_lr, maximize=True
-    )
+
+    # Select dual optimizer based on config
+    # SGD recommended: theory says momentum on dual (linear player) causes issues
+    # ExtraAdam: may get more sparsity than needed due to momentum
+    if cfg.dual_optim == "sgd":
+        dual_optimizer = torch.optim.SGD(
+            ssae.dual_parameters(), lr=dual_lr, maximize=True
+        )
+    elif cfg.dual_optim == "extra-adam":
+        dual_optimizer = cooper.optim.ExtraAdam(
+            ssae.dual_parameters(), lr=dual_lr, maximize=True
+        )
+    else:
+        raise ValueError(f"Unknown dual_optim: {cfg.dual_optim}")
     # which opt for primal, which for dual
     # simultaneous update of both primal and dual variables?
     # or do extrapolation? expensive but works better
