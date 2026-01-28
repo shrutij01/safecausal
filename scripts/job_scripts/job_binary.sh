@@ -40,7 +40,7 @@ schedules=(
 # - For l1: average absolute activation per (sample, feature) pair
 # - For step_l0: fraction of active features
 targets_l1=(
-    "--target 7"
+    "--target 0.005"
 )
 targets_step_l0=(
     "--target 0.05"
@@ -58,7 +58,7 @@ learning_rates=(
     "--lr 0.0005"
 )
 seeds=(
-    "--seed 0" "--seed 1" "--seed 2" "--seed 5" "--seed 7"
+    "--seed 0" "--seed 1" "--seed 2"
 )
 
 # New optimized parameters from refactored code
@@ -75,7 +75,7 @@ dual_optims=(
 )
 dual_lr_divs=(
     "--dual-lr-div 2.0"
-    "--dual-lr-div 5.0"
+    # "--dual-lr-div 5.0"
 )
 
 # Sparsity constraint type
@@ -94,7 +94,7 @@ step_l0_bandwidths=(
 
 # Job settings
 job_name="ssae_binary"
-time_limit="3:00:00"
+time_limit="0:20:00"
 cpu_req="cpus-per-task=8"
 memory="32Gb"
 gpu_req="gpu:1"
