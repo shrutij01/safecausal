@@ -3526,7 +3526,7 @@ def run_k_sweep_attribution(args):
         low_cpu_mem_usage=True,  # Reduce CPU memory usage during loading
     )
     tokenizer = AutoTokenizer.from_pretrained(
-        args.lm_model_name, token=ACCESS_TOKEN
+        args.lm_model_name
     )
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = "left"
