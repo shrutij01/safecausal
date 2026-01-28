@@ -471,7 +471,7 @@ class Logger:
                     / 1024**2,
                     "gpu_memory_reserved_mb": torch.cuda.memory_reserved()
                     / 1024**2,
-                    "gpu_memory_cached_mb": torch.cuda.memory_cached()
+                    "gpu_memory_cached_mb": torch.cuda.memory_reserved()
                     / 1024**2,
                 }
             )
