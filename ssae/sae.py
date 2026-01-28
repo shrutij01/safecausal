@@ -36,6 +36,7 @@ from ssae.ssae import (
     set_seeds,
     Logger,
     _load_yaml,
+    renorm_decoder_cols_,
 )
 
 
@@ -153,7 +154,7 @@ class SAE(torch.nn.Module):
         mp_kval: (int)
             k in matching pursuit sae_type
         lambda_init: (float)
-            initial value for lambda (activation scaling)
+            initial value for lambda (only used by sparsemax/MP)
         """
         super(SAE, self).__init__()
         self.sae_type = sae_type
@@ -161,24 +162,23 @@ class SAE(torch.nn.Module):
         self.dimin = dimin
         self.eps = 0.01
 
-        # Lambda parameter
-        lambda_init_val = (
-            1 / (4 * dimin) if lambda_init is None else lambda_init
-        )
+        # Lambda parameter (only meaningful for sparsemax/MP)
+        lambda_init_val = 1.0 if lambda_init is None else lambda_init
         lambda_pre = softplus_inverse(lambda_init_val)
         self.lambda_pre = nn.Parameter(lambda_pre, requires_grad=False)
 
-        # Encoder parameters
-        self.Ae = nn.Parameter(torch.randn((width, dimin)))
+        # Encoder parameters — Kaiming uniform init
+        self.Ae = nn.Parameter(torch.empty((width, dimin)))
+        init.kaiming_uniform_(self.Ae, a=math.sqrt(5))
         if "MP" not in sae_type:
             self.be = nn.Parameter(torch.zeros((1, width)))
 
-        # Decoder parameters
+        # Decoder parameters — init from encoder, then normalize columns
         self.bd = nn.Parameter(torch.zeros((1, dimin)))
         if "MP" not in sae_type:
-            self.Ad = nn.Parameter(torch.randn((dimin, width)))
+            self.Ad = nn.Parameter(self.Ae.data.T.clone())
             with torch.no_grad():
-                self.Ad.copy_(self.Ae.T)
+                renorm_decoder_cols_(self.Ad)
 
         # Parameters for specific SAEs
         # JumpReLU
@@ -229,28 +229,26 @@ class SAE(torch.nn.Module):
         return F.softplus(self.lambda_pre)
 
     def forward(self, x, return_hidden=False, inf_k=None):
-        lam = self.lambda_val
-
-        # Vanilla ReLU
+        # Vanilla ReLU — standard SAE (Bricken et al.)
         if self.sae_type == "relu":
             x = x - self.bd
             x = torch.matmul(x, self.Ae.T) + self.be
-            codes = F.relu(lam * x)
+            codes = F.relu(x)
             x = torch.matmul(codes, self.Ad.T) + self.bd
 
-        # TopK
+        # TopK — structural sparsity (Gao et al.)
         elif self.sae_type == "topk":
             kval = self.kval_topk if inf_k is None else inf_k
             x = x - self.bd
-            x = torch.matmul(x, self.Ae.T)
-            _, topk_indices = torch.topk(F.relu(x), kval, dim=-1)
-            mask = torch.zeros_like(x)
-            mask.scatter_(-1, topk_indices, 1)
-            codes = x * mask * lam
+            x = torch.matmul(x, self.Ae.T) + self.be
+            topk_values, topk_indices = torch.topk(x, kval, dim=-1)
+            codes = torch.zeros_like(x)
+            codes.scatter_(-1, topk_indices, F.relu(topk_values))
             x = torch.matmul(codes, self.Ad.T) + self.bd
 
         # Matching Pursuits
         elif self.sae_type == "MP":
+            lam = self.lambda_val
             kval = self.mp_kval if inf_k is None else inf_k
             x = x - self.bd
             codes = torch.zeros(x.shape[0], self.Ae.shape[0], device=x.device)
@@ -266,17 +264,18 @@ class SAE(torch.nn.Module):
                 x = x - to_add @ self.Ae
             x = torch.matmul(codes, self.Ae) + self.bd
 
-        # JumpReLU
+        # JumpReLU — learnable threshold (Rajamanoharan et al.)
         elif self.sae_type == "jumprelu":
             x = x - self.bd
             x = torch.matmul(x, self.Ae.T) + self.be
-            x = F.relu(lam * x)
+            x = F.relu(x)
             threshold = torch.exp(self.logthreshold)
             codes = jumprelu(x, threshold, self.bandwidth)
             x = torch.matmul(codes, self.Ad.T) + self.bd
 
         # Sparsemax distance-based
         elif self.sae_type == "sparsemax_dist":
+            lam = self.lambda_val
             x_norm_sq = torch.sum(x**2, dim=-1, keepdim=True)
             ae_norm_sq = torch.sum(self.Ae**2, dim=-1, keepdim=True).T
             dot_product = torch.matmul(x, self.Ae.T)
@@ -714,6 +713,11 @@ def train_epoch(
                 )
             optimizer.step()
 
+        # Renormalize decoder columns to unit norm after each step
+        with torch.no_grad():
+            if hasattr(model, "Ad"):
+                renorm_decoder_cols_(model.Ad)
+
         recon_sum += loss_mse.item()
         reg_sum += loss_reg.item()
 
@@ -729,28 +733,25 @@ def train_epoch(
     return recon_sum, reg_sum, concept_counts, global_step, lr
 
 
-def dump_run(root: Path, model: torch.nn.Module, cfg: Cfg) -> Path:
-    stem_parts = cfg.emb.stem.split("_")
-    if "corr" in cfg.emb.stem and "ds-sp" in cfg.emb.stem:
-        dataset_parts = []
-        for i, part in enumerate(stem_parts):
-            dataset_parts.append(part)
-            if (
-                i > 0
-                and stem_parts[i - 1].startswith("ds-sp")
-                and part.replace(".", "").isdigit()
-            ):
-                break
-        dataset_name = "_".join(dataset_parts)
-    else:
-        dataset_name = stem_parts[0]
+def dump_run(root: Path, model: torch.nn.Module, cfg: Cfg, gamma_reg: float) -> Path:
+    from ssae.ssae import _extract_dataset_name, _extract_model_name
 
-    model_name = getattr(cfg.extra, "model", "unknown")
-    if "/" in model_name:
-        model_name = model_name.split("/")[-1]
+    dataset_name = _extract_dataset_name(cfg.emb.stem)
+    model_name = _extract_model_name(cfg)
 
-    cfg_hash = _hash_cfg(cfg)
-    run = root / f"sae_{dataset_name}_{model_name}_seed{cfg.seed}_{cfg_hash}"
+    # SAE folder: dataset, LLM type, sae type, oc, k-val, gamma-reg, seed
+    # Format gamma_reg: e.g. 0.01 -> "0.01", resolved from -1 if needed
+    gamma_str = f"{gamma_reg:g}"
+    kval_str = f"{cfg.kval_topk}" if cfg.sae_type == "topk" else f"{cfg.mp_kval}" if cfg.sae_type == "MP" else "0"
+
+    run = root / (
+        f"sae_{dataset_name}_{model_name}"
+        f"_{cfg.sae_type}"
+        f"_oc{cfg.oc}"
+        f"_k{kval_str}"
+        f"_g{gamma_str}"
+        f"_seed{cfg.seed}"
+    )
     run.mkdir(parents=True, exist_ok=True)
 
     torch.save(model.state_dict(), run / "weights.pth")
@@ -858,7 +859,7 @@ def main():
             f"lr {lr:.6f}"
         )
 
-    dump_run(cfg.emb.parent / "run_out", model, cfg)
+    dump_run(cfg.emb.parent / "run_out", model, cfg, gamma_reg)
 
 
 if __name__ == "__main__":

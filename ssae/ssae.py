@@ -23,6 +23,55 @@ from box import Box
 
 
 # ============================================================================
+# STEP FUNCTION WITH STE GRADIENT (for L0 constraint)
+# ============================================================================
+
+
+def rectangle(x):
+    """Rectangle function for STE gradient approximation."""
+    return ((x >= -0.5) & (x <= 0.5)).float()
+
+
+class StepFunction(torch.autograd.Function):
+    """
+    Step function with straight-through estimator (STE) gradient.
+    Forward: returns 1 if input > threshold, 0 otherwise
+    Backward: uses rectangle function for gradient approximation
+    """
+
+    @staticmethod
+    def forward(ctx, input, threshold, bandwidth):
+        if not isinstance(threshold, torch.Tensor):
+            threshold = torch.tensor(
+                threshold, dtype=input.dtype, device=input.device
+            )
+        if not isinstance(bandwidth, torch.Tensor):
+            bandwidth = torch.tensor(
+                bandwidth, dtype=input.dtype, device=input.device
+            )
+        ctx.save_for_backward(input, threshold, bandwidth)
+        return (input > threshold).type(input.dtype)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        x, threshold, bandwidth = ctx.saved_tensors
+        # No gradient for input (STE just passes through)
+        grad_input = grad_output.clone()
+        # Gradient for threshold uses rectangle approximation
+        grad_threshold = (
+            -(1.0 / bandwidth)
+            * rectangle((x - threshold) / bandwidth)
+            * grad_output
+        ).sum(dim=0, keepdim=True)
+        return grad_input, grad_threshold, None
+
+
+def step_fn(input, threshold, bandwidth):
+    """Differentiable step function for L0 approximation."""
+    return StepFunction.apply(input, threshold, bandwidth)
+
+
+# ============================================================================
 # DATA WHITENING
 # ============================================================================
 
@@ -228,7 +277,13 @@ def project_decoder_grads_(W: Tensor) -> None:
 
 
 class SSAE(cooper.ConstrainedMinimizationProblem):
-    """MSE + l_1 sparsity constraint on a linear schedule."""
+    """MSE + sparsity constraint on a linear schedule.
+
+    Supports two sparsity constraint types:
+    - "l1": Constrains average absolute activation (L1 norm / num_elements)
+    - "step_l0": Constrains fraction of active features using differentiable
+                step function with STE gradient
+    """
 
     _LOSS: dict[str, callable] = {
         "relative": lambda z, z_hat: (
@@ -249,9 +304,15 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         warmup: int = 2_000,
         schedule: int = 5_000,
         target: float = 0.10,
+        sparsity_type: str = "l1",
+        step_l0_threshold: float = 0.01,
+        step_l0_bandwidth: float = 1e-3,
     ) -> None:
         super().__init__()
         self.batch, self.hid = batch, hid
+        self.sparsity_type = sparsity_type
+        self.step_l0_threshold = step_l0_threshold
+        self.step_l0_bandwidth = step_l0_bandwidth
 
         # sparsity schedule
         self._lvl0 = n_concepts
@@ -281,22 +342,44 @@ class SSAE(cooper.ConstrainedMinimizationProblem):
         t = (self.epoch - self._warm) / self._T
         self.level = self._lvl0 + min(1.0, t) * (self._lvl1 - self._lvl0)
 
+    def _compute_sparsity_violation(self, h: Tensor) -> Tensor:
+        """Compute sparsity constraint violation based on sparsity_type."""
+        actual_batch_size = h.shape[0]
+
+        if self.sparsity_type == "l1":
+            # L1: average absolute activation per (sample, feature) pair
+            # Constraint: avg(|h|) <= level
+            return h.abs().sum() / (actual_batch_size * self.hid) - self.level
+
+        elif self.sparsity_type == "step_l0":
+            # Step L0: fraction of features above threshold
+            # Constraint: fraction_active <= level
+            # Uses differentiable step function with STE gradient
+            active_mask = step_fn(
+                h.abs(), self.step_l0_threshold, self.step_l0_bandwidth
+            )
+            # Average number of active features per sample, normalized by hid
+            fraction_active = active_mask.sum(dim=-1).mean() / self.hid
+            return fraction_active - self.level
+
+        else:
+            raise ValueError(f"Unknown sparsity_type: {self.sparsity_type}")
+
     def compute_cmp_state(
         self,
         model: nn.Module,
         delta_z: Tensor,
         loss_type: str = "relative",
     ) -> cooper.CMPState:
-        """Return CMPState used by Cooper’s optimiser."""
+        """Return CMPState used by Cooper's optimiser."""
         delta_z_hat, h = model(delta_z)
         loss = self._LOSS[loss_type](delta_z, delta_z_hat)
 
         # Cache hidden states for sparsity computation
         self._cached_h = h
-        actual_batch_size = h.shape[0]
 
         self._tick_schedule()
-        ineq = h.abs().sum() / (actual_batch_size * self.hid) - self.level
+        ineq = self._compute_sparsity_violation(h)
         constraint_state = cooper.ConstraintState(violation=ineq)
         observed_constraints = {self.sparsity_constraint: constraint_state}
         cmp_state = cooper.CMPState(
@@ -444,7 +527,13 @@ class SimpleCPUData(Dataset):
             return torch.from_numpy(self.data[idx + 1] - self.data[idx])
 
 
-KEYS = ["seed", "model", "oc", "target"]  # choose what matters
+KEYS = [
+    "seed",
+    "model",
+    "oc",
+    "target",
+    "sparsity_type",
+]  # choose what matters
 
 
 def _hash_cfg(cfg) -> str:
@@ -466,46 +555,46 @@ def _hash_cfg(cfg) -> str:
     return hashlib.sha1(blob).hexdigest()[:6]  # short & stable
 
 
-def dump_run(root: Path, model: torch.nn.Module, cfg) -> Path:
-    from datetime import datetime
-
-    # Extract dataset name from embedding file path
-    # For correlated datasets, preserve the correlation level in the name
-    stem_parts = cfg.emb.stem.split("_")
-    if "corr" in cfg.emb.stem and "ds-sp" in cfg.emb.stem:
-        # For correlated datasets like "labeled_sentences_corr_ds-sp_0.1_pythia70m_5_last_token"
-        # Find the parts up to and including the correlation level
+def _extract_dataset_name(emb_stem: str) -> str:
+    """Extract dataset name from embedding file stem."""
+    stem_parts = emb_stem.split("_")
+    if "corr" in emb_stem and "ds-sp" in emb_stem:
         dataset_parts = []
         for i, part in enumerate(stem_parts):
             dataset_parts.append(part)
-            # Stop after the correlation level (e.g., "0.1")
             if (
                 i > 0
                 and stem_parts[i - 1].startswith("ds-sp")
                 and part.replace(".", "").isdigit()
             ):
                 break
-        dataset_name = "_".join(dataset_parts)
-    else:
-        # For regular datasets, use first part only
-        dataset_name = stem_parts[0]
+        return "_".join(dataset_parts)
+    return stem_parts[0]
 
-    # Get model name from cfg.extra.model and clean it up for directory name
+
+def _extract_model_name(cfg) -> str:
+    """Extract clean LLM name from config."""
     model_name = getattr(cfg.extra, "model", "unknown")
-    # Extract just the model name part (e.g., "gemma-2-2b-it" from "google/gemma-2-2b-it")
     if "/" in model_name:
         model_name = model_name.split("/")[-1]
+    return model_name
 
-    # Build directory name using hash of KEYS
-    cfg_hash = _hash_cfg(cfg)
-    run = root / f"{dataset_name}_{model_name}_seed{cfg.seed}_{cfg_hash}"
-    run.mkdir(
-        parents=True, exist_ok=True
-    )  # Allow multiple runs with same config
 
-    torch.save(model.state_dict(), run / f"weights.pth")
+def dump_run(root: Path, model: torch.nn.Module, cfg) -> Path:
+    dataset_name = _extract_dataset_name(cfg.emb.stem)
+    model_name = _extract_model_name(cfg)
 
-    # Convert config to YAML-serializable format
+    # SSAE folder: dataset, LLM type, sparsity type, oc, seed
+    run = root / (
+        f"{dataset_name}_{model_name}"
+        f"_{cfg.sparsity_type}"
+        f"_oc{cfg.oc}"
+        f"_seed{cfg.seed}"
+    )
+    run.mkdir(parents=True, exist_ok=True)
+
+    torch.save(model.state_dict(), run / "weights.pth")
+
     cfg_dict = asdict(cfg)
     for k, v in cfg_dict.items():
         if isinstance(v, Path):
@@ -599,8 +688,14 @@ def train_epoch(
             h = ssae.get_cached_hidden()  # Reuse from forward pass
             h_abs = torch.abs(h)
 
-            # Use pre-allocated mask for sparsity counting
-            torch.ge(h_abs, cfg.ind_th, out=threshold_mask)
+            # Use step_l0_threshold for counting when using step_l0 constraint
+            # so the logged L0 metric matches what the constraint measures
+            count_th = (
+                cfg.step_l0_threshold
+                if cfg.sparsity_type == "step_l0"
+                else cfg.ind_th
+            )
+            torch.ge(h_abs, count_th, out=threshold_mask)
             concept_counts_gpu += threshold_mask.sum()
 
     # Final cleanup and transfer concept counts to CPU once
@@ -631,6 +726,11 @@ def main():
 
     ssae = make_ssae(cfg, dev)
     optim = make_optim(dict=dict, ssae=ssae, cfg=cfg)
+
+    print(f"Sparsity constraint: {cfg.sparsity_type}")
+    if cfg.sparsity_type == "step_l0":
+        print(f"  step_l0_threshold: {cfg.step_l0_threshold}")
+        print(f"  step_l0_bandwidth: {cfg.step_l0_bandwidth}")
 
     for ep in range(cfg.epochs):
         ssae.epoch = ep  # Update epoch for sparsity scheduling
@@ -707,10 +807,17 @@ class Cfg:
     ind_th: float = 0.1
     seed: int = 0
     renorm_epochs: int = 50
-    dual_lr_div: float = 10.0  # dual_lr = lr / dual_lr_div (10x smaller recommended)
+    dual_lr_div: float = (
+        10.0  # dual_lr = lr / dual_lr_div (10x smaller recommended)
+    )
     dual_optim: str = "sgd"  # "sgd" (recommended) or "extra-adam"
     use_amp: bool = True
     quick: bool = False
+
+    # Sparsity constraint type
+    sparsity_type: str = "l1"  # "l1" or "step_l0"
+    step_l0_threshold: float = 0.01  # Activation threshold for step_l0
+    step_l0_bandwidth: float = 1e-3  # STE bandwidth for step_l0
 
     # Whitening parameters
     whiten: bool = False  # Enable ZCA whitening of input data
@@ -743,11 +850,37 @@ def parse_cfg() -> Cfg:
     add("--ind-th", type=float, default=0.1)
     add("--seed", type=int, default=0)
     add("--renorm-epochs", type=int, default=50)
-    add("--dual-lr-div", type=float, default=10.0,
-        help="Divisor for dual learning rate: dual_lr = lr / dual_lr_div")
-    add("--dual-optim", choices=["sgd", "extra-adam"], default="sgd",
-        help="Optimizer for dual variable: sgd (recommended) or extra-adam")
+    add(
+        "--dual-lr-div",
+        type=float,
+        default=2.0,
+        help="Divisor for dual learning rate: dual_lr = lr / dual_lr_div",
+    )
+    add(
+        "--dual-optim",
+        choices=["extra-sgd", "extra-adam"],
+        default="extra-adam",
+        help="Optimizer for dual variable: sgd (recommended) or extra-adam",
+    )
     add("--use-amp", action="store_true", default=True)
+    add(
+        "--sparsity-type",
+        choices=["l1", "step_l0"],
+        default="l1",
+        help="Sparsity constraint type: l1 (avg abs activation) or step_l0 (fraction active via STE)",
+    )
+    add(
+        "--step-l0-threshold",
+        type=float,
+        default=0.01,
+        help="Activation threshold for step_l0 constraint",
+    )
+    add(
+        "--step-l0-bandwidth",
+        type=float,
+        default=1e-3,
+        help="STE bandwidth for step_l0 gradient approximation",
+    )
     add(
         "--quick",
         action="store_true",
@@ -888,6 +1021,9 @@ def make_ssae(cfg: Cfg, dev: torch.device):
         warmup=cfg.warmup,
         schedule=cfg.schedule,
         target=cfg.target,
+        sparsity_type=cfg.sparsity_type,
+        step_l0_threshold=cfg.step_l0_threshold,
+        step_l0_bandwidth=cfg.step_l0_bandwidth,
     )
 
 
@@ -898,8 +1034,8 @@ def make_optim(dict: torch.nn.Module, ssae, cfg: Cfg):
     # Select dual optimizer based on config
     # SGD recommended: theory says momentum on dual (linear player) causes issues
     # ExtraAdam: may get more sparsity than needed due to momentum
-    if cfg.dual_optim == "sgd":
-        dual_optimizer = torch.optim.SGD(
+    if cfg.dual_optim == "extra-sgd":
+        dual_optimizer = cooper.optim.ExtraSGD(
             ssae.dual_parameters(), lr=dual_lr, maximize=True
         )
     elif cfg.dual_optim == "extra-adam":
