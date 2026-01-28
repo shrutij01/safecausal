@@ -402,7 +402,7 @@ class Cfg:
     sae_type: str = "relu"
     kval_topk: int = 10
     mp_kval: int = 5
-    gamma_reg: float = -1.0  # -1 → use default (0.01 jumprelu, 0.1 otherwise)
+    gamma_reg: float = -1.0  # -1 → use default (1e-5 jumprelu, 1e-4 otherwise)
     lambda_init: float = None
     loss: str = "absolute"
     ind_th: float = 0.1
@@ -453,13 +453,14 @@ def parse_cfg() -> Cfg:
         "--gamma-reg",
         type=float,
         default=-1.0,
-        help="Regularisation weight (-1 = auto: 0.01 jumprelu, 0.1 otherwise)",
+        help="Regularisation weight (-1 = auto: 1e-5 jumprelu, 1e-4 otherwise)",
     )
     add("--lambda-init", type=float, default=None)
     add("--loss", default="absolute", choices=["relative", "absolute"])
     add("--ind-th", type=float, default=0.1)
     add("--seed", type=int, default=0)
-    add("--use-amp", action="store_true", default=True)
+    add("--use-amp", action=argparse.BooleanOptionalAction, default=True,
+        help="Use mixed precision (AMP). Disable with --no-use-amp")
     add(
         "--quick",
         action="store_true",
@@ -647,9 +648,7 @@ _LOSS: dict[str, callable] = {
         torch.sum((x_hat - x).pow(2), dim=1)
         / (torch.sum(x.pow(2), dim=1) + 1e-8)
     ).mean(),
-    # sum-over-features / batch_size  (matches reference training code)
-    "absolute": lambda x, x_hat: F.mse_loss(x_hat, x, reduction="sum")
-    / x.shape[0],
+    "absolute": lambda x, x_hat: F.mse_loss(x_hat, x, reduction="mean"),
 }
 
 
@@ -815,7 +814,7 @@ def main():
     # Resolve gamma_reg: -1 means use type-dependent default
     gamma_reg = cfg.gamma_reg
     if gamma_reg < 0:
-        gamma_reg = 0.01 if cfg.sae_type == "jumprelu" else 0.1
+        gamma_reg = 1e-5 if cfg.sae_type == "jumprelu" else 1e-4
     print(f"gamma_reg = {gamma_reg}  (sae_type={cfg.sae_type})")
 
     # Total optimizer steps across all epochs (for cosine schedule)

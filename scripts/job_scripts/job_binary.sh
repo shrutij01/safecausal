@@ -1,14 +1,21 @@
 #!/bin/bash
 
-# Define hyperparameters for semi-synthetic datasets (eng-french, eng-german, masc-fem-eng, truthful-qa)
-# These datasets have num-concepts = 1, so encoder_dim = 1
+# ==============================================================================
+# SSAE training on 2-binary and corr-binary datasets
+#
+# These datasets have num-concepts = 2, so oc = 2
+# No --quick (not in allowed_quick_datasets)
+# ==============================================================================
 
-# Semi-synthetic and single-concept datasets with Gemma and Pythia embeddings
 embedding_files=(
     "/network/scratch/j/joshi.shruti/ssae/2-binary/2-binary_gemma2_25_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/2-binary/2-binary_pythia70m_5_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/corr-binary/corr-binary_gemma2_25_last_token.h5"
     "/network/scratch/j/joshi.shruti/ssae/corr-binary/corr-binary_pythia70m_5_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/eng-french/eng-french_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/eng-french/eng-french_pythia70m_5_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/masc-fem-eng/masc-fem-eng_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/masc-fem-eng/masc-fem-pythia70m_5_last_token.h5"
 )
 
 data_configs=(
@@ -16,30 +23,39 @@ data_configs=(
     "/network/scratch/j/joshi.shruti/ssae/2-binary/2-binary_pythia70m_5_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/corr-binary/corr-binary_gemma2_25_last_token.yaml"
     "/network/scratch/j/joshi.shruti/ssae/corr-binary/corr-binary_pythia70m_5_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/eng-french/eng-french_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/eng-french/eng-french_pythia70m_5_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/masc-fem-eng/masc-fem-eng_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/masc-fem-eng/masc-fem-eng_pythia70m_5_last_token.yaml"
 )
 
-# Updated parameter names to match refactored code
-# For semi-synthetic and truthful-qa datasets: num-concepts = 1, so encoder_dim = 1
+# Note: --oc 2 is explicit here (2 concepts), NOT defaulting to rep_dim
 encoding_dims=(
-    "--oc 2"    # overcompleteness factor = num-concepts = 1
+    "--oc -1"
 )
 schedules=(
-    "--schedule 3000" #"--schedule 5000"   # scheduler-epochs
+    "--schedule 1000"
 )
-targets=(
-    "--target 7" # target-sparsity
+# Target sparsity
+# - For l1: average absolute activation per (sample, feature) pair
+# - For step_l0: fraction of active features
+targets_l1=(
+    "--target 7"
+)
+targets_step_l0=(
+    "--target 0.05"
 )
 batch_sizes=(
-    "--batch 64" # "--batch 512"      # batch-size - increased for better GPU utilization
+    "--batch 64"
 )
 norm_types=(
-    "--norm ln"         # norm-type
+    "--norm ln"
 )
 loss_types=(
-    "--loss absolute" # loss-type "--loss absolute"
+    "--loss absolute"
 )
 learning_rates=(
-    "--lr 0.0005" # "--lr 0.0007"      # primal-lr
+    "--lr 0.0005"
 )
 seeds=(
     "--seed 0" "--seed 1" "--seed 2" "--seed 5" "--seed 7"
@@ -47,16 +63,37 @@ seeds=(
 
 # New optimized parameters from refactored code
 renorm_epochs=(
-    "--renorm-epochs 50"    # renormalization frequency for the decoder columns
+    "--renorm-epochs 50"
 )
 num_epochs=(
     "--epochs 15000"
 )
 
+# Dual optimizer settings
+dual_optims=(
+    "--dual-optim extra-adam"
+)
+dual_lr_divs=(
+    "--dual-lr-div 2.0"
+    "--dual-lr-div 5.0"
+)
+
+# Sparsity constraint type
+sparsity_types=(
+    "--sparsity-type l1"
+    # "--sparsity-type step_l0"
+)
+
+# step_l0-specific parameters (only used when --sparsity-type step_l0)
+step_l0_thresholds=(
+    "--step-l0-threshold 0.01"
+)
+step_l0_bandwidths=(
+    "--step-l0-bandwidth 0.001"
+)
+
 # Job settings
-job_name="ssae_semi_synth"
-output="job_output_%j.txt"
-error="job_error_%j.txt"
+job_name="ssae_binary"
 time_limit="3:00:00"
 cpu_req="cpus-per-task=8"
 memory="32Gb"
@@ -69,50 +106,80 @@ mkdir -p logs
 # Counter for unique job names
 counter=0
 
-# Loop through all combinations of hyperparameters
+# ==============================================================================
+# Generate and submit jobs
+# ==============================================================================
+
+submit_job() {
+    # Args: all the CLI flags as a single string
+    local job_flags="$1"
+    local script_name="generated_jobs/job_binary_${counter}.sh"
+
+    cat > "${script_name}" << EOF
+#!/bin/bash
+#SBATCH --job-name=${job_name}_${counter}
+#SBATCH --output=logs/job_%j.out
+#SBATCH --error=logs/job_%j.err
+#SBATCH --time=${time_limit}
+#SBATCH --mem=${memory}
+#SBATCH --gres=${gpu_req}
+#SBATCH --${cpu_req}
+
+module load python/3.10
+module load cuda/12.6.0/cudnn
+source /home/mila/j/joshi.shruti/venvs/agents/bin/activate
+export PYTHONPATH="/home/mila/j/joshi.shruti/causalrepl_space/safecausal:\$PYTHONPATH"
+cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal
+
+python -m ssae.ssae ${job_flags}
+EOF
+
+    chmod +x "${script_name}"
+    sbatch "${script_name}"
+    ((counter++))
+}
+
 for idx in "${!embedding_files[@]}"; do
     embedding_file="${embedding_files[$idx]}"
     data_config="${data_configs[$idx]}"
 
-    for target in "${targets[@]}"; do
-        for lr in "${learning_rates[@]}"; do
-            for oc in "${encoding_dims[@]}"; do
-                for batch_size in "${batch_sizes[@]}"; do
-                    for norm_type in "${norm_types[@]}"; do
-                        for loss_type in "${loss_types[@]}"; do
-                            for schedule in "${schedules[@]}"; do
-                                for renorm_epoch in "${renorm_epochs[@]}"; do
-                                    # for amp in "${use_amp[@]}"; do
+    for lr in "${learning_rates[@]}"; do
+        for batch_size in "${batch_sizes[@]}"; do
+            for norm_type in "${norm_types[@]}"; do
+                for loss_type in "${loss_types[@]}"; do
+                    for schedule in "${schedules[@]}"; do
+                        for renorm_epoch in "${renorm_epochs[@]}"; do
+                            for dual_optim in "${dual_optims[@]}"; do
+                                for dual_lr_div in "${dual_lr_divs[@]}"; do
                                     for epochs in "${num_epochs[@]}"; do
-                                        for seed in "${seeds[@]}"; do
-                                            # Define a script name
-                                            script_name="generated_jobs/job_semi_synth_${counter}.sh"
+                                        for oc in "${encoding_dims[@]}"; do
+                                            for sparsity_type in "${sparsity_types[@]}"; do
 
-                                            # Create a batch script for each job
-                                            echo "#!/bin/bash" > "${script_name}"
-                                            echo "#SBATCH --job-name=${job_name}_${counter}" >> "${script_name}"
-                                            echo "#SBATCH --error=logs/job_%j.err" >> "${script_name}"
-                                            echo "#SBATCH --time=${time_limit}" >> "${script_name}"
-                                            echo "#SBATCH --mem=${memory}" >> "${script_name}"
-                                            echo "#SBATCH --gres=${gpu_req}" >> "${script_name}"
-                                            echo "#SBATCH --${cpu_req}" >> "${script_name}"
-                                            echo "module load python/3.10" >> "${script_name}"
-                                            echo "module load cuda/12.6.0/cudnn" >> "${script_name}"
-                                            echo "source /home/mila/j/joshi.shruti/venvs/agents/bin/activate" >> "${script_name}"
-                                            echo "export PYTHONPATH=\"/home/mila/j/joshi.shruti/causalrepl_space/safecausal:$PYTHONPATH\"" >> "${script_name}"
-                                            echo "cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal/ssae" >> "${script_name}"
+                                                # Select target array based on sparsity type
+                                                if [[ "$sparsity_type" == *"step_l0"* ]]; then
+                                                    target_list=("${targets_step_l0[@]}")
+                                                else
+                                                    target_list=("${targets_l1[@]}")
+                                                fi
 
-                                            # Updated command with new parameter names and optimizations
-                                            echo "python ssae.py ${embedding_file} ${data_config} ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${epochs} ${seed}" >> "${script_name}"
+                                                for target in "${target_list[@]}"; do
+                                                    for seed in "${seeds[@]}"; do
 
-                                            # Make the script executable
-                                            chmod +x "${script_name}"
+                                                        base_flags="${embedding_file} ${data_config} ${oc} ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${dual_optim} ${dual_lr_div} ${epochs} ${sparsity_type} ${seed}"
 
-                                            # Submit the job
-                                            sbatch "${script_name}"
+                                                        if [[ "$sparsity_type" == *"step_l0"* ]]; then
+                                                            for sl0_th in "${step_l0_thresholds[@]}"; do
+                                                                for sl0_bw in "${step_l0_bandwidths[@]}"; do
+                                                                    submit_job "${base_flags} ${sl0_th} ${sl0_bw}"
+                                                                done
+                                                            done
+                                                        else
+                                                            submit_job "${base_flags}"
+                                                        fi
 
-                                            # Increment counter
-                                            ((counter++))
+                                                    done
+                                                done
+                                            done
                                         done
                                     done
                                 done
@@ -124,3 +191,5 @@ for idx in "${!embedding_files[@]}"; do
         done
     done
 done
+
+echo "Submitted ${counter} jobs"

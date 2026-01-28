@@ -1,20 +1,25 @@
 #!/bin/bash
 # ==============================================================================
-# SAE baseline training on bias-in-bios dataset
+# SAE baseline training on 2-binary and corr-binary datasets
 #
 # Supports multiple SAE types: relu, topk, jumprelu
 # For topk: uses --kval-topk to set k
 # For all: uses --gamma-reg for regularization weight
+# No --quick (not in allowed_quick_datasets)
 # ==============================================================================
 
 embedding_files=(
-    "/network/scratch/j/joshi.shruti/ssae/bias-in-bios/bias-in-bios_gemma2_25_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/bias-in-bios/bias-in-bios_pythia70m_5_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/2-binary/2-binary_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/2-binary/2-binary_pythia70m_5_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/corr-binary/corr-binary_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/corr-binary/corr-binary_pythia70m_5_last_token.h5"
 )
 
 data_configs=(
-    "/network/scratch/j/joshi.shruti/ssae/bias-in-bios/bias-in-bios_gemma2_25_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/bias-in-bios/bias-in-bios_pythia70m_5_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/2-binary/2-binary_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/2-binary/2-binary_pythia70m_5_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/corr-binary/corr-binary_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/corr-binary/corr-binary_pythia70m_5_last_token.yaml"
 )
 
 # ------------------------------------------------------------------------------
@@ -46,7 +51,7 @@ kval_topk_values=(
 # For relu: controls L1 regularization strength on codes
 # For jumprelu: controls L0 regularization strength (step function penalty)
 # For topk: not used (structural sparsity, gamma * 0 = 0)
-# Codes are at natural scale (no lambda scaling), so small values needed
+# Scaled for reduction="mean" loss (no rep_dim factor)
 # ------------------------------------------------------------------------------
 gamma_regs=(
     "--gamma-reg 1e-7"
@@ -92,7 +97,7 @@ seeds=(
 # ------------------------------------------------------------------------------
 # Job settings
 # ------------------------------------------------------------------------------
-job_name="sae_bias_in_bios"
+job_name="sae_binary"
 time_limit="4:00:00"
 cpu_req="cpus-per-task=8"
 memory="32Gb"
@@ -125,11 +130,11 @@ for idx in "${!embedding_files[@]}"; do
                                         for seed in "${seeds[@]}"; do
 
                                             # Shared base flags (oc defaults to embedding_dim)
-                                            base_flags="${embedding_file} ${data_config} --quick ${lr} ${loss_type} ${sae_type} ${batch_size} ${epochs} ${warmup} ${wd} ${gc} ${renorm_epoch} ${seed}"
+                                            base_flags="${embedding_file} ${data_config} ${lr} ${loss_type} ${sae_type} ${batch_size} ${epochs} ${warmup} ${wd} ${gc} ${renorm_epoch} ${seed}"
 
                                             if [[ "$sae_type" == *"topk"* ]]; then
                                                 for kval in "${kval_topk_values[@]}"; do
-                                                    script_name="generated_jobs/job_sae_bias_in_bios_${counter}.sh"
+                                                    script_name="generated_jobs/job_sae_binary_${counter}.sh"
                                                     cat > "${script_name}" << EOF
 #!/bin/bash
 #SBATCH --job-name=${job_name}_${counter}
@@ -154,7 +159,7 @@ EOF
                                                 done
                                             else
                                                 for gamma_reg in "${gamma_regs[@]}"; do
-                                                    script_name="generated_jobs/job_sae_bias_in_bios_${counter}.sh"
+                                                    script_name="generated_jobs/job_sae_binary_${counter}.sh"
                                                     cat > "${script_name}" << EOF
 #!/bin/bash
 #SBATCH --job-name=${job_name}_${counter}

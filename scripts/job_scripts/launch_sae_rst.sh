@@ -1,6 +1,6 @@
 #!/bin/bash
 # ==============================================================================
-# SAE baseline training on bias-in-bios dataset
+# SAE baseline training on refusal, sycophancy, and truthful-qa datasets
 #
 # Supports multiple SAE types: relu, topk, jumprelu
 # For topk: uses --kval-topk to set k
@@ -8,13 +8,21 @@
 # ==============================================================================
 
 embedding_files=(
-    "/network/scratch/j/joshi.shruti/ssae/bias-in-bios/bias-in-bios_gemma2_25_last_token.h5"
-    "/network/scratch/j/joshi.shruti/ssae/bias-in-bios/bias-in-bios_pythia70m_5_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/truthful-qa/truthful-qa_gemma2_25_last_token.h5"
+    "/network/scratch/j/joshi.shruti/ssae/truthful-qa/truthful-qa_pythia70m_5_last_token.h5"
 )
 
 data_configs=(
-    "/network/scratch/j/joshi.shruti/ssae/bias-in-bios/bias-in-bios_gemma2_25_last_token.yaml"
-    "/network/scratch/j/joshi.shruti/ssae/bias-in-bios/bias-in-bios_pythia70m_5_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/refusal/refusal_pythia70m_5_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/sycophancy/sycophancy_pythia70m_5_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/truthful-qa/truthful-qa_gemma2_25_last_token.yaml"
+    "/network/scratch/j/joshi.shruti/ssae/truthful-qa/truthful-qa_pythia70m_5_last_token.yaml"
 )
 
 # ------------------------------------------------------------------------------
@@ -92,7 +100,7 @@ seeds=(
 # ------------------------------------------------------------------------------
 # Job settings
 # ------------------------------------------------------------------------------
-job_name="sae_bias_in_bios"
+job_name="sae_rst"
 time_limit="4:00:00"
 cpu_req="cpus-per-task=8"
 memory="32Gb"
@@ -129,7 +137,7 @@ for idx in "${!embedding_files[@]}"; do
 
                                             if [[ "$sae_type" == *"topk"* ]]; then
                                                 for kval in "${kval_topk_values[@]}"; do
-                                                    script_name="generated_jobs/job_sae_bias_in_bios_${counter}.sh"
+                                                    script_name="generated_jobs/job_sae_rst_${counter}.sh"
                                                     cat > "${script_name}" << EOF
 #!/bin/bash
 #SBATCH --job-name=${job_name}_${counter}
@@ -154,7 +162,7 @@ EOF
                                                 done
                                             else
                                                 for gamma_reg in "${gamma_regs[@]}"; do
-                                                    script_name="generated_jobs/job_sae_bias_in_bios_${counter}.sh"
+                                                    script_name="generated_jobs/job_sae_rst_${counter}.sh"
                                                     cat > "${script_name}" << EOF
 #!/bin/bash
 #SBATCH --job-name=${job_name}_${counter}

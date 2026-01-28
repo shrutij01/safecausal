@@ -865,7 +865,8 @@ def parse_cfg() -> Cfg:
         default="extra-adam",
         help="Optimizer for dual variable: sgd (recommended) or extra-adam",
     )
-    add("--use-amp", action="store_true", default=True)
+    add("--use-amp", action=argparse.BooleanOptionalAction, default=True,
+        help="Use mixed precision (AMP). Disable with --no-use-amp")
     add(
         "--sparsity-type",
         choices=["l1", "step_l0"],
