@@ -1008,6 +1008,12 @@ def make_dataloader(cfg) -> DataLoader:
         drop_last=True,  # Consistent batch sizes for memory pool
     )
 
+    if len(train_loader) == 0:
+        raise ValueError(
+            f"DataLoader is empty: dataset size ({len(dataset)}) < batch size ({cfg.batch}). "
+            f"Reduce --batch or use a larger dataset."
+        )
+
     print(f"DataLoader length: {len(train_loader)}")
 
     # Store dataset reference for cleanup

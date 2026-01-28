@@ -2,6 +2,10 @@
 
 # ==============================================================================
 # SSAE training on refusal, sycophancy, and truthful-qa datasets
+#
+# Batch size is per-dataset:
+#   sycophancy: 1024 (large dataset)
+#   refusal, truthful-qa: 64 (small datasets)
 # ==============================================================================
 
 embedding_files=(
@@ -35,9 +39,6 @@ targets_l1=(
 )
 targets_step_l0=(
     "--target 0.05"
-)
-batch_sizes=(
-    "--batch 1024"
 )
 norm_types=(
     "--norm ln"
@@ -139,40 +140,45 @@ for idx in "${!embedding_files[@]}"; do
     embedding_file="${embedding_files[$idx]}"
     data_config="${data_configs[$idx]}"
 
+    # Per-dataset batch size: sycophancy has enough data for 1024, others need 64
+    if [[ "$embedding_file" == *"sycophancy"* ]]; then
+        batch_size="--batch 1024"
+    else
+        batch_size="--batch 64"
+    fi
+
     for lr in "${learning_rates[@]}"; do
-        for batch_size in "${batch_sizes[@]}"; do
-            for norm_type in "${norm_types[@]}"; do
-                for loss_type in "${loss_types[@]}"; do
-                    for schedule in "${schedules[@]}"; do
-                        for renorm_epoch in "${renorm_epochs[@]}"; do
-                            for dual_optim in "${dual_optims[@]}"; do
-                                for dual_lr_div in "${dual_lr_divs[@]}"; do
-                                    for epochs in "${num_epochs[@]}"; do
-                                        for sparsity_type in "${sparsity_types[@]}"; do
+        for norm_type in "${norm_types[@]}"; do
+            for loss_type in "${loss_types[@]}"; do
+                for schedule in "${schedules[@]}"; do
+                    for renorm_epoch in "${renorm_epochs[@]}"; do
+                        for dual_optim in "${dual_optims[@]}"; do
+                            for dual_lr_div in "${dual_lr_divs[@]}"; do
+                                for epochs in "${num_epochs[@]}"; do
+                                    for sparsity_type in "${sparsity_types[@]}"; do
 
-                                            # Select target array based on sparsity type
-                                            if [[ "$sparsity_type" == *"step_l0"* ]]; then
-                                                target_list=("${targets_step_l0[@]}")
-                                            else
-                                                target_list=("${targets_l1[@]}")
-                                            fi
+                                        # Select target array based on sparsity type
+                                        if [[ "$sparsity_type" == *"step_l0"* ]]; then
+                                            target_list=("${targets_step_l0[@]}")
+                                        else
+                                            target_list=("${targets_l1[@]}")
+                                        fi
 
-                                            for target in "${target_list[@]}"; do
-                                                for seed in "${seeds[@]}"; do
+                                        for target in "${target_list[@]}"; do
+                                            for seed in "${seeds[@]}"; do
 
-                                                    base_flags="${embedding_file} ${data_config} --quick ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${dual_optim} ${dual_lr_div} ${epochs} ${sparsity_type} ${seed}"
+                                                base_flags="${embedding_file} ${data_config} --quick ${lr} ${loss_type} ${norm_type} ${target} ${batch_size} ${schedule} ${renorm_epoch} ${dual_optim} ${dual_lr_div} ${epochs} ${sparsity_type} ${seed}"
 
-                                                    if [[ "$sparsity_type" == *"step_l0"* ]]; then
-                                                        for sl0_th in "${step_l0_thresholds[@]}"; do
-                                                            for sl0_bw in "${step_l0_bandwidths[@]}"; do
-                                                                submit_job "${base_flags} ${sl0_th} ${sl0_bw}"
-                                                            done
+                                                if [[ "$sparsity_type" == *"step_l0"* ]]; then
+                                                    for sl0_th in "${step_l0_thresholds[@]}"; do
+                                                        for sl0_bw in "${step_l0_bandwidths[@]}"; do
+                                                            submit_job "${base_flags} ${sl0_th} ${sl0_bw}"
                                                         done
-                                                    else
-                                                        submit_job "${base_flags}"
-                                                    fi
+                                                    done
+                                                else
+                                                    submit_job "${base_flags}"
+                                                fi
 
-                                                done
                                             done
                                         done
                                     done
