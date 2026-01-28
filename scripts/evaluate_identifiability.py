@@ -15,6 +15,7 @@ Metrics:
 import torch
 import torch.nn.functional as F
 import numpy as np
+import h5py
 import argparse
 import sys
 import os
@@ -373,6 +374,67 @@ def compute_steering_cosine_sim(embeddings, sae_model, feature_idx):
     }
 
 
+def compute_decoder_projection_mcc(model, embeddings, labels):
+    """Compute MCC by projecting embeddings directly onto decoder columns.
+
+    Instead of running through the full encoder (which may have distribution
+    mismatch for SSAEs trained on differences), this directly measures how
+    well each learned dictionary direction separates the two classes.
+
+    For all SAE types, decoder.weight has shape (rep_dim, hid).
+    Column j is the j-th concept direction in embedding space.
+
+    Args:
+        model: Any SAE model with model.decoder.weight attribute.
+        embeddings: Individual embeddings, shape (N, rep_dim).
+        labels: Binary labels, length N.
+
+    Returns:
+        Dict with mcc, feature_idx, and steering cosine similarity.
+    """
+    embeddings_f = embeddings.float()
+    labels_t = torch.tensor(labels, dtype=torch.float32)
+
+    # decoder.weight: (rep_dim, hid) — each column is a concept direction
+    W = model.decoder.weight.detach().float()  # (rep_dim, hid)
+
+    # Project each embedding onto each decoder column
+    projections = embeddings_f @ W  # (N, hid)
+
+    # Pearson correlation between each column's projections and labels
+    proj_centered = projections - projections.mean(dim=0, keepdim=True)
+    proj_std = proj_centered.norm(dim=0, keepdim=True)
+
+    labels_centered = labels_t - labels_t.mean()
+    labels_std = labels_centered.norm()
+
+    numerator = proj_centered.T @ labels_centered  # (hid,)
+    denominator = proj_std.squeeze() * labels_std
+
+    mask = denominator != 0
+    correlations = torch.zeros(projections.shape[1])
+    correlations[mask] = numerator[mask] / denominator[mask]
+
+    best_feature_idx = correlations.argmax().item()
+    best_correlation = correlations[best_feature_idx].item()
+
+    # Steering cos sim for the best decoder-projection feature
+    steering = W[:, best_feature_idx]
+    z = embeddings_f[0::2]
+    z_tilde = embeddings_f[1::2]
+    shifts = z_tilde - z
+    cos_sims = F.cosine_similarity(shifts, steering.unsqueeze(0), dim=1)
+
+    return {
+        "mcc": best_correlation,
+        "feature_idx": best_feature_idx,
+        "steer": {
+            "mean_cos_sim": cos_sims.mean().item(),
+            "std_cos_sim": cos_sims.std().item(),
+        },
+    }
+
+
 def evaluate_sae(name, model, embeddings, activations, labels, run_linear_probe=False):
     """Run full evaluation (MCC + steering + optional probe) for a single SAE."""
     results = compute_max_correlation_mcc(activations, labels)
@@ -470,35 +532,58 @@ def main():
         action="store_true",
         help="Run linear probe baseline on SAE activations and raw embeddings",
     )
+    parser.add_argument(
+        "--embeddings",
+        type=Path,
+        default=None,
+        help="Path to h5 file with pre-computed embeddings (loads cfc_test, skips LLM extraction)",
+    )
 
     args = parser.parse_args()
 
     # -------------------------------------------------------------------------
-    # Load dataset
+    # Load embeddings
     # -------------------------------------------------------------------------
-    print(f"Loading dataset: {args.dataset}...")
-    if args.dataset in COUNTERFACTUAL_DATASETS:
-        split_index = int(0.9 * args.num_samples)
-        _, cfc_test_tuples, concept_labels = generate_counterfactual_pairs(
-            args.dataset, split_index, args.num_samples
-        )
+    concept_labels = None
+
+    if args.embeddings:
+        # Load pre-computed test embeddings from h5 file (cfc_test)
+        print(f"Loading pre-computed test embeddings from {args.embeddings}...")
+        with h5py.File(args.embeddings, "r") as f:
+            cfc_test = f["cfc_test"][:]  # (N, 2, rep_dim)
+
+        n_pairs = cfc_test.shape[0]
+
+        # Interleave: [z_0, z_tilde_0, z_1, z_tilde_1, ...]
+        embeddings = torch.zeros(2 * n_pairs, cfc_test.shape[-1])
+        embeddings[0::2] = torch.from_numpy(cfc_test[:, 0])
+        embeddings[1::2] = torch.from_numpy(cfc_test[:, 1])
+        labels = [0, 1] * n_pairs
+
+        print(f"Loaded {n_pairs} test pairs -> {len(embeddings)} embeddings, "
+              f"shape {embeddings.shape}")
     else:
-        _, cfc_test_tuples = load_eval_dataset(
-            args.dataset, num_samples=args.num_samples
-        )
-        concept_labels = None
+        # Fall back to loading text + re-extracting embeddings via LLM
+        print(f"Loading dataset: {args.dataset}...")
+        if args.dataset in COUNTERFACTUAL_DATASETS:
+            split_index = int(0.9 * args.num_samples)
+            _, cfc_test_tuples, concept_labels = generate_counterfactual_pairs(
+                args.dataset, split_index, args.num_samples
+            )
+        else:
+            _, cfc_test_tuples = load_eval_dataset(
+                args.dataset, num_samples=args.num_samples
+            )
 
-    texts, labels = flatten_pairs(cfc_test_tuples)
+        texts, labels = flatten_pairs(cfc_test_tuples)
 
-    n_class0 = sum(1 for l in labels if l == 0)
-    n_class1 = sum(1 for l in labels if l == 1)
-    print(f"Loaded {len(texts)} texts ({n_class0} class-0, {n_class1} class-1) "
-          f"from {len(cfc_test_tuples)} test pairs")
+        n_class0 = sum(1 for l in labels if l == 0)
+        n_class1 = sum(1 for l in labels if l == 1)
+        print(f"Loaded {len(texts)} texts ({n_class0} class-0, {n_class1} class-1) "
+              f"from {len(cfc_test_tuples)} test pairs")
 
-    # -------------------------------------------------------------------------
-    # Extract embeddings (once for all SAEs)
-    # -------------------------------------------------------------------------
-    embeddings = extract_embeddings(texts, args.embedding_model)
+        embeddings = extract_embeddings(texts, args.embedding_model)
+
     print(f"Embeddings shape: {embeddings.shape}")
 
     # -------------------------------------------------------------------------
@@ -573,6 +658,11 @@ def main():
             ssae_results = evaluate_sae(
                 "SSAE", ssae_model, c_embeddings, c_ssae_acts, c_labels, args.linear_probe
             )
+            ssae_dec_results = compute_decoder_projection_mcc(
+                ssae_model, c_embeddings, c_labels
+            )
+            print(f"  Decoder MCC:    {ssae_dec_results['mcc']:.4f} (feature {ssae_dec_results['feature_idx']})")
+            print(f"  Decoder steer:  {ssae_dec_results['steer']['mean_cos_sim']:.4f} (+/- {ssae_dec_results['steer']['std_cos_sim']:.4f})")
         else:
             ssae_results = evaluate_sae_dci("SSAE", c_ssae_acts, c_labels)
 
@@ -591,9 +681,15 @@ def main():
                 trained_results = evaluate_sae(
                     "Trained SAE", trained_sae_model, c_embeddings, c_trained_acts, c_labels, args.linear_probe
                 )
+                trained_dec_results = compute_decoder_projection_mcc(
+                    trained_sae_model, c_embeddings, c_labels
+                )
+                print(f"  Decoder MCC:    {trained_dec_results['mcc']:.4f} (feature {trained_dec_results['feature_idx']})")
+                print(f"  Decoder steer:  {trained_dec_results['steer']['mean_cos_sim']:.4f} (+/- {trained_dec_results['steer']['std_cos_sim']:.4f})")
                 print(f"\n  vs SSAE:")
                 print(f"    MCC diff:     {ssae_results['mcc'] - trained_results['mcc']:.4f} (SSAE - Trained)")
                 print(f"    Steer diff:   {ssae_results['steer']['mean_cos_sim'] - trained_results['steer']['mean_cos_sim']:.4f}")
+                print(f"    Dec MCC diff: {ssae_dec_results['mcc'] - trained_dec_results['mcc']:.4f} (SSAE - Trained)")
             else:
                 trained_results = evaluate_sae_dci("Trained SAE", c_trained_acts, c_labels)
                 print(f"\n  vs SSAE:")
@@ -615,9 +711,15 @@ def main():
                 pretrained_results = evaluate_sae(
                     "Pretrained SAE", pretrained_sae_model, c_embeddings, c_pretrained_acts, c_labels, args.linear_probe
                 )
+                pretrained_dec_results = compute_decoder_projection_mcc(
+                    pretrained_sae_model, c_embeddings, c_labels
+                )
+                print(f"  Decoder MCC:    {pretrained_dec_results['mcc']:.4f} (feature {pretrained_dec_results['feature_idx']})")
+                print(f"  Decoder steer:  {pretrained_dec_results['steer']['mean_cos_sim']:.4f} (+/- {pretrained_dec_results['steer']['std_cos_sim']:.4f})")
                 print(f"\n  vs SSAE:")
                 print(f"    MCC diff:     {ssae_results['mcc'] - pretrained_results['mcc']:.4f} (SSAE - Pretrained)")
                 print(f"    Steer diff:   {ssae_results['steer']['mean_cos_sim'] - pretrained_results['steer']['mean_cos_sim']:.4f}")
+                print(f"    Dec MCC diff: {ssae_dec_results['mcc'] - pretrained_dec_results['mcc']:.4f} (SSAE - Pretrained)")
             else:
                 pretrained_results = evaluate_sae_dci("Pretrained SAE", c_pretrained_acts, c_labels)
                 print(f"\n  vs SSAE:")
