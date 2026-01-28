@@ -37,6 +37,7 @@ from ssae.ssae import (
     Logger,
     _load_yaml,
     renorm_decoder_cols_,
+    project_decoder_grads_,
 )
 
 
@@ -410,6 +411,8 @@ class Cfg:
     quick: bool = False
     encoder_reg: bool = True  # sparsemax: use encoder weights in dist penalty
 
+    renorm_epochs: int = 50  # renormalize decoder columns every N epochs (0 = off)
+
     # AdamW parameters
     weight_decay: float = 0.0
     beta1: float = 0.9
@@ -474,6 +477,8 @@ def parse_cfg() -> Cfg:
         action="store_false",
         help="Sparsemax: use decoder weights in distance penalty",
     )
+    add("--renorm-epochs", type=int, default=50,
+        help="Renormalize decoder columns every N epochs (0=off)")
     # AdamW
     add("--weight-decay", type=float, default=0.0)
     add("--beta1", type=float, default=0.9)
@@ -697,6 +702,10 @@ def train_epoch(
                 torch.nn.utils.clip_grad_norm_(
                     model.parameters(), cfg.grad_clip
                 )
+            # Project decoder gradients before step (preserve unit-norm columns)
+            if hasattr(model, "Ad") and model.Ad.grad is not None:
+                with torch.no_grad():
+                    project_decoder_grads_(model.Ad)
             scaler.step(optimizer)
             scaler.update()
         else:
@@ -711,12 +720,11 @@ def train_epoch(
                 torch.nn.utils.clip_grad_norm_(
                     model.parameters(), cfg.grad_clip
                 )
+            # Project decoder gradients before step (preserve unit-norm columns)
+            if hasattr(model, "Ad") and model.Ad.grad is not None:
+                with torch.no_grad():
+                    project_decoder_grads_(model.Ad)
             optimizer.step()
-
-        # Renormalize decoder columns to unit norm after each step
-        with torch.no_grad():
-            if hasattr(model, "Ad"):
-                renorm_decoder_cols_(model.Ad)
 
         recon_sum += loss_mse.item()
         reg_sum += loss_reg.item()
@@ -826,6 +834,15 @@ def main():
             global_step,
             total_steps,
         )
+
+        # Periodic decoder column renormalization (matches SSAE convention)
+        if (
+            cfg.renorm_epochs > 0
+            and ep % cfg.renorm_epochs == 0
+            and hasattr(model, "Ad")
+        ):
+            with torch.no_grad():
+                renorm_decoder_cols_(model.Ad)
 
         num_batches = len(dataloader)
         dataset_size: int = len(dataloader.dataset)

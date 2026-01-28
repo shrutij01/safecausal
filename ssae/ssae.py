@@ -586,9 +586,11 @@ def dump_run(root: Path, model: torch.nn.Module, cfg) -> Path:
 
     # SSAE folder: dataset, LLM type, sparsity type, oc, seed
     run = root / (
+        "ssae_"
         f"{dataset_name}_{model_name}"
         f"_{cfg.sparsity_type}"
         f"_oc{cfg.oc}"
+        f"_dual{cfg.dual_lr_div}"
         f"_seed{cfg.seed}"
     )
     run.mkdir(parents=True, exist_ok=True)

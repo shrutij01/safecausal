@@ -73,6 +73,9 @@ weight_decays=(
 grad_clips=(
     "--grad-clip 1.0"
 )
+renorm_epochs=(
+    "--renorm-epochs 50"
+)
 
 # ------------------------------------------------------------------------------
 # Loss and training
@@ -120,15 +123,16 @@ for idx in "${!embedding_files[@]}"; do
                             for warmup in "${warmup_iters[@]}"; do
                                 for wd in "${weight_decays[@]}"; do
                                     for gc in "${grad_clips[@]}"; do
-                                        for seed in "${seeds[@]}"; do
+                                        for renorm_epoch in "${renorm_epochs[@]}"; do
+                                            for seed in "${seeds[@]}"; do
 
-                                            # Determine which additional args to use based on SAE type
-                                            if [[ "$sae_type" == *"topk"* ]]; then
-                                                # For topk: iterate over kval_topk values, no gamma_reg
-                                                for kval in "${kval_topk_values[@]}"; do
-                                                    script_name="generated_jobs/job_sae_bias_in_bios_${counter}.sh"
+                                                # Shared base flags
+                                                base_flags="${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${sae_type} ${batch_size} ${epochs} ${warmup} ${wd} ${gc} ${renorm_epoch} ${seed}"
 
-                                                    cat > "${script_name}" << EOF
+                                                if [[ "$sae_type" == *"topk"* ]]; then
+                                                    for kval in "${kval_topk_values[@]}"; do
+                                                        script_name="generated_jobs/job_sae_bias_in_bios_${counter}.sh"
+                                                        cat > "${script_name}" << EOF
 #!/bin/bash
 #SBATCH --job-name=${job_name}_${counter}
 #SBATCH --output=logs/job_%j.out
@@ -144,18 +148,16 @@ source /home/mila/j/joshi.shruti/venvs/agents/bin/activate
 export PYTHONPATH="/home/mila/j/joshi.shruti/causalrepl_space/safecausal:\$PYTHONPATH"
 cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal
 
-python -m ssae.sae ${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${sae_type} ${kval} ${batch_size} ${epochs} ${warmup} ${wd} ${gc} ${seed}
+python -m ssae.sae ${base_flags} ${kval}
 EOF
-                                                    chmod +x "${script_name}"
-                                                    sbatch "${script_name}"
-                                                    ((counter++))
-                                                done
-                                            else
-                                                # For relu/jumprelu: iterate over gamma_reg values
-                                                for gamma_reg in "${gamma_regs[@]}"; do
-                                                    script_name="generated_jobs/job_sae_bias_in_bios_${counter}.sh"
-
-                                                    cat > "${script_name}" << EOF
+                                                        chmod +x "${script_name}"
+                                                        sbatch "${script_name}"
+                                                        ((counter++))
+                                                    done
+                                                else
+                                                    for gamma_reg in "${gamma_regs[@]}"; do
+                                                        script_name="generated_jobs/job_sae_bias_in_bios_${counter}.sh"
+                                                        cat > "${script_name}" << EOF
 #!/bin/bash
 #SBATCH --job-name=${job_name}_${counter}
 #SBATCH --output=logs/job_%j.out
@@ -171,14 +173,15 @@ source /home/mila/j/joshi.shruti/venvs/agents/bin/activate
 export PYTHONPATH="/home/mila/j/joshi.shruti/causalrepl_space/safecausal:\$PYTHONPATH"
 cd /home/mila/j/joshi.shruti/causalrepl_space/safecausal
 
-python -m ssae.sae ${embedding_file} ${data_config} --quick ${oc} ${lr} ${loss_type} ${sae_type} ${gamma_reg} ${batch_size} ${epochs} ${warmup} ${wd} ${gc} ${seed}
+python -m ssae.sae ${base_flags} ${gamma_reg}
 EOF
-                                                    chmod +x "${script_name}"
-                                                    sbatch "${script_name}"
-                                                    ((counter++))
-                                                done
-                                            fi
+                                                        chmod +x "${script_name}"
+                                                        sbatch "${script_name}"
+                                                        ((counter++))
+                                                    done
+                                                fi
 
+                                            done
                                         done
                                     done
                                 done
