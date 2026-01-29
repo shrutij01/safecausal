@@ -886,6 +886,8 @@ def main():
 
     # Collect results for aggregation if --aggregate-seeds
     aggregated_results = {}  # {model_type: [mcc_values]}
+    pretrained_sae_mcc = None  # Store pretrained SAE MCC for summary
+    raw_emb_probe_mcc = None  # Store raw embeddings linear probe for summary
     quiet = args.aggregate_seeds  # Suppress per-seed output when aggregating
     steer_computed_for = set()  # Track model types that already have steering computed
 
@@ -1023,6 +1025,9 @@ def main():
                     "Pretrained SAE", pretrained_sae_model, c_embeddings, c_pretrained_acts, c_labels,
                     args.linear_probe, quiet=quiet, max_steer_cols=1000  # Limit for speed
                 )
+                pretrained_sae_mcc = pretrained_results['mcc']  # Save for summary
+                if quiet:
+                    print(".", end="", flush=True)  # Progress indicator
 
                 # Skip decoder projection in quiet mode
                 if not quiet:
@@ -1044,13 +1049,17 @@ def main():
                     print(f"    Compl diff:   {first_ssae_results['completeness'] - pretrained_results['completeness']:.4f}")
 
         # --- Raw embeddings linear probe ---
-        if args.linear_probe and metric == "mcc" and not quiet:
-            print(f"\n{'-'*60}")
-            print(f"Raw Embeddings Linear Probe — {concept_name}")
-            print(f"{'-'*60}")
-            probe_emb = compute_linear_probe_mcc(c_embeddings, c_labels)
-            print(f"  Pearson corr: {probe_emb['mcc']:.4f}")
-            print(f"  Accuracy:     {probe_emb['accuracy']:.4f}")
+        if args.linear_probe and metric == "mcc":
+            # Only compute once (same embeddings for all seeds)
+            if raw_emb_probe_mcc is None:
+                probe_emb = compute_linear_probe_mcc(c_embeddings, c_labels)
+                raw_emb_probe_mcc = probe_emb['mcc']
+            if not quiet:
+                print(f"\n{'-'*60}")
+                print(f"Raw Embeddings Linear Probe — {concept_name}")
+                print(f"{'-'*60}")
+                print(f"  Pearson corr: {raw_emb_probe_mcc:.4f}")
+                print(f"  Accuracy:     {probe_emb['accuracy']:.4f}")
 
     # -------------------------------------------------------------------------
     # Print aggregated summary if --aggregate-seeds
@@ -1066,6 +1075,13 @@ def main():
                 mean_val = np.mean(values)
                 std_val = np.std(values) if len(values) > 1 else 0.0
                 print(f"  {model_type:12s}: MCC = {mean_val:.4f} ± {std_val:.4f}  (n={len(values)})")
+        # Print pretrained SAE (single model, no aggregation)
+        if pretrained_sae_mcc is not None:
+            pretrained_name = f"{args.embedding_model.upper()}SCOPE"
+            print(f"  {pretrained_name:12s}: MCC = {pretrained_sae_mcc:.4f}  (pretrained)")
+        # Print raw embeddings linear probe
+        if raw_emb_probe_mcc is not None:
+            print(f"  {'RAW_EMB':12s}: MCC = {raw_emb_probe_mcc:.4f}  (linear probe)")
 
     print("\nEvaluation complete.")
 
