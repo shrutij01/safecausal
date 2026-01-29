@@ -925,6 +925,13 @@ def parse_cfg() -> Cfg:
         print(f"Warning: oc={cfg.oc} > rep_dim={rep_dim}, capping to {rep_dim}")
         object.__setattr__(cfg, "oc", rep_dim)
 
+    # Resolve n_concepts from YAML num_concepts if CLI left at default
+    if cfg.n_concepts == 1 and hasattr(cfg.extra, "num_concepts"):
+        yaml_nc = cfg.extra.num_concepts
+        if yaml_nc != cfg.n_concepts:
+            object.__setattr__(cfg, "n_concepts", yaml_nc)
+            print(f"n_concepts={yaml_nc} (from YAML config)")
+
     return cfg
 
 
