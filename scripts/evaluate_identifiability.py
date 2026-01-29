@@ -508,6 +508,67 @@ def compute_decoder_projection_mcc(model, embeddings, labels):
     }
 
 
+def compute_random_baselines(embeddings, labels, n_random=100, seed=42):
+    """Compute random baselines for MCC and steering cosine similarity.
+
+    Args:
+        embeddings: Flattened pair order [z_0, z_tilde_0, z_1, z_tilde_1, ...].
+        labels: Binary labels (0/1).
+        n_random: Number of random vectors to average over.
+        seed: Random seed for reproducibility.
+
+    Returns:
+        Dict with random_mcc and random_steering stats.
+    """
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+
+    z = embeddings[0::2].float()           # (N, D)
+    z_tilde = embeddings[1::2].float()     # (N, D)
+    N, D = z.shape
+    labels_t = torch.tensor(labels[::2], dtype=torch.float32)  # Labels for z (one per pair)
+
+    random_mccs = []
+    random_steerings = []
+
+    for _ in range(n_random):
+        # Random unit vector in embedding space
+        rand_vec = torch.randn(D)
+        rand_vec = rand_vec / rand_vec.norm()
+
+        # --- Random MCC ---
+        # Project embeddings onto random vector
+        z_proj = z @ rand_vec  # (N,)
+        z_tilde_proj = z_tilde @ rand_vec  # (N,)
+
+        # Use difference as "activation" (like SAE would produce for contrastive)
+        diff_proj = z_tilde_proj - z_proj  # (N,)
+
+        # Pearson correlation with labels
+        diff_centered = diff_proj - diff_proj.mean()
+        labels_centered = labels_t - labels_t.mean()
+        if diff_centered.norm() > 0 and labels_centered.norm() > 0:
+            corr = (diff_centered @ labels_centered) / (diff_centered.norm() * labels_centered.norm())
+            random_mccs.append(abs(corr.item()))
+        else:
+            random_mccs.append(0.0)
+
+        # --- Random Steering Cosine Sim ---
+        # z_hat = normalize(z + rand_vec)
+        z_hat = F.normalize(z + rand_vec.unsqueeze(0), dim=-1)  # (N, D)
+        z_tilde_norm = F.normalize(z_tilde, dim=-1)  # (N, D)
+        cos_sims = (z_hat * z_tilde_norm).sum(dim=-1)  # (N,)
+        random_steerings.append(cos_sims.mean().item())
+
+    return {
+        "random_mcc_mean": np.mean(random_mccs),
+        "random_mcc_std": np.std(random_mccs),
+        "random_mcc_max": np.max(random_mccs),
+        "random_steering_mean": np.mean(random_steerings),
+        "random_steering_std": np.std(random_steerings),
+    }
+
+
 def evaluate_sae(name, model, embeddings, activations, labels, run_linear_probe=False, quiet=False, max_steer_cols=None, skip_steer=False):
     """Run full evaluation (MCC + steering + optional probe) for a single SAE.
 
@@ -560,6 +621,15 @@ def evaluate_sae_dci(name, activations, factors, seed=42, quiet=False):
         print(f"  Informativeness test:   {results['informativeness_test']:.4f}")
 
     return results
+
+
+def evaluate_steering_only(name, model, embeddings, max_cols=None):
+    """Compute only steering cosine similarity for a model."""
+    steer = compute_steering_cosine_sim(embeddings, model, max_cols=max_cols)
+    print(f"  {name}:")
+    print(f"    Steering cos: {steer['mean_cos_sim']:.4f} (+/- {steer['std_cos_sim']:.4f})"
+          f"  [col {steer['steering_col_idx']}, freq {steer['steering_col_freq']:.0%}]")
+    return steer
 
 
 # ==============================================================================
@@ -644,6 +714,11 @@ def main():
         action="store_true",
         help="Find all seed variants for SSAE and SAE models and report mean +/- std. "
              "Requires --all-sae-types or explicit model paths.",
+    )
+    parser.add_argument(
+        "--steering-only",
+        action="store_true",
+        help="Only compute steering cosine similarity (skip MCC, decoder projection, linear probe).",
     )
 
     args = parser.parse_args()
@@ -874,6 +949,38 @@ def main():
     metric = args.metric
     print(f"\nMetric: {metric.upper()}")
 
+    # -------------------------------------------------------------------------
+    # Steering-only mode: just compute cosine sim and exit
+    # -------------------------------------------------------------------------
+    if args.steering_only:
+        print(f"\n{'='*60}")
+        print(f"STEERING COSINE SIMILARITY — {display_dataset}")
+        print(f"{'='*60}")
+
+        # Random baselines
+        print("\n  Computing random baselines (n=100)...")
+        random_baselines = compute_random_baselines(embeddings, labels, n_random=100)
+        print(f"  RANDOM BASELINE:")
+        print(f"    MCC:          {random_baselines['random_mcc_mean']:.4f} (+/- {random_baselines['random_mcc_std']:.4f}), max={random_baselines['random_mcc_max']:.4f}")
+        print(f"    Steering cos: {random_baselines['random_steering_mean']:.4f} (+/- {random_baselines['random_steering_std']:.4f})")
+
+        # SSAEs
+        print()
+        for ssae_name, ssae_model, _ in ssae_list:
+            evaluate_steering_only(ssae_name, ssae_model, embeddings)
+
+        # Trained SAEs
+        for sae_name, sae_model, _ in trained_saes:
+            evaluate_steering_only(sae_name, sae_model, embeddings)
+
+        # Pretrained SAE
+        if pretrained_sae_model is not None:
+            pretrained_label = f"Pretrained ({args.embedding_model})"
+            evaluate_steering_only(pretrained_label, pretrained_sae_model, embeddings, max_cols=1000)
+
+        print("\nSteering evaluation complete.")
+        return
+
     # Helper to extract model type from directory name for grouping
     def _get_model_type(name):
         if name.startswith("ssae_"):
@@ -888,12 +995,17 @@ def main():
     aggregated_results = {}  # {model_type: [mcc_values]}
     pretrained_sae_mcc = None  # Store pretrained SAE MCC for summary
     raw_emb_probe_mcc = None  # Store raw embeddings linear probe for summary
+    random_baseline = None  # Store random baseline for summary
     quiet = args.aggregate_seeds  # Suppress per-seed output when aggregating
     steer_computed_for = set()  # Track model types that already have steering computed
 
     if quiet:
         n_models = len(ssae_list) + len(trained_saes)
         print(f"\nEvaluating {n_models} models (aggregating over seeds)...", end="", flush=True)
+
+    # Compute random baseline once
+    if metric == "mcc":
+        random_baseline = compute_random_baselines(embeddings, labels, n_random=100)
 
     for concept in concepts:
         if concept is not None:
@@ -1082,6 +1194,9 @@ def main():
         # Print raw embeddings linear probe
         if raw_emb_probe_mcc is not None:
             print(f"  {'RAW_EMB':12s}: MCC = {raw_emb_probe_mcc:.4f}  (linear probe)")
+        # Print random baseline
+        if random_baseline is not None:
+            print(f"  {'RANDOM':12s}: MCC = {random_baseline['random_mcc_mean']:.4f} ± {random_baseline['random_mcc_std']:.4f}  (max={random_baseline['random_mcc_max']:.4f})")
 
     print("\nEvaluation complete.")
 
