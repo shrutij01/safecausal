@@ -385,7 +385,7 @@ def compute_max_correlation_mcc(activations, labels):
     }
 
 
-def compute_steering_cosine_sim(embeddings, sae_model):
+def compute_steering_cosine_sim(embeddings, sae_model, max_cols=None):
     """Find the decoder column that best steers z toward z_tilde.
 
     For each pair (z, z_tilde) and each decoder column d_j:
@@ -394,7 +394,10 @@ def compute_steering_cosine_sim(embeddings, sae_model):
     Takes max over decoder columns per pair.
     The most frequently selected column is reported as the steering vector.
 
-    Embeddings are in flattened pair order: [z_0, z_tilde_0, z_1, z_tilde_1, ...].
+    Args:
+        embeddings: Flattened pair order [z_0, z_tilde_0, z_1, z_tilde_1, ...].
+        sae_model: SAE model with decoder.weight.
+        max_cols: If set, only search first max_cols decoder columns (for speed).
     """
     z = embeddings[0::2].float()           # (N, D)
     z_tilde = embeddings[1::2].float()     # (N, D)
@@ -403,6 +406,11 @@ def compute_steering_cosine_sim(embeddings, sae_model):
     # Decoder columns: (D, V) where V = number of features
     W = sae_model.decoder.weight.detach().float()  # (D, V)
     V = W.shape[1]
+
+    # Limit columns if specified (for large pretrained SAEs)
+    if max_cols is not None and max_cols < V:
+        V = max_cols
+        W = W[:, :V]
 
     z_tilde_norm = F.normalize(z_tilde, dim=-1)  # (N, D)
 
@@ -500,24 +508,32 @@ def compute_decoder_projection_mcc(model, embeddings, labels):
     }
 
 
-def evaluate_sae(name, model, embeddings, activations, labels, run_linear_probe=False, quiet=False):
-    """Run full evaluation (MCC + steering + optional probe) for a single SAE."""
-    results = compute_max_correlation_mcc(activations, labels)
-    steer = compute_steering_cosine_sim(embeddings, model)
+def evaluate_sae(name, model, embeddings, activations, labels, run_linear_probe=False, quiet=False, max_steer_cols=None, skip_steer=False):
+    """Run full evaluation (MCC + steering + optional probe) for a single SAE.
 
+    Args:
+        max_steer_cols: Limit steering cosine search to first N columns (for large SAEs).
+        skip_steer: If True, skip steering computation (for subsequent seeds of same type).
+    """
+    results = compute_max_correlation_mcc(activations, labels)
+
+    # Skip expensive steering computation in quiet mode or if already done for this model type
     if not quiet:
         print(f"  MCC:            {results['mcc']:.4f} (feature {results['feature_idx']})")
-        print(f"  Steering cos:   {steer['mean_cos_sim']:.4f} (+/- {steer['std_cos_sim']:.4f})"
-              f"  [col {steer['steering_col_idx']}, freq {steer['steering_col_freq']:.0%}]")
+        if not skip_steer:
+            steer = compute_steering_cosine_sim(embeddings, model, max_cols=max_steer_cols)
+            print(f"  Steering cos:   {steer['mean_cos_sim']:.4f} (+/- {steer['std_cos_sim']:.4f})"
+                  f"  [col {steer['steering_col_idx']}, freq {steer['steering_col_freq']:.0%}]")
+            results["steer"] = steer
+        else:
+            print(f"  Steering cos:   (skipped, already computed for this model type)")
 
-    if run_linear_probe:
+    if run_linear_probe and not quiet:
         probe = compute_linear_probe_mcc(activations, labels)
-        if not quiet:
-            print(f"  Linear probe:   corr={probe['mcc']:.4f}  acc={probe['accuracy']:.4f}")
-            print(f"  Gap (probe-MCC): {probe['mcc'] - results['mcc']:.4f}")
+        print(f"  Linear probe:   corr={probe['mcc']:.4f}  acc={probe['accuracy']:.4f}")
+        print(f"  Gap (probe-MCC): {probe['mcc'] - results['mcc']:.4f}")
         results["probe"] = probe
 
-    results["steer"] = steer
     return results
 
 
@@ -871,10 +887,11 @@ def main():
     # Collect results for aggregation if --aggregate-seeds
     aggregated_results = {}  # {model_type: [mcc_values]}
     quiet = args.aggregate_seeds  # Suppress per-seed output when aggregating
+    steer_computed_for = set()  # Track model types that already have steering computed
 
     if quiet:
         n_models = len(ssae_list) + len(trained_saes)
-        print(f"\nEvaluating {n_models} models (aggregating over seeds)...")
+        print(f"\nEvaluating {n_models} models (aggregating over seeds)...", end="", flush=True)
 
     for concept in concepts:
         if concept is not None:
@@ -908,19 +925,27 @@ def main():
                 print(f"SSAE [{ssae_name}] — {concept_name} ({n_pairs} pairs)")
                 print(f"{'='*60}")
             if metric == "mcc":
+                model_type = _get_model_type(ssae_name)
+                skip_steer = model_type in steer_computed_for
                 ssae_results = evaluate_sae(
-                    ssae_name, ssae_model, c_embeddings, c_ssae_acts, c_labels, args.linear_probe, quiet=quiet
+                    ssae_name, ssae_model, c_embeddings, c_ssae_acts, c_labels, args.linear_probe,
+                    quiet=quiet, skip_steer=skip_steer
                 )
-                ssae_dec_results = compute_decoder_projection_mcc(
-                    ssae_model, c_embeddings, c_labels
-                )
+                if not skip_steer:
+                    steer_computed_for.add(model_type)
+
+                # Skip decoder projection in quiet mode (expensive and not used for aggregation)
+                ssae_dec_results = None
                 if not quiet:
+                    ssae_dec_results = compute_decoder_projection_mcc(
+                        ssae_model, c_embeddings, c_labels
+                    )
                     print(f"  Decoder MCC:    {ssae_dec_results['mcc']:.4f} (feature {ssae_dec_results['feature_idx']})")
 
                 # Collect for aggregation
                 if args.aggregate_seeds:
-                    model_type = _get_model_type(ssae_name)
                     aggregated_results.setdefault(model_type, []).append(ssae_results['mcc'])
+                    print(".", end="", flush=True)  # Progress indicator
 
                 # Keep first for comparison
                 if first_ssae_results is None:
@@ -944,19 +969,28 @@ def main():
                 print(f"Trained SAE [{sae_name}] — {concept_name}")
                 print(f"{'-'*60}")
             if metric == "mcc":
+                model_type = _get_model_type(sae_name)
+                skip_steer = model_type in steer_computed_for
                 trained_results = evaluate_sae(
-                    sae_name, sae_model, c_embeddings, c_trained_acts, c_labels, args.linear_probe, quiet=quiet
+                    sae_name, sae_model, c_embeddings, c_trained_acts, c_labels, args.linear_probe,
+                    quiet=quiet, skip_steer=skip_steer
                 )
-                trained_dec_results = compute_decoder_projection_mcc(
-                    sae_model, c_embeddings, c_labels
-                )
+                if not skip_steer:
+                    steer_computed_for.add(model_type)
+
+                # Skip decoder projection in quiet mode
+                trained_dec_results = None
                 if not quiet:
+                    trained_dec_results = compute_decoder_projection_mcc(
+                        sae_model, c_embeddings, c_labels
+                    )
                     print(f"  Decoder MCC:    {trained_dec_results['mcc']:.4f} (feature {trained_dec_results['feature_idx']})")
 
                 # Collect for aggregation
                 if args.aggregate_seeds:
                     model_type = _get_model_type(sae_name)
                     aggregated_results.setdefault(model_type, []).append(trained_results['mcc'])
+                    print(".", end="", flush=True)  # Progress indicator
 
                 # Compare with first SSAE
                 if not quiet and first_ssae_results:
@@ -986,12 +1020,15 @@ def main():
                 print(f"{'-'*60}")
             if metric == "mcc":
                 pretrained_results = evaluate_sae(
-                    "Pretrained SAE", pretrained_sae_model, c_embeddings, c_pretrained_acts, c_labels, args.linear_probe, quiet=quiet
+                    "Pretrained SAE", pretrained_sae_model, c_embeddings, c_pretrained_acts, c_labels,
+                    args.linear_probe, quiet=quiet, max_steer_cols=1000  # Limit for speed
                 )
-                pretrained_dec_results = compute_decoder_projection_mcc(
-                    pretrained_sae_model, c_embeddings, c_labels
-                )
+
+                # Skip decoder projection in quiet mode
                 if not quiet:
+                    pretrained_dec_results = compute_decoder_projection_mcc(
+                        pretrained_sae_model, c_embeddings, c_labels
+                    )
                     print(f"  Decoder MCC:    {pretrained_dec_results['mcc']:.4f} (feature {pretrained_dec_results['feature_idx']})")
                     if first_ssae_results:
                         print(f"\n  vs SSAE:")
@@ -1019,6 +1056,7 @@ def main():
     # Print aggregated summary if --aggregate-seeds
     # -------------------------------------------------------------------------
     if args.aggregate_seeds and aggregated_results and metric == "mcc":
+        print()  # Newline after progress dots
         print(f"\n{'='*60}")
         print(f"AGGREGATED RESULTS — {display_dataset} (mean ± std over seeds)")
         print(f"{'='*60}")
