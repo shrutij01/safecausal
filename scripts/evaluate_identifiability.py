@@ -725,6 +725,32 @@ def main():
             args.trained_sae = merged if merged else None
 
     # -------------------------------------------------------------------------
+    # Expand --trained-sae to all seeds if --aggregate-seeds (without --all-sae-types)
+    # -------------------------------------------------------------------------
+    if args.aggregate_seeds and args.trained_sae and not args.all_sae_types:
+        if root_dir is None:
+            root_dir = args.model_path.parent
+
+        expanded = []
+        seen_bases = set()
+        for sae_path in args.trained_sae:
+            base = _extract_base_name(sae_path.name)
+            if base not in seen_bases:
+                seen_bases.add(base)
+                seed_variants = sorted(root_dir.glob(f"{base}_seed*"))
+                seed_variants = [d for d in seed_variants if d.is_dir() and (d / "weights.pth").exists()]
+                if seed_variants:
+                    expanded.extend(seed_variants)
+                else:
+                    expanded.append(sae_path)  # Keep original if no variants found
+
+        if len(expanded) > len(args.trained_sae):
+            print(f"Expanded --trained-sae to {len(expanded)} seed variants:")
+            for d in sorted(set(expanded)):
+                print(f"  {d.name}")
+        args.trained_sae = sorted(set(expanded))
+
+    # -------------------------------------------------------------------------
     # Load embeddings
     # -------------------------------------------------------------------------
     concept_labels = None
