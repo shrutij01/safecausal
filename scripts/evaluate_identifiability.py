@@ -449,12 +449,24 @@ def compute_steering_cosine_sim(embeddings, sae_model, max_cols=None):
     col_counts = Counter(best_col.tolist())
     steering_col_idx, steering_col_count = col_counts.most_common(1)[0]
 
+    # Compute cosine similarity between selected decoder column and each difference
+    # This measures how well the SAE's steering direction aligns with actual (z_tilde - z)
+    W_full = sae_model.decoder.weight.detach().float()  # Use full W in case we limited cols
+    steering_col = W_full[:, steering_col_idx]  # (D,)
+    steering_col_norm = F.normalize(steering_col.unsqueeze(0), dim=-1).squeeze()  # (D,)
+
+    differences = z_tilde - z  # (N, D)
+    diff_norms = F.normalize(differences, dim=-1)  # (N, D)
+    decoder_diff_cos = (diff_norms @ steering_col_norm)  # (N,)
+
     return {
         "mean_cos_sim": max_cos.mean().item(),
         "std_cos_sim": max_cos.std().item(),
         "median_cos_sim": max_cos.median().item(),
         "steering_col_idx": steering_col_idx,
         "steering_col_freq": steering_col_count / N,
+        "decoder_diff_cos_mean": decoder_diff_cos.mean().item(),
+        "decoder_diff_cos_std": decoder_diff_cos.std().item(),
     }
 
 
@@ -604,6 +616,8 @@ def evaluate_sae(name, model, embeddings, activations, labels, run_linear_probe=
             steer = compute_steering_cosine_sim(embeddings, model, max_cols=max_steer_cols)
             print(f"  Steering cos:   {steer['mean_cos_sim']:.4f} (+/- {steer['std_cos_sim']:.4f})"
                   f"  [col {steer['steering_col_idx']}, freq {steer['steering_col_freq']:.0%}]")
+            print(f"  Decoder-diff:   {steer['decoder_diff_cos_mean']:.4f} (+/- {steer['decoder_diff_cos_std']:.4f})"
+                  f"  (cos between decoder col and z_tilde - z)")
             results["steer"] = steer
         else:
             print(f"  Steering cos:   (skipped, already computed for this model type)")
@@ -648,6 +662,7 @@ def evaluate_steering_only(name, model, embeddings, max_cols=None):
     print(f"  {name}:")
     print(f"    Steering cos: {steer['mean_cos_sim']:.4f} (+/- {steer['std_cos_sim']:.4f})"
           f"  [col {steer['steering_col_idx']}, freq {steer['steering_col_freq']:.0%}]")
+    print(f"    Decoder-diff: {steer['decoder_diff_cos_mean']:.4f} (+/- {steer['decoder_diff_cos_std']:.4f})")
     return steer
 
 
