@@ -500,32 +500,35 @@ def compute_decoder_projection_mcc(model, embeddings, labels):
     }
 
 
-def evaluate_sae(name, model, embeddings, activations, labels, run_linear_probe=False):
+def evaluate_sae(name, model, embeddings, activations, labels, run_linear_probe=False, quiet=False):
     """Run full evaluation (MCC + steering + optional probe) for a single SAE."""
     results = compute_max_correlation_mcc(activations, labels)
     steer = compute_steering_cosine_sim(embeddings, model)
 
-    print(f"  MCC:            {results['mcc']:.4f} (feature {results['feature_idx']})")
-    print(f"  Steering cos:   {steer['mean_cos_sim']:.4f} (+/- {steer['std_cos_sim']:.4f})"
-          f"  [col {steer['steering_col_idx']}, freq {steer['steering_col_freq']:.0%}]")
+    if not quiet:
+        print(f"  MCC:            {results['mcc']:.4f} (feature {results['feature_idx']})")
+        print(f"  Steering cos:   {steer['mean_cos_sim']:.4f} (+/- {steer['std_cos_sim']:.4f})"
+              f"  [col {steer['steering_col_idx']}, freq {steer['steering_col_freq']:.0%}]")
 
     if run_linear_probe:
         probe = compute_linear_probe_mcc(activations, labels)
-        print(f"  Linear probe:   corr={probe['mcc']:.4f}  acc={probe['accuracy']:.4f}")
-        print(f"  Gap (probe-MCC): {probe['mcc'] - results['mcc']:.4f}")
+        if not quiet:
+            print(f"  Linear probe:   corr={probe['mcc']:.4f}  acc={probe['accuracy']:.4f}")
+            print(f"  Gap (probe-MCC): {probe['mcc'] - results['mcc']:.4f}")
         results["probe"] = probe
 
     results["steer"] = steer
     return results
 
 
-def evaluate_sae_dci(name, activations, factors, seed=42):
+def evaluate_sae_dci(name, activations, factors, seed=42, quiet=False):
     """Run DCI evaluation for a single SAE.
 
     Args:
         name: Display name for the model.
         activations: SAE codes, shape (n_samples, n_codes).
         factors: Ground truth factors, shape (n_samples,) or (n_samples, n_factors).
+        quiet: If True, suppress printing.
     """
     codes_np = activations.float().numpy()
     factors_np = np.array(factors, dtype=np.float64)
@@ -534,10 +537,11 @@ def evaluate_sae_dci(name, activations, factors, seed=42):
         codes_np, factors_np, train_fraction=0.8, random_state=seed,
     )
 
-    print(f"  Disentanglement:        {results['disentanglement']:.4f}")
-    print(f"  Completeness:           {results['completeness']:.4f}")
-    print(f"  Informativeness train:  {results['informativeness_train']:.4f}")
-    print(f"  Informativeness test:   {results['informativeness_test']:.4f}")
+    if not quiet:
+        print(f"  Disentanglement:        {results['disentanglement']:.4f}")
+        print(f"  Completeness:           {results['completeness']:.4f}")
+        print(f"  Informativeness train:  {results['informativeness_train']:.4f}")
+        print(f"  Informativeness test:   {results['informativeness_test']:.4f}")
 
     return results
 
@@ -755,6 +759,9 @@ def main():
     # -------------------------------------------------------------------------
     concept_labels = None
 
+    # Track dataset name for display (may be overridden when using --embeddings)
+    display_dataset = args.dataset
+
     if args.embeddings:
         # Load pre-computed test embeddings from h5 file (cfc_test)
         print(f"Loading pre-computed test embeddings from {args.embeddings}...")
@@ -768,6 +775,11 @@ def main():
         embeddings[0::2] = torch.from_numpy(cfc_test[:, 0])
         embeddings[1::2] = torch.from_numpy(cfc_test[:, 1])
         labels = [0, 1] * n_pairs
+
+        # Extract dataset name from embedding file for display
+        # e.g., "sycophancy_gemma2_25_last_token.h5" -> "sycophancy"
+        emb_stem = args.embeddings.stem
+        display_dataset = emb_stem.split("_")[0]
 
         print(f"Loaded {n_pairs} test pairs -> {len(embeddings)} embeddings, "
               f"shape {embeddings.shape}")
@@ -858,6 +870,11 @@ def main():
 
     # Collect results for aggregation if --aggregate-seeds
     aggregated_results = {}  # {model_type: [mcc_values]}
+    quiet = args.aggregate_seeds  # Suppress per-seed output when aggregating
+
+    if quiet:
+        n_models = len(ssae_list) + len(trained_saes)
+        print(f"\nEvaluating {n_models} models (aggregating over seeds)...")
 
     for concept in concepts:
         if concept is not None:
@@ -872,7 +889,7 @@ def main():
             c_embeddings = embeddings
             c_labels = labels
             flat_indices = None
-            concept_name = args.dataset
+            concept_name = display_dataset
 
         n_pairs = len(c_labels) // 2
 
@@ -886,17 +903,19 @@ def main():
                 else ssae_full_acts
             )
 
-            print(f"\n{'='*60}")
-            print(f"SSAE [{ssae_name}] — {concept_name} ({n_pairs} pairs)")
-            print(f"{'='*60}")
+            if not quiet:
+                print(f"\n{'='*60}")
+                print(f"SSAE [{ssae_name}] — {concept_name} ({n_pairs} pairs)")
+                print(f"{'='*60}")
             if metric == "mcc":
                 ssae_results = evaluate_sae(
-                    ssae_name, ssae_model, c_embeddings, c_ssae_acts, c_labels, args.linear_probe
+                    ssae_name, ssae_model, c_embeddings, c_ssae_acts, c_labels, args.linear_probe, quiet=quiet
                 )
                 ssae_dec_results = compute_decoder_projection_mcc(
                     ssae_model, c_embeddings, c_labels
                 )
-                print(f"  Decoder MCC:    {ssae_dec_results['mcc']:.4f} (feature {ssae_dec_results['feature_idx']})")
+                if not quiet:
+                    print(f"  Decoder MCC:    {ssae_dec_results['mcc']:.4f} (feature {ssae_dec_results['feature_idx']})")
 
                 # Collect for aggregation
                 if args.aggregate_seeds:
@@ -908,7 +927,7 @@ def main():
                     first_ssae_results = ssae_results
                     first_ssae_dec_results = ssae_dec_results
             else:
-                ssae_results = evaluate_sae_dci(ssae_name, c_ssae_acts, c_labels)
+                ssae_results = evaluate_sae_dci(ssae_name, c_ssae_acts, c_labels, quiet=quiet)
                 if first_ssae_results is None:
                     first_ssae_results = ssae_results
 
@@ -920,17 +939,19 @@ def main():
                 else sae_full_acts
             )
 
-            print(f"\n{'-'*60}")
-            print(f"Trained SAE [{sae_name}] — {concept_name}")
-            print(f"{'-'*60}")
+            if not quiet:
+                print(f"\n{'-'*60}")
+                print(f"Trained SAE [{sae_name}] — {concept_name}")
+                print(f"{'-'*60}")
             if metric == "mcc":
                 trained_results = evaluate_sae(
-                    sae_name, sae_model, c_embeddings, c_trained_acts, c_labels, args.linear_probe
+                    sae_name, sae_model, c_embeddings, c_trained_acts, c_labels, args.linear_probe, quiet=quiet
                 )
                 trained_dec_results = compute_decoder_projection_mcc(
                     sae_model, c_embeddings, c_labels
                 )
-                print(f"  Decoder MCC:    {trained_dec_results['mcc']:.4f} (feature {trained_dec_results['feature_idx']})")
+                if not quiet:
+                    print(f"  Decoder MCC:    {trained_dec_results['mcc']:.4f} (feature {trained_dec_results['feature_idx']})")
 
                 # Collect for aggregation
                 if args.aggregate_seeds:
@@ -938,15 +959,15 @@ def main():
                     aggregated_results.setdefault(model_type, []).append(trained_results['mcc'])
 
                 # Compare with first SSAE
-                if first_ssae_results:
+                if not quiet and first_ssae_results:
                     print(f"\n  vs SSAE:")
                     print(f"    MCC diff:     {first_ssae_results['mcc'] - trained_results['mcc']:.4f} (SSAE - {sae_name})")
                     print(f"    Steer diff:   {first_ssae_results['steer']['mean_cos_sim'] - trained_results['steer']['mean_cos_sim']:.4f}")
                     if first_ssae_dec_results:
                         print(f"    Dec MCC diff: {first_ssae_dec_results['mcc'] - trained_dec_results['mcc']:.4f} (SSAE - {sae_name})")
             else:
-                trained_results = evaluate_sae_dci(sae_name, c_trained_acts, c_labels)
-                if first_ssae_results:
+                trained_results = evaluate_sae_dci(sae_name, c_trained_acts, c_labels, quiet=quiet)
+                if not quiet and first_ssae_results:
                     print(f"\n  vs SSAE:")
                     print(f"    Disent diff:  {first_ssae_results['disentanglement'] - trained_results['disentanglement']:.4f} (SSAE - {sae_name})")
                     print(f"    Compl diff:   {first_ssae_results['completeness'] - trained_results['completeness']:.4f}")
@@ -959,32 +980,34 @@ def main():
                 else pretrained_sae_activations
             )
 
-            print(f"\n{'-'*60}")
-            print(f"Pretrained SAE ({args.embedding_model}) — {concept_name}")
-            print(f"{'-'*60}")
+            if not quiet:
+                print(f"\n{'-'*60}")
+                print(f"Pretrained SAE ({args.embedding_model}) — {concept_name}")
+                print(f"{'-'*60}")
             if metric == "mcc":
                 pretrained_results = evaluate_sae(
-                    "Pretrained SAE", pretrained_sae_model, c_embeddings, c_pretrained_acts, c_labels, args.linear_probe
+                    "Pretrained SAE", pretrained_sae_model, c_embeddings, c_pretrained_acts, c_labels, args.linear_probe, quiet=quiet
                 )
                 pretrained_dec_results = compute_decoder_projection_mcc(
                     pretrained_sae_model, c_embeddings, c_labels
                 )
-                print(f"  Decoder MCC:    {pretrained_dec_results['mcc']:.4f} (feature {pretrained_dec_results['feature_idx']})")
-                if first_ssae_results:
-                    print(f"\n  vs SSAE:")
-                    print(f"    MCC diff:     {first_ssae_results['mcc'] - pretrained_results['mcc']:.4f} (SSAE - Pretrained)")
-                    print(f"    Steer diff:   {first_ssae_results['steer']['mean_cos_sim'] - pretrained_results['steer']['mean_cos_sim']:.4f}")
-                    if first_ssae_dec_results:
-                        print(f"    Dec MCC diff: {first_ssae_dec_results['mcc'] - pretrained_dec_results['mcc']:.4f} (SSAE - Pretrained)")
+                if not quiet:
+                    print(f"  Decoder MCC:    {pretrained_dec_results['mcc']:.4f} (feature {pretrained_dec_results['feature_idx']})")
+                    if first_ssae_results:
+                        print(f"\n  vs SSAE:")
+                        print(f"    MCC diff:     {first_ssae_results['mcc'] - pretrained_results['mcc']:.4f} (SSAE - Pretrained)")
+                        print(f"    Steer diff:   {first_ssae_results['steer']['mean_cos_sim'] - pretrained_results['steer']['mean_cos_sim']:.4f}")
+                        if first_ssae_dec_results:
+                            print(f"    Dec MCC diff: {first_ssae_dec_results['mcc'] - pretrained_dec_results['mcc']:.4f} (SSAE - Pretrained)")
             else:
-                pretrained_results = evaluate_sae_dci("Pretrained SAE", c_pretrained_acts, c_labels)
-                if first_ssae_results:
+                pretrained_results = evaluate_sae_dci("Pretrained SAE", c_pretrained_acts, c_labels, quiet=quiet)
+                if not quiet and first_ssae_results:
                     print(f"\n  vs SSAE:")
                     print(f"    Disent diff:  {first_ssae_results['disentanglement'] - pretrained_results['disentanglement']:.4f} (SSAE - Pretrained)")
                     print(f"    Compl diff:   {first_ssae_results['completeness'] - pretrained_results['completeness']:.4f}")
 
         # --- Raw embeddings linear probe ---
-        if args.linear_probe and metric == "mcc":
+        if args.linear_probe and metric == "mcc" and not quiet:
             print(f"\n{'-'*60}")
             print(f"Raw Embeddings Linear Probe — {concept_name}")
             print(f"{'-'*60}")
@@ -997,7 +1020,7 @@ def main():
     # -------------------------------------------------------------------------
     if args.aggregate_seeds and aggregated_results and metric == "mcc":
         print(f"\n{'='*60}")
-        print("AGGREGATED RESULTS (mean ± std over seeds)")
+        print(f"AGGREGATED RESULTS — {display_dataset} (mean ± std over seeds)")
         print(f"{'='*60}")
         for model_type in sorted(aggregated_results.keys()):
             values = aggregated_results[model_type]
