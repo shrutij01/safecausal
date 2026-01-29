@@ -560,12 +560,31 @@ def compute_random_baselines(embeddings, labels, n_random=100, seed=42):
         cos_sims = (z_hat * z_tilde_norm).sum(dim=-1)  # (N,)
         random_steerings.append(cos_sims.mean().item())
 
+    # --- Mean Difference Vector Baseline ---
+    # Use mean(z_tilde - z) as the steering vector
+    differences = z_tilde - z  # (N, D)
+    mean_diff = differences.mean(dim=0)  # (D,)
+    mean_diff_norm = F.normalize(mean_diff.unsqueeze(0), dim=-1).squeeze()  # (D,)
+
+    # Cosine similarity between mean_diff and each individual difference
+    diff_norms = F.normalize(differences, dim=-1)  # (N, D)
+    mean_diff_cos_sims = (diff_norms @ mean_diff_norm)  # (N,)
+
+    # Also compute steering cosine sim: z_hat = normalize(z + mean_diff), compare to z_tilde
+    z_hat_mean = F.normalize(z + mean_diff.unsqueeze(0), dim=-1)  # (N, D)
+    mean_diff_steering_cos = (z_hat_mean * z_tilde_norm).sum(dim=-1)  # (N,)
+
     return {
         "random_mcc_mean": np.mean(random_mccs),
         "random_mcc_std": np.std(random_mccs),
         "random_mcc_max": np.max(random_mccs),
         "random_steering_mean": np.mean(random_steerings),
         "random_steering_std": np.std(random_steerings),
+        # Mean difference baseline
+        "mean_diff_cos_mean": mean_diff_cos_sims.mean().item(),
+        "mean_diff_cos_std": mean_diff_cos_sims.std().item(),
+        "mean_diff_steering_mean": mean_diff_steering_cos.mean().item(),
+        "mean_diff_steering_std": mean_diff_steering_cos.std().item(),
     }
 
 
@@ -958,11 +977,14 @@ def main():
         print(f"{'='*60}")
 
         # Random baselines
-        print("\n  Computing random baselines (n=100)...")
+        print("\n  Computing baselines...")
         random_baselines = compute_random_baselines(embeddings, labels, n_random=100)
-        print(f"  RANDOM BASELINE:")
+        print(f"  RANDOM VECTOR (n=100):")
         print(f"    MCC:          {random_baselines['random_mcc_mean']:.4f} (+/- {random_baselines['random_mcc_std']:.4f}), max={random_baselines['random_mcc_max']:.4f}")
         print(f"    Steering cos: {random_baselines['random_steering_mean']:.4f} (+/- {random_baselines['random_steering_std']:.4f})")
+        print(f"  MEAN DIFFERENCE VECTOR:")
+        print(f"    Cos w/ diffs: {random_baselines['mean_diff_cos_mean']:.4f} (+/- {random_baselines['mean_diff_cos_std']:.4f})")
+        print(f"    Steering cos: {random_baselines['mean_diff_steering_mean']:.4f} (+/- {random_baselines['mean_diff_steering_std']:.4f})")
 
         # SSAEs
         print()
@@ -1197,6 +1219,7 @@ def main():
         # Print random baseline
         if random_baseline is not None:
             print(f"  {'RANDOM':12s}: MCC = {random_baseline['random_mcc_mean']:.4f} ± {random_baseline['random_mcc_std']:.4f}  (max={random_baseline['random_mcc_max']:.4f})")
+            print(f"  {'MEAN_DIFF':12s}: cos = {random_baseline['mean_diff_cos_mean']:.4f} ± {random_baseline['mean_diff_cos_std']:.4f}  (steering={random_baseline['mean_diff_steering_mean']:.4f})")
 
     print("\nEvaluation complete.")
 
